@@ -23,4 +23,8 @@
     <string name="erro_email_invalido">E-mail inválido</string>
     <string name="erro_senha_curta">A senha deve ter pelo menos %1$d caracteres</string>
     <string name="erro_credenciais_invalidas">E-mail ou senha incorretos</string>
+    <string name="erro_placa_invalida">Placa inválida (ex.: ABC-1234 ou ABC1D23)</string>
+    <string name="erro_placa_duplicada">Já existe um veículo com esta placa</string>
+    <string name="erro_ano_invalido">Informe um ano entre %1$d e o próximo ano</string>
+    <string name="erro_numero_invalido">Valor inválido</string>
 </resources>

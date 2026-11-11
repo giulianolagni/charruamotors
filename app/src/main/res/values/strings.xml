@@ -7,7 +7,6 @@
     <string name="campo_senha">Senha</string>
     <string name="botao_entrar">Entrar</string>
     <string name="login_dica">Login simulado — use admin@charruamotors.com / 123456</string>
-    <string name="login_sucesso">Login realizado com sucesso</string>
 
     <!-- Dashboard -->
     <string name="dashboard_titulo">Charrua Motors</string>

@@ -1,3 +1,17 @@
 <resources>
     <string name="app_name">Charrua Motors</string>
+
+    <!-- Login -->
+    <string name="login_subtitulo">Manutenção, abastecimentos e diagnóstico do seu veículo</string>
+    <string name="campo_email">E-mail</string>
+    <string name="campo_senha">Senha</string>
+    <string name="botao_entrar">Entrar</string>
+    <string name="login_dica">Login simulado — use admin@charruamotors.com / 123456</string>
+    <string name="login_sucesso">Login realizado com sucesso</string>
+
+    <!-- Erros de validação -->
+    <string name="erro_obrigatorio">Campo obrigatório</string>
+    <string name="erro_email_invalido">E-mail inválido</string>
+    <string name="erro_senha_curta">A senha deve ter pelo menos %1$d caracteres</string>
+    <string name="erro_credenciais_invalidas">E-mail ou senha incorretos</string>
 </resources>

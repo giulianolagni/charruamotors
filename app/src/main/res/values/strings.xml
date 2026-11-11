@@ -18,6 +18,36 @@
     <string name="acao_sair">Sair</string>
     <string name="em_breve">Disponível em breve</string>
 
+    <!-- Formulário de veículo -->
+    <string name="veiculo_titulo_novo">Novo veículo</string>
+    <string name="veiculo_titulo_editar">Editar veículo</string>
+    <string name="campo_marca">Marca</string>
+    <string name="campo_modelo">Modelo</string>
+    <string name="campo_ano">Ano</string>
+    <string name="campo_placa">Placa</string>
+    <string name="campo_cor">Cor (opcional)</string>
+    <string name="campo_km">Quilometragem atual</string>
+    <string name="campo_combustivel">Combustível</string>
+    <string name="campo_tanque">Capacidade do tanque (opcional)</string>
+    <string name="sufixo_km">km</string>
+    <string name="sufixo_litros">L</string>
+    <string name="botao_salvar">Salvar</string>
+    <string name="botao_excluir">Excluir</string>
+    <string name="botao_cancelar">Cancelar</string>
+    <string name="voltar">Voltar</string>
+    <string name="veiculo_excluir_titulo">Excluir veículo?</string>
+    <string name="veiculo_excluir_mensagem">O veículo e todo o seu histórico serão removidos. Esta ação não pode ser desfeita.</string>
+    <string name="veiculo_cadastrado">Veículo cadastrado</string>
+    <string name="veiculo_atualizado">Veículo atualizado</string>
+    <string name="veiculo_excluido">Veículo excluído</string>
+
+    <!-- Combustíveis -->
+    <string name="combustivel_gasolina">Gasolina</string>
+    <string name="combustivel_etanol">Etanol</string>
+    <string name="combustivel_flex">Flex</string>
+    <string name="combustivel_diesel">Diesel</string>
+    <string name="combustivel_gnv">GNV</string>
+
     <!-- Erros de validação -->
     <string name="erro_obrigatorio">Campo obrigatório</string>
     <string name="erro_email_invalido">E-mail inválido</string>

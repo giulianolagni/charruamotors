@@ -17,6 +17,11 @@
     <string name="botao_novo_veiculo">Novo veículo</string>
     <string name="acao_sair">Sair</string>
     <string name="em_breve">Disponível em breve</string>
+    <string name="item_veiculo_detalhes">%1$d km • %2$s</string>
+    <plurals name="dashboard_total_veiculos">
+        <item quantity="one">%d veículo cadastrado</item>
+        <item quantity="other">%d veículos cadastrados</item>
+    </plurals>
 
     <!-- Formulário de veículo -->
     <string name="veiculo_titulo_novo">Novo veículo</string>

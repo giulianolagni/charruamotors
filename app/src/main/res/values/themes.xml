@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema único usado por todas as Activities (layout consistente). -->
+    <style name="Theme.CharruaMotors" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/azul_primario</item>
+        <item name="colorOnPrimary">@color/branco</item>
+        <item name="colorPrimaryContainer">@color/azul_primario_escuro</item>
+        <item name="colorSecondary">@color/laranja_destaque</item>
+        <item name="colorOnSecondary">@color/branco</item>
+        <item name="colorError">@color/erro</item>
+        <item name="android:colorBackground">@color/fundo</item>
+        <item name="android:statusBarColor">@color/azul_primario_escuro</item>
+    </style>
+
+    <!-- Toolbar padrão das telas. -->
+    <style name="Widget.CharruaMotors.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="android:background">@color/azul_primario</item>
+        <item name="titleTextColor">@color/branco</item>
+        <item name="navigationIconTint">@color/branco</item>
+    </style>
+
+    <!-- Campo de texto padrão dos formulários. -->
+    <style name="Widget.CharruaMotors.TextInput" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="android:layout_marginTop">@dimen/espaco_pequeno</item>
+    </style>
+</resources>

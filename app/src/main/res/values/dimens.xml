@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="margem_tela">16dp</dimen>
+    <dimen name="espaco_pequeno">8dp</dimen>
+    <dimen name="espaco_medio">16dp</dimen>
+    <dimen name="espaco_grande">24dp</dimen>
+    <dimen name="raio_card">12dp</dimen>
+    <dimen name="tamanho_logo">96dp</dimen>
+</resources>

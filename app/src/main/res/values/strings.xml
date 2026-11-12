@@ -7,7 +7,16 @@
     <string name="campo_senha">Senha</string>
     <string name="botao_entrar">Entrar</string>
     <string name="login_dica">Login simulado — use admin@charruamotors.com / 123456</string>
-    <string name="login_sucesso">Login realizado com sucesso</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_titulo">Charrua Motors</string>
+    <string name="dashboard_boas_vindas">Olá, %1$s</string>
+    <string name="dashboard_meus_veiculos">Meus veículos</string>
+    <string name="dashboard_lista_vazia">Nenhum veículo cadastrado.\nToque em “Novo veículo” para começar.</string>
+    <string name="botao_conectar_scanner">Conectar scanner OBD2</string>
+    <string name="botao_novo_veiculo">Novo veículo</string>
+    <string name="acao_sair">Sair</string>
+    <string name="em_breve">Disponível em breve</string>
 
     <!-- Erros de validação -->
     <string name="erro_obrigatorio">Campo obrigatório</string>

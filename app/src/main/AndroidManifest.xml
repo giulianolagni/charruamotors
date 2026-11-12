@@ -22,6 +22,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Activity 2: Dashboard / Home -->
+        <activity
+            android:name=".ui.dashboard.DashboardActivity"
+            android:exported="false" />
     </application>
 
 </manifest>

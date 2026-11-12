@@ -1,8 +1,8 @@
 package com.charruamotors.ui.login
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.inputmethod.EditorInfo
-import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -11,8 +11,10 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.databinding.ActivityLoginBinding
+import com.charruamotors.ui.dashboard.DashboardActivity
 import com.charruamotors.ui.util.aplicarInsetsDoSistema
 import com.charruamotors.ui.util.mensagem
 import com.google.android.material.snackbar.Snackbar
@@ -27,6 +29,12 @@ class LoginActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        // Sessão já iniciada anteriormente: pula o login e vai direto ao Dashboard.
+        if ((application as CharruaMotorsApp).sessao.estaLogado) {
+            abrirDashboard()
+            return
+        }
 
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -77,9 +85,14 @@ class LoginActivity : AppCompatActivity() {
             }
             EstadoLogin.CredenciaisInvalidas ->
                 Snackbar.make(root, R.string.erro_credenciais_invalidas, Snackbar.LENGTH_LONG).show()
-            EstadoLogin.Sucesso ->
-                Toast.makeText(this@LoginActivity, R.string.login_sucesso, Toast.LENGTH_SHORT).show()
+            EstadoLogin.Sucesso -> abrirDashboard()
             EstadoLogin.Ocioso, EstadoLogin.Carregando -> Unit
         }
+    }
+
+    /** finish() remove o Login da pilha: o botão voltar no Dashboard fecha o app. */
+    private fun abrirDashboard() {
+        startActivity(Intent(this, DashboardActivity::class.java))
+        finish()
     }
 }

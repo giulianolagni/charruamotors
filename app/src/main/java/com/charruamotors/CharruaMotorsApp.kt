@@ -3,6 +3,7 @@ package com.charruamotors
 import android.app.Application
 import com.charruamotors.data.local.AppDatabase
 import com.charruamotors.data.repository.UsuarioRepository
+import com.charruamotors.data.repository.VeiculoRepository
 import com.charruamotors.data.session.SessaoManager
 
 /**
@@ -17,4 +18,6 @@ class CharruaMotorsApp : Application() {
     val sessao: SessaoManager by lazy { SessaoManager(this) }
 
     val usuarioRepository: UsuarioRepository by lazy { UsuarioRepository(database.usuarioDao()) }
+
+    val veiculoRepository: VeiculoRepository by lazy { VeiculoRepository(database.veiculoDao()) }
 }

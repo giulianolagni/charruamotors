@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Moldura no estilo de placa de veículo, usada na lista do Dashboard. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/superficie" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/texto_primario" />
+    <corners android:radius="4dp" />
+</shape>

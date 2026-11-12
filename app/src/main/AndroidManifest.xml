@@ -27,6 +27,13 @@
         <activity
             android:name=".ui.dashboard.DashboardActivity"
             android:exported="false" />
+
+        <!-- Activity 3: Formulário de Veículos (CRUD) -->
+        <activity
+            android:name=".ui.veiculo.VeiculoFormActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.dashboard.DashboardActivity"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 
 </manifest>

@@ -5,19 +5,31 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.isVisible
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.databinding.ActivityDashboardBinding
+import com.charruamotors.domain.model.Veiculo
 import com.charruamotors.ui.login.LoginActivity
 import com.charruamotors.ui.util.aplicarInsetsDoSistema
+import com.charruamotors.ui.veiculo.VeiculoFormActivity
 import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.launch
 
 /** Activity 2 — Dashboard / Home: lista de veículos, resumo e atalho para o scanner OBD2. */
 class DashboardActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityDashboardBinding
     private val sessao by lazy { (application as CharruaMotorsApp).sessao }
+    private val viewModel: DashboardViewModel by viewModels { DashboardViewModel.Factory }
+    private val adapter = VeiculoAdapter(aoClicar = { veiculo ->
+        startActivity(VeiculoFormActivity.intent(this, veiculo.id))
+    })
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Ícones claros na status bar, porque a toolbar é azul.
@@ -35,6 +47,23 @@ class DashboardActivity : AppCompatActivity() {
         binding.botaoScanner.setOnClickListener {
             Snackbar.make(binding.root, R.string.em_breve, Snackbar.LENGTH_SHORT).show()
         }
+        binding.botaoNovoVeiculo.setOnClickListener {
+            startActivity(VeiculoFormActivity.intent(this))
+        }
+        binding.listaVeiculos.adapter = adapter
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.veiculos.collect { veiculos -> veiculos?.let(::mostrarVeiculos) }
+            }
+        }
+    }
+
+    private fun mostrarVeiculos(veiculos: List<Veiculo>) {
+        adapter.submitList(veiculos)
+        binding.textoListaVazia.isVisible = veiculos.isEmpty()
+        binding.textoTotalVeiculos.text =
+            resources.getQuantityString(R.plurals.dashboard_total_veiculos, veiculos.size, veiculos.size)
     }
 
     private fun configurarToolbar() {

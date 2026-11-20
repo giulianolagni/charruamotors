@@ -16,4 +16,8 @@ fun ErroValidacao.mensagem(context: Context): String = when (this) {
     ErroValidacao.PLACA_DUPLICADA -> context.getString(R.string.erro_placa_duplicada)
     ErroValidacao.ANO_INVALIDO -> context.getString(R.string.erro_ano_invalido, ValidadorVeiculo.ANO_MINIMO)
     ErroValidacao.NUMERO_INVALIDO -> context.getString(R.string.erro_numero_invalido)
+    ErroValidacao.DATA_FUTURA -> context.getString(R.string.erro_data_futura)
+    ErroValidacao.KM_MENOR_QUE_ULTIMO -> context.getString(R.string.erro_km_menor_que_ultimo)
+    ErroValidacao.MAIOR_QUE_ZERO -> context.getString(R.string.erro_maior_que_zero)
+    ErroValidacao.LITROS_ACIMA_DO_TANQUE -> context.getString(R.string.erro_litros_acima_do_tanque)
 }

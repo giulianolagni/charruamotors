@@ -2,6 +2,9 @@ package com.charruamotors
 
 import android.app.Application
 import com.charruamotors.data.local.AppDatabase
+import com.charruamotors.data.repository.AbastecimentoRepository
+import com.charruamotors.data.repository.DiagnosticoRepository
+import com.charruamotors.data.repository.ManutencaoRepository
 import com.charruamotors.data.repository.UsuarioRepository
 import com.charruamotors.data.repository.VeiculoRepository
 import com.charruamotors.data.session.SessaoManager
@@ -20,4 +23,16 @@ class CharruaMotorsApp : Application() {
     val usuarioRepository: UsuarioRepository by lazy { UsuarioRepository(database.usuarioDao()) }
 
     val veiculoRepository: VeiculoRepository by lazy { VeiculoRepository(database.veiculoDao()) }
+
+    val manutencaoRepository: ManutencaoRepository by lazy {
+        ManutencaoRepository(database.manutencaoDao(), database.veiculoDao())
+    }
+
+    val abastecimentoRepository: AbastecimentoRepository by lazy {
+        AbastecimentoRepository(database.abastecimentoDao(), database.veiculoDao())
+    }
+
+    val diagnosticoRepository: DiagnosticoRepository by lazy {
+        DiagnosticoRepository(database.leituraObdDao(), database.codigoFalhaDao())
+    }
 }

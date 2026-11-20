@@ -62,4 +62,8 @@
     <string name="erro_placa_duplicada">Já existe um veículo com esta placa</string>
     <string name="erro_ano_invalido">Informe um ano entre %1$d e o próximo ano</string>
     <string name="erro_numero_invalido">Valor inválido</string>
+    <string name="erro_data_futura">A data não pode ser futura</string>
+    <string name="erro_km_menor_que_ultimo">A km não pode ser menor que a do último registro</string>
+    <string name="erro_maior_que_zero">O valor deve ser maior que zero</string>
+    <string name="erro_litros_acima_do_tanque">Os litros excedem a capacidade do tanque</string>
 </resources>

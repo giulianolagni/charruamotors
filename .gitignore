@@ -13,3 +13,12 @@ local.properties
 
 # Instruções locais do Claude Code
 CLAUDE.md
+
+# Assinatura de release (chave e senhas): só local, nunca no Git
+keystore.properties
+/assinatura/
+*.jks
+*.keystore
+
+# APKs gerados para instalar
+/dist/

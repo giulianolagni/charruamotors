@@ -1,6 +1,7 @@
 package com.charruamotors
 
 import android.app.Application
+import android.bluetooth.BluetoothManager
 import com.charruamotors.data.local.AppDatabase
 import com.charruamotors.data.repository.AbastecimentoRepository
 import com.charruamotors.data.repository.DiagnosticoRepository
@@ -8,6 +9,10 @@ import com.charruamotors.data.repository.ManutencaoRepository
 import com.charruamotors.data.repository.UsuarioRepository
 import com.charruamotors.data.repository.VeiculoRepository
 import com.charruamotors.data.session.SessaoManager
+import com.charruamotors.obd.Elm327BluetoothClient
+import com.charruamotors.obd.ModoObd
+import com.charruamotors.obd.ObdClient
+import com.charruamotors.obd.ObdClientFake
 
 /**
  * Classe Application: criada uma única vez quando o processo do app inicia,
@@ -34,5 +39,34 @@ class CharruaMotorsApp : Application() {
 
     val diagnosticoRepository: DiagnosticoRepository by lazy {
         DiagnosticoRepository(database.leituraObdDao(), database.codigoFalhaDao())
+    }
+
+    // ---------------------------------------------------------------- OBD2
+
+    /**
+     * Modo atual do scanner. Para alternar facilmente: troque o valor inicial abaixo
+     * (SIMULADO no emulador/apresentação, BLUETOOTH com o scanner ELM327 real) ou chame
+     * [selecionarModoObd] — de preferência com o scanner desconectado.
+     */
+    var modoObd: ModoObd = ModoObd.SIMULADO
+        private set
+
+    // Um cliente por modo, criados sob demanda e mantidos vivos (a conexão sobrevive às telas).
+    private val obdSimulado: ObdClient by lazy { ObdClientFake() }
+
+    private val obdBluetooth: ObdClient by lazy {
+        val adaptador = getSystemService(BluetoothManager::class.java)?.adapter
+        Elm327BluetoothClient(adaptador)
+    }
+
+    /** Cliente OBD2 do modo atual; ViewModels dependem apenas da interface [ObdClient]. */
+    val obdClient: ObdClient
+        get() = when (modoObd) {
+            ModoObd.SIMULADO -> obdSimulado
+            ModoObd.BLUETOOTH -> obdBluetooth
+        }
+
+    fun selecionarModoObd(modo: ModoObd) {
+        modoObd = modo
     }
 }

@@ -1,6 +1,11 @@
 package com.charruamotors.ui.diagnostico.obd
 
+import com.charruamotors.domain.calculo.ConsumoInstantaneo
+import com.charruamotors.domain.calculo.EstadoCronometro
+import com.charruamotors.domain.calculo.ParametrosMotor
+import com.charruamotors.domain.calculo.ResumoViagem
 import com.charruamotors.obd.FreezeFrame
+import com.charruamotors.obd.ResultadoPerfil
 import com.charruamotors.obd.dtc.InfoDtc
 import com.charruamotors.obd.dtc.TipoDtc
 import com.charruamotors.obd.pid.DefinicaoPid
@@ -8,12 +13,28 @@ import com.charruamotors.obd.pid.DefinicaoPid
 /** Valor atual de um sensor suportado, para a grade de PIDs (null = sem resposta neste ciclo). */
 data class LeituraSensor(val definicao: DefinicaoPid, val valor: Double?)
 
-/** Informações da ECU conectada: VIN (null = ainda lendo ou indisponível) e PIDs detectados. */
+/** Informações da ECU conectada: VIN (null = ainda lendo ou indisponível), PIDs detectados e perfil de montadora. */
 data class InfoEcu(
     val vin: String? = null,
     /** A leitura do VIN já terminou (com ou sem sucesso). */
     val vinLido: Boolean = false,
+    /** PIDs do catálogo padrão suportados (sem os de montadora). */
     val quantidadePids: Int = 0,
+    /** Perfil de montadora (modos 21/22); null = ainda verificando ou desconectado. */
+    val perfil: ResultadoPerfil? = null,
+)
+
+/** Card do computador de bordo: consumo instantâneo e totais da viagem desde a conexão. */
+data class ComputadorBordoUi(
+    val consumo: ConsumoInstantaneo? = null,
+    val viagem: ResumoViagem = ResumoViagem(),
+    val motor: ParametrosMotor = ParametrosMotor(),
+)
+
+/** Card do cronômetro 0–100 km/h. */
+data class CronometroUi(
+    val estado: EstadoCronometro = EstadoCronometro.Desarmado,
+    val melhorTempoMs: Long? = null,
 )
 
 /** Estado do Data Logger exibido no botão "Gravar Log CSV". */

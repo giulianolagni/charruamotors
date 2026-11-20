@@ -19,11 +19,15 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.R
 import com.charruamotors.databinding.FragmentObdBinding
+import com.charruamotors.domain.calculo.EstadoCronometro
+import com.charruamotors.domain.calculo.MetodoConsumo
+import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.model.LeituraObd
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.DispositivoObd
 import com.charruamotors.obd.ModoObd
+import com.charruamotors.obd.ResultadoPerfil
 import com.charruamotors.obd.pid.Pids
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.util.ArquivoExportado
@@ -31,13 +35,17 @@ import com.charruamotors.ui.util.ExportadorCsv
 import com.charruamotors.ui.util.PermissoesBluetooth
 import com.charruamotors.ui.util.comoDecimal
 import com.charruamotors.ui.util.comoMilhar
+import com.charruamotors.ui.util.comoNumero
+import com.charruamotors.ui.util.rotulo
+import com.charruamotors.ui.componentes.PontoTelemetria
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 
 /**
- * Aba 1 — Scanner OBD2: conexão, painel de telemetria (mostradores + grade de todos os PIDs
- * suportados), Data Logger CSV e diagnóstico completo (VIN, falhas por categoria, Freeze Frame).
+ * Aba 1 — Scanner OBD2: conexão, painel de telemetria (mostradores, gráfico ao vivo, computador
+ * de bordo, cronômetro 0–100 km/h e grade de todos os PIDs suportados, inclusive os da
+ * montadora), Data Logger CSV e diagnóstico completo (VIN, falhas por categoria, Freeze Frame).
  */
 class ObdFragment : Fragment() {
 
@@ -112,6 +120,8 @@ class ObdFragment : Fragment() {
         botaoDesconectar.setOnClickListener { viewModel.desconectar() }
         botaoSalvarLeitura.setOnClickListener { viewModel.salvarLeitura() }
         botaoGravarLog.setOnClickListener { viewModel.alternarLog() }
+        botaoArmarCronometro.setOnClickListener { viewModel.alternarCronometro() }
+        botaoZerarViagem.setOnClickListener { viewModel.zerarViagem() }
         botaoLerCodigos.setOnClickListener { viewModel.lerCodigos() }
         botaoLimparCodigos.setOnClickListener { confirmarLimpezaCodigos() }
     }
@@ -164,6 +174,9 @@ class ObdFragment : Fragment() {
                 launch { viewModel.infoEcu.collect { mostrarInfoEcu(it) } }
                 launch { viewModel.diagnostico.collect { mostrarDiagnostico(it) } }
                 launch { viewModel.estadoLog.collect { mostrarEstadoLog(it) } }
+                launch { viewModel.computador.collect { mostrarComputador(it) } }
+                launch { viewModel.cronometro.collect { mostrarCronometro(it) } }
+                launch { viewModel.grafico.collect { mostrarGrafico(it) } }
                 launch { viewModel.ocupado.collect { atualizarBotoes() } }
                 launch { viewModel.historicoLeituras.collect { mostrarHistorico(it) } }
                 launch {
@@ -223,6 +236,8 @@ class ObdFragment : Fragment() {
         botaoSalvarLeitura.isEnabled = conectado && viewModel.dados.value != null
         // Gravando: o botão continua ativo para permitir parar mesmo após a queda da conexão.
         botaoGravarLog.isEnabled = conectado || viewModel.estadoLog.value.gravando
+        botaoArmarCronometro.isEnabled = conectado || viewModel.cronometro.value.estado.armado
+        botaoZerarViagem.isEnabled = viewModel.computador.value.viagem.segundos > 0
         botaoLerCodigos.isEnabled = conectado && !ocupado
         botaoLimparCodigos.isEnabled = conectado && !ocupado
     }
@@ -276,6 +291,92 @@ class ObdFragment : Fragment() {
         } else {
             getString(R.string.valor_indisponivel)
         }
+        val perfil = info.perfil
+        textoPerfilFabricante.text = when {
+            !conectado -> getString(R.string.valor_indisponivel)
+            perfil == null -> getString(R.string.obd_perfil_verificando)
+            perfil is ResultadoPerfil.SemPerfil -> getString(R.string.obd_perfil_sem)
+            perfil is ResultadoPerfil.Indisponivel -> getString(R.string.obd_perfil_indisponivel, perfil.fabricante, perfil.motivo)
+            perfil is ResultadoPerfil.Ativo ->
+                resources.getQuantityString(R.plurals.obd_perfil_ativo, perfil.pids.size, perfil.fabricante, perfil.pids.size)
+            else -> ""
+        }
+        val observacao = (perfil as? ResultadoPerfil.Ativo)?.observacao?.takeIf { conectado && it.isNotBlank() }
+        textoPerfilObservacao.isVisible = observacao != null
+        textoPerfilObservacao.text = observacao
+    }
+
+    /** Computador de bordo: km/L e L/h instantâneos, método usado e média da viagem. */
+    private fun mostrarComputador(ui: ComputadorBordoUi) = with(binding) {
+        val vazio = getString(R.string.valor_indisponivel)
+        val consumo = ui.consumo
+        textoConsumoKmL.text = when {
+            consumo == null -> vazio
+            consumo.kmPorLitro == null -> getString(R.string.obd_bordo_parado)
+            else -> getString(R.string.obd_bordo_km_l, consumo.kmPorLitro.coerceAtMost(MAX_KM_L_EXIBIDO).comoNumero(1))
+        }
+        textoConsumoLH.text = consumo?.let { getString(R.string.obd_bordo_l_h, it.litrosPorHora.comoNumero(1)) } ?: vazio
+        textoMetodoConsumo.isVisible = consumo != null
+        textoMetodoConsumo.text = when (consumo?.metodo) {
+            MetodoConsumo.MAF -> getString(R.string.obd_bordo_metodo_maf)
+            MetodoConsumo.SPEED_DENSITY -> getString(R.string.obd_bordo_metodo_sd)
+            MetodoConsumo.SENSOR_ECU -> getString(R.string.obd_bordo_metodo_ecu)
+            null -> ""
+        }
+        textoMediaViagem.text = ui.viagem.mediaKmPorLitro?.let { getString(R.string.obd_bordo_km_l, it.comoNumero(1)) } ?: vazio
+        textoTotaisViagem.text = getString(
+            R.string.obd_bordo_totais, ui.viagem.distanciaKm.comoNumero(1), ui.viagem.litros.comoNumero(2),
+        )
+
+        val conectado = viewModel.estado.value is EstadoConexaoObd.Conectado
+        val etanol = viewModel.dados.value?.get(Pids.PERCENTUAL_ETANOL)
+        val combustivel = ui.motor.tipoCombustivel.rotulo(requireContext())
+        val cilindrada = ui.motor.cilindradaLitros.comoNumero(1)
+        textoParametrosMotor.text = when {
+            conectado && consumo == null && ui.motor.tipoCombustivel == TipoCombustivel.DIESEL ->
+                getString(R.string.obd_bordo_diesel_sem_ecu)
+            conectado && consumo == null -> getString(R.string.obd_bordo_sem_dados)
+            ui.motor.tipoCombustivel == TipoCombustivel.FLEX && etanol != null ->
+                getString(R.string.obd_bordo_motor_etanol, cilindrada, combustivel, etanol.comoNumero(0))
+            else -> getString(R.string.obd_bordo_motor, cilindrada, combustivel)
+        }
+        botaoZerarViagem.isEnabled = ui.viagem.segundos > 0
+    }
+
+    /** Cronômetro 0–100: tempo (ao vivo ou final), instrução do estado e melhor tempo. */
+    private fun mostrarCronometro(ui: CronometroUi) = with(binding) {
+        val estado = ui.estado
+        textoCronometroTempo.text = getString(
+            R.string.obd_cronometro_tempo,
+            when (estado) {
+                is EstadoCronometro.Medindo -> segundos(estado.decorridoMs, 1)
+                is EstadoCronometro.Concluido -> segundos(estado.tempoMs, 2)
+                else -> segundos(0, 2)
+            },
+        )
+        textoCronometroStatus.text = when (estado) {
+            EstadoCronometro.Desarmado -> getString(R.string.obd_cronometro_desarmado)
+            EstadoCronometro.AguardandoParada -> getString(R.string.obd_cronometro_aguardando)
+            EstadoCronometro.Pronto -> getString(R.string.obd_cronometro_pronto)
+            is EstadoCronometro.Medindo -> getString(R.string.obd_cronometro_medindo, estado.velocidade.toInt())
+            is EstadoCronometro.Concluido -> getString(R.string.obd_cronometro_concluido)
+        }
+        textoCronometroMelhor.isVisible = ui.melhorTempoMs != null
+        textoCronometroMelhor.text = ui.melhorTempoMs?.let { getString(R.string.obd_cronometro_melhor, segundos(it, 2)) }
+        botaoArmarCronometro.setText(
+            when {
+                estado.armado -> R.string.obd_cronometro_cancelar
+                estado is EstadoCronometro.Concluido -> R.string.obd_cronometro_novamente
+                else -> R.string.obd_cronometro_armar
+            },
+        )
+        atualizarBotoes()
+    }
+
+    private fun segundos(ms: Long, casas: Int): String = (ms / 1000.0).comoNumero(casas)
+
+    private fun mostrarGrafico(pontos: List<PontoTelemetria>) {
+        binding.graficoTelemetria.definirPontos(pontos)
     }
 
     private fun mostrarEstadoLog(log: EstadoLog) = with(binding) {
@@ -376,6 +477,8 @@ class ObdFragment : Fragment() {
     companion object {
         private const val TAG = "ObdFragment"
         private const val LARGURA_MINIMA_CELULA_DP = 170
+        /** Em descidas com corte de combustível o km/L instantâneo dispara; acima disso mostra o teto. */
+        private const val MAX_KM_L_EXIBIDO = 99.9
 
         fun novo(veiculoId: Long) = ObdFragment().apply {
             arguments = Bundle().apply { putLong(DiagnosticoActivity.EXTRA_VEICULO_ID, veiculoId) }

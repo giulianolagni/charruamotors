@@ -274,7 +274,7 @@ class GaugeView @JvmOverloads constructor(
     }
 
     companion object {
-        private const val DURACAO_ANIMACAO_MS = 400L
+        private const val DURACAO_ANIMACAO_MS = 240L // ≈ ciclo da fila rápida (250 ms)
         private const val TAMANHO_PADRAO_DP = 160
         private val LOCALE_BR = java.util.Locale.forLanguageTag("pt-BR")
     }

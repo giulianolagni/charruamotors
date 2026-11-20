@@ -225,6 +225,218 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- Gráfico ao vivo: últimos 60 s de RPM e MAP/turbo -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Material3.CardView.Elevated"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_medio"
+            app:cardCornerRadius="@dimen/raio_card">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/espaco_medio">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/obd_grafico_titulo"
+                    android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                <com.charruamotors.ui.componentes.TelemetriaChartView
+                    android:id="@+id/grafico_telemetria"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/altura_grafico"
+                    android:layout_marginTop="@dimen/espaco_pequeno" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Computador de bordo: consumo instantâneo e média da viagem -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Material3.CardView.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_medio"
+            app:cardCornerRadius="@dimen/raio_card">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/espaco_medio">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/obd_bordo_titulo"
+                        android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                    <TextView
+                        android:id="@+id/texto_metodo_consumo"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/fundo_badge"
+                        android:paddingHorizontal="@dimen/espaco_pequeno"
+                        android:paddingVertical="2dp"
+                        android:textAppearance="?attr/textAppearanceLabelSmall"
+                        android:textColor="?attr/colorOnSecondaryContainer"
+                        app:backgroundTint="?attr/colorSecondaryContainer"
+                        tools:text="MAF" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/obd_bordo_instantaneo"
+                            android:textAppearance="?attr/textAppearanceLabelMedium"
+                            android:textColor="@color/texto_secundario" />
+
+                        <TextView
+                            android:id="@+id/texto_consumo_km_l"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                            tools:text="12,4 km/L" />
+
+                        <TextView
+                            android:id="@+id/texto_consumo_l_h"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textAppearance="?attr/textAppearanceBodyMedium"
+                            tools:text="4,8 L/h" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/obd_bordo_media"
+                            android:textAppearance="?attr/textAppearanceLabelMedium"
+                            android:textColor="@color/texto_secundario" />
+
+                        <TextView
+                            android:id="@+id/texto_media_viagem"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                            tools:text="11,8 km/L" />
+
+                        <TextView
+                            android:id="@+id/texto_totais_viagem"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textAppearance="?attr/textAppearanceBodyMedium"
+                            tools:text="3,2 km · 0,27 L" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/texto_parametros_motor"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="@color/texto_secundario"
+                    tools:text="Motor 1.6 L · flex · E27 (informado pela ECU)" />
+
+                <Button
+                    android:id="@+id/botao_zerar_viagem"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:text="@string/obd_bordo_zerar" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Cronômetro automático 0–100 km/h -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_cronometro"
+            style="@style/Widget.Material3.CardView.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_medio"
+            app:cardCornerRadius="@dimen/raio_card">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/espaco_medio">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/obd_cronometro_titulo"
+                    android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                <TextView
+                    android:id="@+id/texto_cronometro_tempo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:fontFeatureSettings="tnum"
+                    android:textAppearance="?attr/textAppearanceDisplaySmall"
+                    tools:text="11,84 s" />
+
+                <TextView
+                    android:id="@+id/texto_cronometro_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_horizontal"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textColor="@color/texto_secundario"
+                    tools:text="Pronto: a contagem começa quando o carro sair do 0" />
+
+                <TextView
+                    android:id="@+id/texto_cronometro_melhor"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_horizontal"
+                    android:textAppearance="?attr/textAppearanceLabelMedium"
+                    android:visibility="gone"
+                    tools:text="Melhor tempo: 11,84 s"
+                    tools:visibility="visible" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_armar_cronometro"
+                    style="@style/Widget.Material3.Button.Icon"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:text="@string/obd_cronometro_armar"
+                    app:icon="@drawable/ic_cronometro" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- Grade com todos os PIDs suportados pela ECU -->
         <TextView
             android:id="@+id/titulo_sensores"
@@ -346,7 +558,32 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textAppearance="?attr/textAppearanceTitleMedium"
-                    tools:text="27 de 27 do catálogo" />
+                    tools:text="28 de 28 do catálogo" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:text="@string/obd_ecu_perfil"
+                    android:textAppearance="?attr/textAppearanceLabelMedium"
+                    android:textColor="@color/texto_secundario" />
+
+                <TextView
+                    android:id="@+id/texto_perfil_fabricante"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                    tools:text="Volkswagen (UDS 22): 3 PIDs ativos" />
+
+                <TextView
+                    android:id="@+id/texto_perfil_observacao"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="@color/texto_secundario"
+                    android:visibility="gone"
+                    tools:text="DIDs de referência; confirme com ODIS/VCDS."
+                    tools:visibility="visible" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

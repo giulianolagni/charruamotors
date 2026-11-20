@@ -170,6 +170,56 @@
     <string name="obd_ff_nao_suportado">A ECU não informou o quadro congelado.</string>
     <string name="obd_ff_sem_dtc">Código causador não informado</string>
 
+    <!-- Gráfico ao vivo -->
+    <string name="obd_grafico_titulo">Telemetria ao vivo (últimos 60 s)</string>
+    <string name="obd_grafico_agora">agora</string>
+    <string name="obd_grafico_legenda_rpm">RPM %1$s</string>
+    <string name="obd_grafico_legenda_map">MAP %1$s kPa</string>
+    <string name="obd_grafico_vazio">Gráfico de RPM e pressão do coletor: sem leituras</string>
+    <string name="obd_grafico_descricao">Gráfico dos últimos 60 segundos. RPM atual %1$s, pressão do coletor %2$s kPa</string>
+
+    <!-- Computador de bordo -->
+    <string name="obd_bordo_titulo">Computador de bordo</string>
+    <string name="obd_bordo_instantaneo">Consumo instantâneo</string>
+    <string name="obd_bordo_media">Média da viagem</string>
+    <string name="obd_bordo_km_l">%1$s km/L</string>
+    <string name="obd_bordo_l_h">%1$s L/h</string>
+    <string name="obd_bordo_parado">Parado</string>
+    <string name="obd_bordo_totais">%1$s km · %2$s L</string>
+    <string name="obd_bordo_zerar">Zerar viagem</string>
+    <string name="obd_bordo_metodo_maf">MAF</string>
+    <string name="obd_bordo_metodo_sd">Speed-Density</string>
+    <string name="obd_bordo_metodo_ecu">ECU (015E)</string>
+    <string name="obd_bordo_sem_dados">Sem dados para calcular o consumo (a ECU não informa MAF nem RPM/MAP/temperatura do ar).</string>
+    <string name="obd_bordo_motor">Motor %1$s L · %2$s</string>
+    <string name="obd_bordo_motor_etanol">Motor %1$s L · %2$s · %3$s%% de etanol (ECU)</string>
+    <string name="obd_bordo_diesel_sem_ecu">Diesel: o consumo só é exibido se a ECU informar o PID 015E.</string>
+
+    <!-- Cronômetro 0–100 km/h -->
+    <string name="obd_cronometro_titulo">Cronômetro 0–100 km/h</string>
+    <string name="obd_cronometro_armar">Armar 0–100 km/h</string>
+    <string name="obd_cronometro_cancelar">Cancelar</string>
+    <string name="obd_cronometro_novamente">Armar novamente</string>
+    <string name="obd_cronometro_tempo">%1$s s</string>
+    <string name="obd_cronometro_desarmado">Arme o cronômetro com o carro parado. Só em local seguro e permitido.</string>
+    <string name="obd_cronometro_aguardando">Armado: pare o veículo para começar.</string>
+    <string name="obd_cronometro_pronto">Pronto: a contagem começa quando o carro sair do 0.</string>
+    <string name="obd_cronometro_medindo">Medindo… %1$d km/h</string>
+    <string name="obd_cronometro_concluido">0–100 km/h concluído!</string>
+    <string name="obd_cronometro_melhor">Melhor tempo nesta sessão: %1$s s</string>
+    <string name="obd_cronometro_sem_conexao">Conecte o scanner para usar o cronômetro</string>
+    <string name="obd_cronometro_sem_velocidade">A ECU não informa a velocidade (PID 010D)</string>
+
+    <!-- Perfil de montadora (modos 21/22) -->
+    <string name="obd_ecu_perfil">PIDs da montadora (modo 21 / UDS 22)</string>
+    <string name="obd_perfil_verificando">Verificando…</string>
+    <string name="obd_perfil_sem">Sem perfil para a marca deste veículo</string>
+    <string name="obd_perfil_indisponivel">%1$s: %2$s</string>
+    <plurals name="obd_perfil_ativo">
+        <item quantity="one">%1$s: %2$d PID ativo</item>
+        <item quantity="other">%1$s: %2$d PIDs ativos</item>
+    </plurals>
+
     <!-- Aba Manutenções -->
     <string name="manutencoes_lista_vazia">Nenhuma manutenção registrada.
 Toque em “Nova manutenção” para começar.</string>

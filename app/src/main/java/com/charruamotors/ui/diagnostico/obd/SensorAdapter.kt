@@ -25,7 +25,7 @@ class SensorAdapter : ListAdapter<LeituraSensor, SensorAdapter.ViewHolder>(Diff)
     class ViewHolder(private val binding: ItemSensorBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(leitura: LeituraSensor) {
             binding.textoNome.text = leitura.definicao.nome
-            binding.textoComando.text = leitura.definicao.comando
+            binding.textoComando.text = leitura.definicao.rotuloComando
             bindValor(leitura)
         }
 

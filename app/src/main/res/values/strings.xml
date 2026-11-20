@@ -53,6 +53,120 @@
     <string name="combustivel_diesel">Diesel</string>
     <string name="combustivel_gnv">GNV</string>
 
+    <!-- Diagnóstico (Activity com abas) -->
+    <string name="diagnostico_titulo">Diagnóstico</string>
+    <string name="aba_obd">Diagnóstico OBD2</string>
+    <string name="aba_manutencoes">Manutenções</string>
+    <string name="aba_abastecimentos">Abastecimentos</string>
+    <string name="botao_diagnostico">Diagnóstico</string>
+    <string name="scanner_sem_veiculo">Cadastre um veículo para usar o scanner</string>
+    <string name="scanner_escolher_veiculo">Escolha o veículo</string>
+    <string name="seletor_data_titulo">Selecione a data</string>
+    <string name="valor_indisponivel">—</string>
+    <string name="prefixo_reais">R$</string>
+    <string name="item_km">%1$s km</string>
+
+    <!-- Aba OBD2 -->
+    <string name="obd_scanner">Scanner OBD2</string>
+    <string name="obd_modo_simulado">Simulado</string>
+    <string name="obd_modo_bluetooth">Bluetooth real</string>
+    <string name="obd_dispositivo">Scanner simulado</string>
+    <string name="obd_dispositivo_pareado">Scanner pareado</string>
+    <string name="obd_atualizar_dispositivos">Atualizar lista</string>
+    <string name="obd_conectar">Conectar</string>
+    <string name="obd_desconectar">Desconectar</string>
+    <string name="obd_estado_desconectado">Desconectado</string>
+    <string name="obd_estado_conectando">Conectando…</string>
+    <string name="obd_estado_conectado">Conectado</string>
+    <string name="obd_estado_erro">Erro: %1$s</string>
+    <string name="obd_conectado">Scanner conectado</string>
+    <string name="obd_sem_pareados">Nenhum scanner pareado. Pareie o ELM327 nas configurações de Bluetooth.</string>
+    <string name="obd_sem_bluetooth">Este aparelho não possui Bluetooth. Use o modo simulado.</string>
+    <string name="obd_permissao_negada">Permissão de Bluetooth necessária para usar o scanner</string>
+    <string name="obd_bluetooth_desligado">Ligue o Bluetooth para conectar ao scanner</string>
+    <string name="obd_erro_sem_dispositivo">Selecione um scanner</string>
+    <string name="obd_erro_sem_leitura">Ainda não há leitura para salvar</string>
+    <string name="obd_leitura_salva">Leitura salva no histórico</string>
+    <string name="obd_tempo_real">Dados em tempo real</string>
+    <string name="obd_rpm">Rotação (RPM)</string>
+    <string name="obd_velocidade">Velocidade</string>
+    <string name="obd_temperatura">Temperatura do motor</string>
+    <string name="obd_carga">Carga do motor</string>
+    <string name="obd_bateria">Tensão da bateria</string>
+    <string name="obd_valor_rpm">%1$s rpm</string>
+    <string name="obd_valor_velocidade">%1$d km/h</string>
+    <string name="obd_valor_temperatura">%1$d °C</string>
+    <string name="obd_valor_carga">%1$s %%</string>
+    <string name="obd_valor_bateria">%1$s V</string>
+    <string name="obd_salvar_leitura">Salvar leitura no histórico</string>
+    <string name="obd_codigos_falha">Códigos de falha</string>
+    <string name="obd_ler_codigos">Ler códigos</string>
+    <string name="obd_limpar_codigos">Limpar códigos</string>
+    <string name="obd_codigos_nao_lidos">Conecte o scanner e toque em “Ler códigos”.</string>
+    <string name="obd_sem_codigos">Nenhum código de falha armazenado.</string>
+    <string name="obd_codigos_lidos">Códigos de falha lidos e salvos no histórico</string>
+    <string name="obd_codigos_limpos">Códigos de falha limpos</string>
+    <string name="obd_limpar_titulo">Limpar códigos de falha?</string>
+    <string name="obd_limpar_mensagem">Os códigos serão apagados da memória da ECU e a luz de injeção pode voltar a acender se o problema persistir. Anote-os antes de continuar.</string>
+    <string name="obd_limpar_confirmar">Limpar</string>
+
+    <!-- Aba Manutenções -->
+    <string name="manutencoes_lista_vazia">Nenhuma manutenção registrada.
+Toque em “Nova manutenção” para começar.</string>
+    <string name="manutencao_nova">Nova manutenção</string>
+    <string name="manutencao_editar">Editar manutenção</string>
+    <string name="manutencao_salva">Manutenção salva</string>
+    <string name="manutencao_excluida">Manutenção excluída</string>
+    <string name="manutencao_excluir_titulo">Excluir manutenção?</string>
+    <string name="manutencao_excluir_mensagem">O registro e as peças trocadas serão removidos. Esta ação não pode ser desfeita.</string>
+    <string name="manutencao_proximas_titulo">Próxima manutenção prevista</string>
+    <string name="manutencao_previsao_km">aos %1$s km</string>
+    <string name="manutencao_previsao_data">até %1$s</string>
+    <string name="manutencao_previsao_linha">%1$s — %2$s</string>
+    <string name="manutencao_previsao_vencida">%1$s (vencida)</string>
+    <string name="manutencao_item_pecas">Peças: %1$s</string>
+    <string name="manutencao_pecas_titulo">Peças trocadas</string>
+    <string name="manutencao_adicionar_peca">Adicionar peça</string>
+    <string name="manutencao_remover_peca">Remover</string>
+    <string name="manutencao_tipo_troca_oleo">Troca de óleo</string>
+    <string name="manutencao_tipo_filtros">Filtros</string>
+    <string name="manutencao_tipo_freios">Freios</string>
+    <string name="manutencao_tipo_pneus">Pneus</string>
+    <string name="manutencao_tipo_revisao">Revisão</string>
+    <string name="manutencao_tipo_eletrica">Elétrica</string>
+    <string name="manutencao_tipo_outros">Outros</string>
+
+    <!-- Aba Abastecimentos -->
+    <string name="abastecimentos_lista_vazia">Nenhum abastecimento registrado.
+Toque em “Novo abastecimento” para começar.</string>
+    <string name="abastecimento_novo">Novo abastecimento</string>
+    <string name="abastecimento_editar">Editar abastecimento</string>
+    <string name="abastecimento_salvo">Abastecimento salvo</string>
+    <string name="abastecimento_excluido">Abastecimento excluído</string>
+    <string name="abastecimento_excluir_titulo">Excluir abastecimento?</string>
+    <string name="abastecimento_excluir_mensagem">O registro será removido. Esta ação não pode ser desfeita.</string>
+    <string name="abastecimento_consumo_medio">Consumo médio</string>
+    <string name="abastecimento_custo_km">Custo por km</string>
+    <string name="abastecimento_valor_consumo">%1$s km/l</string>
+    <string name="abastecimento_valor_custo_km">%1$s/km</string>
+    <string name="abastecimento_item_titulo">%1$s L de %2$s</string>
+    <string name="abastecimento_tanque_cheio">Tanque cheio</string>
+    <string name="abastecimento_preco_litro">%1$s/L</string>
+
+    <!-- Campos dos formulários de registro -->
+    <string name="campo_tipo_servico">Tipo de serviço</string>
+    <string name="campo_data">Data</string>
+    <string name="campo_km_registro">Quilometragem</string>
+    <string name="campo_custo_total">Custo total</string>
+    <string name="campo_oficina">Oficina (opcional)</string>
+    <string name="campo_descricao">Descrição (opcional)</string>
+    <string name="campo_peca_nome">Peça</string>
+    <string name="campo_peca_quantidade">Quantidade</string>
+    <string name="campo_peca_valor">Valor unitário</string>
+    <string name="campo_litros">Litros</string>
+    <string name="campo_valor_total">Valor total</string>
+    <string name="campo_tanque_cheio">Tanque cheio</string>
+
     <!-- Erros de validação -->
     <string name="erro_obrigatorio">Campo obrigatório</string>
     <string name="erro_email_invalido">E-mail inválido</string>

@@ -3,6 +3,7 @@ package com.charruamotors.domain.calculo
 import com.charruamotors.domain.model.Abastecimento
 import com.charruamotors.domain.model.Manutencao
 import com.charruamotors.domain.model.TipoManutencao
+import com.charruamotors.domain.model.Veiculo
 import java.time.LocalDate
 
 /** Previsão da próxima manutenção de um tipo de serviço (por km e/ou por data). */
@@ -12,6 +13,19 @@ data class ProximaManutencao(
     val dataPrevista: LocalDate?,
     val vencida: Boolean,
 )
+
+/** Resumo de um veículo exibido no Dashboard (todos os valores já calculados pelo domínio). */
+data class ResumoVeiculo(
+    val veiculo: Veiculo,
+    /** km/l pelo método do tanque cheio; null sem dois tanques cheios. */
+    val consumoMedio: Double?,
+    /** Serviço mais urgente (vencido primeiro); null sem histórico de serviços periódicos. */
+    val proximaManutencao: ProximaManutencao?,
+    /** Quantidade de códigos de falha (DTC) com status ATIVO. */
+    val falhasAtivas: Int,
+) {
+    val temFalhasAtivas: Boolean get() = falhasAtivas > 0
+}
 
 /** Cálculos de domínio (sem Android/UI), cobertos por testes unitários. */
 object CalculosVeiculo {
@@ -88,4 +102,18 @@ object CalculosVeiculo {
     /** A manutenção mais urgente, ou null se não houver histórico de serviços periódicos. */
     fun proximaManutencao(manutencoes: List<Manutencao>, kmAtual: Int, hoje: LocalDate): ProximaManutencao? =
         proximasManutencoes(manutencoes, kmAtual, hoje).firstOrNull()
+
+    /** Monta o resumo do Dashboard a partir do histórico do veículo. */
+    fun resumir(
+        veiculo: Veiculo,
+        abastecimentos: List<Abastecimento>,
+        manutencoes: List<Manutencao>,
+        falhasAtivas: Int,
+        hoje: LocalDate,
+    ): ResumoVeiculo = ResumoVeiculo(
+        veiculo = veiculo,
+        consumoMedio = consumoMedio(abastecimentos),
+        proximaManutencao = proximaManutencao(manutencoes, veiculo.kmAtual, hoje),
+        falhasAtivas = falhasAtivas,
+    )
 }

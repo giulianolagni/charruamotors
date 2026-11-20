@@ -4,6 +4,7 @@ import com.charruamotors.domain.model.Abastecimento
 import com.charruamotors.domain.model.Manutencao
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.TipoManutencao
+import com.charruamotors.domain.model.Veiculo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -128,5 +129,42 @@ class CalculosVeiculoTest {
     fun `tipos sem periodicidade ou sem historico sao ignorados`() {
         assertNull(CalculosVeiculo.proximaManutencao(emptyList(), 1000, hoje))
         assertNull(CalculosVeiculo.proximaManutencao(listOf(manut(1000, TipoManutencao.ELETRICA, 100.0)), 1000, hoje))
+    }
+
+    // --- resumo do dashboard ---
+
+    private val carro = Veiculo(
+        id = 1, marca = "Chevrolet", modelo = "Onix", ano = 2020, placa = "ABC1234",
+        kmAtual = 45000, tipoCombustivel = TipoCombustivel.FLEX,
+    )
+
+    @Test
+    fun `resumo agrega consumo, proxima manutencao e falhas`() {
+        val abastecimentos = listOf(abast(1000, 40.0, 240.0, true), abast(1400, 40.0, 240.0, true))
+        val manutencoes = listOf(manut(40000, TipoManutencao.TROCA_OLEO, 200.0))
+
+        val resumo = CalculosVeiculo.resumir(carro, abastecimentos, manutencoes, falhasAtivas = 2, hoje = hoje)
+
+        assertEquals(carro, resumo.veiculo)
+        assertEquals(10.0, resumo.consumoMedio!!, 0.001)
+        assertEquals(TipoManutencao.TROCA_OLEO, resumo.proximaManutencao!!.tipo)
+        assertEquals(2, resumo.falhasAtivas)
+        assertTrue(resumo.temFalhasAtivas)
+    }
+
+    @Test
+    fun `resumo sem historico fica neutro`() {
+        val resumo = CalculosVeiculo.resumir(carro, emptyList(), emptyList(), falhasAtivas = 0, hoje = hoje)
+
+        assertNull(resumo.consumoMedio)
+        assertNull(resumo.proximaManutencao)
+        assertFalse(resumo.temFalhasAtivas)
+    }
+
+    @Test
+    fun `resumo usa a km atual do veiculo para marcar manutencao vencida`() {
+        val manutencoes = listOf(manut(30000, TipoManutencao.TROCA_OLEO, 200.0))
+        val resumo = CalculosVeiculo.resumir(carro, emptyList(), manutencoes, 0, hoje)
+        assertTrue(resumo.proximaManutencao!!.vencida)
     }
 }

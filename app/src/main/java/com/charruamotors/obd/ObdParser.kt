@@ -342,6 +342,17 @@ object ObdParser {
         linhasLimpas(bruto, null).any { it.startsWith("LV RESET") || it.startsWith("ELM327") }
 
     /**
+     * Texto da resposta sem bytes nulos e demais caracteres de controle (`\r`, `\n` viram espaço),
+     * em maiúsculas e com espaços colapsados — para identificar o adaptador a partir de `ATZ`/`ATI`.
+     */
+    fun limparResposta(bruto: String): String =
+        bruto.map { if (it < ' ' || it.code == 0x7F) ' ' else it }
+            .joinToString("")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .uppercase()
+
+    /**
      * Primeira mensagem de erro do ELM327 na resposta (`NO DATA`, `CAN ERROR`, `BUS INIT: ...ERROR`,
      * `?`, `STOPPED`...), para mensagens ao usuário e o registro de comunicação; null se não houver.
      */

@@ -153,6 +153,52 @@ class Elm327HardwareRealTest {
     }
 
     @Test
+    fun `ATZ com bytes nulos e controle ainda identifica o ELM327 sem enviar ATI`() = runTest {
+        val t = TransporteFalso(ecu().apply { put("ATZ", "\u0000\u0000\r\u0007EL\u0000M327 v1.5\u0000\r\r") })
+        // "EL\u0000M327" vira "EL M327" ao trocar controle por espaço: o ATI confirma.
+        t.interceptar = { if (it == "ATI") "ELM327 v1.5\r\r" else null }
+        val obd = cliente(t)
+        assertTrue(obd.conectar(dispositivo).isSuccess)
+
+        val t2 = TransporteFalso(ecu().apply { put("ATZ", "\u0000\u0000\r\rELM327 v1.5\u0000\r\r") })
+        val obd2 = cliente(t2)
+        assertTrue(obd2.conectar(dispositivo).isSuccess)
+        assertFalse("ATI" in t2.enviados)
+    }
+
+    @Test
+    fun `ATZ sem ELM mas ATI de adaptador compativel conecta`() = runTest {
+        for (ati in listOf("OBDII v1.5\r\r", "STN1110 v4.0\r\r", "VGATE iCar\r\r", "v2.1\r\r")) {
+            val t = TransporteFalso(ecu().apply { put("ATZ", "\r\r?\r\r") })
+            t.interceptar = { if (it == "ATI") ati else null }
+            val obd = cliente(t)
+            assertTrue(ati, obd.conectar(dispositivo).isSuccess)
+            assertTrue("ATI" in t.enviados)
+        }
+    }
+
+    @Test
+    fun `ATZ e ATI irreconheciveis mas ATE0 com OK aceita a inicializacao`() = runTest {
+        val t = TransporteFalso(ecu().apply { put("ATZ", "xyz\r\r"); put("ATI", "???\r\r") })
+        val obd = cliente(t)
+        assertTrue(obd.conectar(dispositivo).isSuccess)
+        assertTrue(obd.eventos().any { "ATE0 respondeu OK" in it })
+    }
+
+    @Test
+    fun `sem identificacao e sem OK no ATE0 falha e o registro guarda a resposta bruta do ATZ`() = runTest {
+        val t = TransporteFalso(ecu().apply { put("ATZ", "\u0000zz\r\r"); put("ATI", "???\r\r"); put("ATE0", "?\r\r") })
+        val obd = cliente(t)
+        val r = obd.conectar(dispositivo)
+        assertTrue(r.exceptionOrNull()!!.message!!.contains("ELM327"))
+        assertTrue(obd.estado.value is EstadoConexaoObd.Erro)
+        val atz = obd.comandosRegistrados().first { it.comando == "ATZ" }
+        assertEquals("\u0000zz\r\r", atz.resposta)
+        assertTrue(obd.comandosRegistrados().any { it.comando == "ATI" })
+        assertTrue(obd.eventos().any { "ATZ=\"\\x00zz\\r\\r\"" in it })
+    }
+
+    @Test
     fun `linha K que falha no primeiro BUS INIT conecta na nova busca`() = runTest {
         val t = TransporteFalso(ecu())
         var buscas = 0

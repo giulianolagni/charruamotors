@@ -13,6 +13,7 @@ import com.charruamotors.ui.util.rotulo
 /** Adapter da lista de veículos do Dashboard. O DiffUtil anima só os itens que mudaram. */
 class VeiculoAdapter(
     private val aoClicar: (Veiculo) -> Unit,
+    private val aoDiagnosticar: (Veiculo) -> Unit,
 ) : ListAdapter<Veiculo, VeiculoAdapter.ViewHolder>(Diff) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder =
@@ -33,6 +34,7 @@ class VeiculoAdapter(
                 veiculo.tipoCombustivel.rotulo(context),
             )
             root.setOnClickListener { aoClicar(veiculo) }
+            botaoDiagnostico.setOnClickListener { aoDiagnosticar(veiculo) }
         }
     }
 

@@ -52,6 +52,13 @@
             android:exported="false"
             android:parentActivityName=".ui.dashboard.DashboardActivity"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- Activity 4: Diagnóstico OBD2, Manutenções e Abastecimentos (abas) -->
+        <activity
+            android:name=".ui.diagnostico.DiagnosticoActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.dashboard.DashboardActivity"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 
 </manifest>

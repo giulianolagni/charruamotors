@@ -15,9 +15,11 @@ import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.databinding.ActivityDashboardBinding
 import com.charruamotors.domain.model.Veiculo
+import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.login.LoginActivity
 import com.charruamotors.ui.util.aplicarInsetsDoSistema
 import com.charruamotors.ui.veiculo.VeiculoFormActivity
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 
@@ -27,9 +29,10 @@ class DashboardActivity : AppCompatActivity() {
     private lateinit var binding: ActivityDashboardBinding
     private val sessao by lazy { (application as CharruaMotorsApp).sessao }
     private val viewModel: DashboardViewModel by viewModels { DashboardViewModel.Factory }
-    private val adapter = VeiculoAdapter(aoClicar = { veiculo ->
-        startActivity(VeiculoFormActivity.intent(this, veiculo.id))
-    })
+    private val adapter = VeiculoAdapter(
+        aoClicar = { veiculo -> startActivity(VeiculoFormActivity.intent(this, veiculo.id)) },
+        aoDiagnosticar = ::abrirDiagnostico,
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Ícones claros na status bar, porque a toolbar é azul.
@@ -44,9 +47,7 @@ class DashboardActivity : AppCompatActivity() {
 
         configurarToolbar()
         binding.textoBoasVindas.text = getString(R.string.dashboard_boas_vindas, sessao.nomeUsuario.orEmpty())
-        binding.botaoScanner.setOnClickListener {
-            Snackbar.make(binding.root, R.string.em_breve, Snackbar.LENGTH_SHORT).show()
-        }
+        binding.botaoScanner.setOnClickListener { escolherVeiculoParaScanner() }
         binding.botaoNovoVeiculo.setOnClickListener {
             startActivity(VeiculoFormActivity.intent(this))
         }
@@ -64,6 +65,26 @@ class DashboardActivity : AppCompatActivity() {
         binding.textoListaVazia.isVisible = veiculos.isEmpty()
         binding.textoTotalVeiculos.text =
             resources.getQuantityString(R.plurals.dashboard_total_veiculos, veiculos.size, veiculos.size)
+    }
+
+    private fun abrirDiagnostico(veiculo: Veiculo) {
+        startActivity(DiagnosticoActivity.intent(this, veiculo.id))
+    }
+
+    /** Atalho do scanner: abre direto com um único veículo; com vários, pergunta qual. */
+    private fun escolherVeiculoParaScanner() {
+        val veiculos = viewModel.veiculos.value.orEmpty()
+        when (veiculos.size) {
+            0 -> Snackbar.make(binding.root, R.string.scanner_sem_veiculo, Snackbar.LENGTH_SHORT).show()
+            1 -> abrirDiagnostico(veiculos.first())
+            else -> MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.scanner_escolher_veiculo)
+                .setItems(veiculos.map { "${it.descricao} (${it.placaFormatada})" }.toTypedArray()) { _, indice ->
+                    abrirDiagnostico(veiculos[indice])
+                }
+                .setNegativeButton(R.string.botao_cancelar, null)
+                .show()
+        }
     }
 
     private fun configurarToolbar() {

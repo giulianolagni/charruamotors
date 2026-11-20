@@ -7,6 +7,8 @@ androidxAppcompat = "1.8.0"
 androidxActivity = "1.13.0"
 androidxConstraintlayout = "2.2.2"
 androidxRecyclerview = "1.4.0"
+androidxViewpager2 = "1.1.0"
+androidxFragment = "1.8.9"
 androidxLifecycle = "2.11.0"
 material = "1.14.0"
 room = "2.8.5"
@@ -21,6 +23,8 @@ androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "a
 androidx-activity-ktx = { module = "androidx.activity:activity-ktx", version.ref = "androidxActivity" }
 androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "androidxConstraintlayout" }
 androidx-recyclerview = { module = "androidx.recyclerview:recyclerview", version.ref = "androidxRecyclerview" }
+androidx-fragment-ktx = { module = "androidx.fragment:fragment-ktx", version.ref = "androidxFragment" }
+androidx-viewpager2 = { module = "androidx.viewpager2:viewpager2", version.ref = "androidxViewpager2" }
 androidx-lifecycle-viewmodel-ktx = { module = "androidx.lifecycle:lifecycle-viewmodel-ktx", version.ref = "androidxLifecycle" }
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidxLifecycle" }
 material = { module = "com.google.android.material:material", version.ref = "material" }

@@ -61,10 +61,13 @@ class CharruaMotorsApp : Application() {
 
     /** Cliente OBD2 do modo atual; ViewModels dependem apenas da interface [ObdClient]. */
     val obdClient: ObdClient
-        get() = when (modoObd) {
-            ModoObd.SIMULADO -> obdSimulado
-            ModoObd.BLUETOOTH -> obdBluetooth
-        }
+        get() = obdClientDe(modoObd)
+
+    /** Cliente OBD2 de um modo específico (usado pela UI para observar o estado de cada modo). */
+    fun obdClientDe(modo: ModoObd): ObdClient = when (modo) {
+        ModoObd.SIMULADO -> obdSimulado
+        ModoObd.BLUETOOTH -> obdBluetooth
+    }
 
     fun selecionarModoObd(modo: ModoObd) {
         modoObd = modo

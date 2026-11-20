@@ -1,5 +1,7 @@
 package com.charruamotors.obd
 
+import com.charruamotors.obd.pid.DefinicaoPid
+
 /** Resultado da interpretação de uma resposta bruta do ELM327. */
 sealed class RespostaObd<out T> {
     /** Resposta válida, já convertida para a unidade do domínio. */
@@ -32,6 +34,11 @@ object ObdParser {
     private val regexTamanhoCan = Regex("^[0-9A-F]{3}$")
     private val regexTensao = Regex("^(\\d{1,2}(?:[.,]\\d+)?)V?$")
     private val regexBusInitErro = Regex("BUS ?INIT:.*ERROR")
+    private val regexNumeroAt = Regex("^(-?\\d{1,6}(?:[.,]\\d+)?)[A-Z%]*$")
+
+    /** 17 caracteres; o padrão ISO 3779 exclui I, O e Q (confundíveis com 1 e 0). */
+    private val regexVin = Regex("^[A-HJ-NPR-Z0-9]{17}$")
+    private const val TAMANHO_VIN = 17
 
     // ---------------------------------------------------------------- PIDs do modo 01
 
@@ -63,24 +70,158 @@ object ObdParser {
         return classificarErro(linhas, bruto)
     }
 
-    /** Verifica a resposta de `0100` (PIDs suportados), usada para validar o link com a ECU. */
-    fun parsePidsSuportados(bruto: String, comando: String? = "0100"): RespostaObd<Unit> =
-        bytesDoPid(bruto, "00", 4, comando).mapear { }
+    // ---------------------------------------------------------------- PID genérico (catálogo)
+
+    /**
+     * Interpreta a resposta de qualquer PID do catálogo: extrai os [DefinicaoPid.bytes] bytes após
+     * `41 <pid>` (ou o número em texto, nos comandos AT), aplica a fórmula e valida a faixa.
+     */
+    fun parsePid(bruto: String, definicao: DefinicaoPid, comando: String? = definicao.comando): RespostaObd<Double> {
+        if (definicao.ehComandoAt) {
+            val linhas = linhasLimpas(bruto, comando)
+            for (linha in linhas) {
+                val numero = regexNumeroAt.matchEntire(compactar(linha))?.groupValues?.get(1) ?: continue
+                val x = numero.replace(',', '.').toDoubleOrNull() ?: continue
+                return validarFaixa(definicao.converter(x = x), definicao, bruto)
+            }
+            return classificarErro(linhas, bruto)
+        }
+        return when (val r = bytesDaResposta(bruto, "41${definicao.pidHex}", definicao.bytes, comando)) {
+            is RespostaObd.Ok -> validarFaixa(definicao.converter(r.valor), definicao, bruto)
+            else -> r.mapear { 0.0 }
+        }
+    }
+
+    // ---------------------------------------------------------------- PIDs suportados (bitmasks)
+
+    /**
+     * `0100`, `0120`, `0140`...: bitmask de 32 bits dos PIDs suportados em `base+1 .. base+0x20`.
+     * Devolve os números dos PIDs suportados, unindo as respostas de todas as ECUs que responderem.
+     * Se o último PID da faixa (`base+0x20`) estiver no conjunto, a ECU suporta a próxima faixa.
+     */
+    fun parsePidsSuportados(
+        bruto: String,
+        base: Int = 0x00,
+        comando: String? = "01%02X".format(base),
+    ): RespostaObd<Set<Int>> {
+        val linhas = linhasLimpas(bruto, comando)
+        val regex = Regex("41%02X([0-9A-F]*)".format(base))
+        var achou = false
+        val suportados = sortedSetOf<Int>()
+        for (linha in linhas) {
+            val dados = regex.find(compactar(linha))?.groupValues?.get(1) ?: continue
+            val bytes = hexParaBytes(dados)
+            if (bytes.size < 4) continue
+            achou = true
+            suportados += decodificarBitmask(base, bytes.take(4))
+        }
+        if (achou) return RespostaObd.Ok(suportados)
+        if (linhas.any { regex.containsMatchIn(compactar(it)) }) return RespostaObd.Invalido(bruto)
+        return classificarErro(linhas, bruto)
+    }
+
+    /** Bit 7 do 1º byte = PID `base+1` ... bit 0 do 4º byte = PID `base+0x20` (SAE J1979). */
+    fun decodificarBitmask(base: Int, bytes: List<Int>): Set<Int> {
+        require(bytes.size == 4) { "O bitmask de PIDs tem 4 bytes" }
+        val mascara = bytes.fold(0L) { acc, b -> (acc shl 8) or (b.toLong() and 0xFF) }
+        return (0 until 32).filter { bit -> (mascara shr (31 - bit)) and 1L == 1L }
+            .map { bit -> base + bit + 1 }
+            .toSet()
+    }
+
+    // ---------------------------------------------------------------- Freeze Frame (modo 02)
+
+    /**
+     * `02 <pid> <quadro>`: valor do PID congelado no momento da falha. Resposta `42 <pid> <quadro> A B...`.
+     * A [definicao] é a mesma do modo 01 (mesma fórmula e faixa).
+     */
+    fun parseFreezeFrame(
+        bruto: String,
+        definicao: DefinicaoPid,
+        quadro: Int = 0,
+        comando: String? = comandoFreezeFrame(definicao, quadro),
+    ): RespostaObd<Double> {
+        require(!definicao.ehComandoAt) { "Comandos AT não existem no Freeze Frame" }
+        val prefixo = "42${definicao.pidHex}%02X".format(quadro)
+        return when (val r = bytesDaResposta(bruto, prefixo, definicao.bytes, comando)) {
+            is RespostaObd.Ok -> validarFaixa(definicao.converter(r.valor), definicao, bruto)
+            else -> r.mapear { 0.0 }
+        }
+    }
+
+    /** `020200`: DTC que disparou o Freeze Frame. `Ok(null)` = nenhum quadro armazenado (`00 00`). */
+    fun parseDtcFreezeFrame(
+        bruto: String,
+        quadro: Int = 0,
+        comando: String? = "0202%02X".format(quadro),
+    ): RespostaObd<String?> =
+        bytesDaResposta(bruto, "4202%02X".format(quadro), 2, comando).mapear { (b1, b2) ->
+            if (b1 == 0 && b2 == 0) null else decodificarDtc(b1, b2)
+        }
+
+    /** Comando do modo 02 para o PID da [definicao] (`010C` → `020C00`). */
+    fun comandoFreezeFrame(definicao: DefinicaoPid, quadro: Int = 0): String =
+        "02${definicao.pidHex}%02X".format(quadro)
+
+    // ---------------------------------------------------------------- VIN (modo 09, PID 02)
+
+    /**
+     * `0902`: VIN (chassi) com 17 caracteres ASCII.
+     * - CAN (multi-frame): `49 02 01` + 17 bytes, distribuídos nas linhas `0:`, `1:`, `2:`;
+     * - ISO 9141 / KWP: 5 linhas `49 02 <seq> b1 b2 b3 b4`, a primeira preenchida com `00`.
+     */
+    fun parseVin(bruto: String, comando: String? = "0902"): RespostaObd<String> {
+        val linhas = linhasLimpas(bruto, comando)
+        val partes = linhas.mapNotNull { linha ->
+            val compacta = compactar(linha)
+            val i = compacta.indexOf("4902")
+            if (i < 0) null else hexParaBytes(compacta.substring(i + 4))
+        }.filter { it.isNotEmpty() }
+        if (partes.isEmpty()) return classificarErro(linhas, bruto)
+
+        // O 1º byte de cada parte é a sequência (ou a quantidade de itens, no CAN): ordena e descarta.
+        val texto = partes.sortedBy { it.first() }
+            .flatMap { it.drop(1) }
+            .filter { it in 0x21..0x7E }
+            .map { it.toChar().uppercaseChar() }
+            .filter { it.isLetterOrDigit() }
+            .joinToString("")
+        val vin = texto.take(TAMANHO_VIN)
+        return if (regexVin.matches(vin)) RespostaObd.Ok(vin) else RespostaObd.Invalido(bruto)
+    }
 
     // ---------------------------------------------------------------- DTCs (modos 03 e 04)
 
     /**
-     * `03`: códigos de falha armazenados. Resposta `43 ...`.
+     * `03`: códigos de falha armazenados (confirmados). Resposta `43 ...`.
      * Em CAN o primeiro byte após `43` é a quantidade de códigos (total de bytes ímpar);
      * nos demais protocolos vêm apenas pares de bytes, preenchidos com `00 00`.
      */
-    fun parseDtcs(bruto: String, comando: String? = "03"): RespostaObd<List<String>> {
+    fun parseDtcs(bruto: String, comando: String? = "03"): RespostaObd<List<String>> =
+        parseDtcsDoModo(bruto, "43", comando)
+
+    /**
+     * `07`: códigos pendentes — falhas detectadas no ciclo de condução atual/anterior que ainda
+     * não foram confirmadas (a luz de injeção pode ainda não ter acendido). Resposta `47 ...`.
+     */
+    fun parseDtcsPendentes(bruto: String, comando: String? = "07"): RespostaObd<List<String>> =
+        parseDtcsDoModo(bruto, "47", comando)
+
+    /**
+     * `0A`: códigos permanentes — não são apagados pelo modo 04; só a própria ECU os remove
+     * depois de verificar que a falha não se repete. Resposta `4A ...`.
+     */
+    fun parseDtcsPermanentes(bruto: String, comando: String? = "0A"): RespostaObd<List<String>> =
+        parseDtcsDoModo(bruto, "4A", comando)
+
+    /** Formato comum dos modos 03/07/0A; [prefixoResposta] = `0x40 + modo`. */
+    private fun parseDtcsDoModo(bruto: String, prefixoResposta: String, comando: String?): RespostaObd<List<String>> {
         val linhas = linhasLimpas(bruto, comando)
         val codigos = linkedSetOf<String>()
         var achouResposta = false
         for (linha in linhas) {
             val compacta = compactar(linha)
-            if (!compacta.startsWith("43")) continue
+            if (!compacta.startsWith(prefixoResposta)) continue
             val bytes = hexParaBytes(compacta.substring(2))
             achouResposta = true
             val pares = if (bytes.size % 2 == 1) bytes.drop(1) else bytes
@@ -111,9 +252,13 @@ object ObdParser {
     // ---------------------------------------------------------------- internos
 
     /** Procura `41 <pid> <bytes...>` em qualquer linha e devolve os [quantidade] bytes de dados. */
-    private fun bytesDoPid(bruto: String, pid: String, quantidade: Int, comando: String?): RespostaObd<List<Int>> {
+    private fun bytesDoPid(bruto: String, pid: String, quantidade: Int, comando: String?): RespostaObd<List<Int>> =
+        bytesDaResposta(bruto, "41$pid", quantidade, comando)
+
+    /** Procura `<prefixo> <bytes...>` (ex.: `410C`, `420C00`) em qualquer linha e devolve [quantidade] bytes. */
+    private fun bytesDaResposta(bruto: String, prefixo: String, quantidade: Int, comando: String?): RespostaObd<List<Int>> {
         val linhas = linhasLimpas(bruto, comando)
-        val regex = Regex("41$pid([0-9A-F]*)")
+        val regex = Regex("$prefixo([0-9A-F]*)")
         for (linha in linhas) {
             val dados = regex.find(compactar(linha))?.groupValues?.get(1) ?: continue
             val bytes = hexParaBytes(dados)
@@ -123,6 +268,9 @@ object ObdParser {
         if (linhas.any { regex.containsMatchIn(compactar(it)) }) return RespostaObd.Invalido(bruto)
         return classificarErro(linhas, bruto)
     }
+
+    private fun validarFaixa(valor: Double, definicao: DefinicaoPid, bruto: String): RespostaObd<Double> =
+        if (definicao.dentroDaFaixa(valor)) RespostaObd.Ok(valor) else RespostaObd.Invalido(bruto)
 
     private fun classificarErro(linhas: List<String>, bruto: String): RespostaObd<Nothing> {
         val texto = linhas.joinToString("\n")

@@ -69,6 +69,8 @@ dependencies {
     // Testes
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // org.json real para os testes JVM (o android.jar dos testes unitários só tem stubs).
+    testImplementation(libs.json)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
 }

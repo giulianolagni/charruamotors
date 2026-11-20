@@ -16,7 +16,6 @@
     <string name="botao_conectar_scanner">Conectar scanner OBD2</string>
     <string name="botao_novo_veiculo">Novo veículo</string>
     <string name="acao_sair">Sair</string>
-    <string name="em_breve">Disponível em breve</string>
     <string name="item_veiculo_detalhes">%1$d km • %2$s</string>
     <plurals name="dashboard_total_veiculos">
         <item quantity="one">%d veículo cadastrado</item>

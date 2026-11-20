@@ -50,5 +50,16 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/texto_descricao"
             tools:text="45000 km • Flex" />
+
+        <!-- Atalho para o diagnóstico OBD2 / manutenções do veículo -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/botao_diagnostico"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_pequeno"
+            android:text="@string/botao_diagnostico"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/texto_detalhes" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </com.google.android.material.card.MaterialCardView>

@@ -8,7 +8,8 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.charruamotors"
+        // ID próprio: instala lado a lado com o app original (com.charruamotors).
+        applicationId = "com.charruamotors.pro"
         minSdk = 26
         targetSdk = 37
         versionCode = 1
@@ -68,6 +69,8 @@ dependencies {
     // Testes
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // org.json real para os testes JVM (o android.jar dos testes unitários só tem stubs).
+    testImplementation(libs.json)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
 }

@@ -13,6 +13,7 @@ import com.charruamotors.obd.Elm327BluetoothClient
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
 import com.charruamotors.obd.ObdClientFake
+import com.charruamotors.obd.pid.CatalogoPids
 
 /**
  * Classe Application: criada uma única vez quando o processo do app inicia,
@@ -51,12 +52,17 @@ class CharruaMotorsApp : Application() {
     var modoObd: ModoObd = ModoObd.SIMULADO
         private set
 
+    /** Catálogo de PIDs (fórmulas, unidades, faixas), lido uma vez de `assets/pids_padrao.json`. */
+    val catalogoPids: CatalogoPids by lazy {
+        CatalogoPids.deJson(assets.open(CatalogoPids.ARQUIVO_PADRAO).bufferedReader().use { it.readText() })
+    }
+
     // Um cliente por modo, criados sob demanda e mantidos vivos (a conexão sobrevive às telas).
     private val obdSimulado: ObdClient by lazy { ObdClientFake() }
 
     private val obdBluetooth: ObdClient by lazy {
         val adaptador = getSystemService(BluetoothManager::class.java)?.adapter
-        Elm327BluetoothClient(adaptador)
+        Elm327BluetoothClient(adaptador, catalogoPids)
     }
 
     /** Cliente OBD2 do modo atual; ViewModels dependem apenas da interface [ObdClient]. */

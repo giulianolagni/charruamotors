@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Charrua Motors</string>
+    <string name="app_name">Charrua OBD Pro</string>
 
     <!-- Login -->
     <string name="login_subtitulo">Manutenção, abastecimentos e diagnóstico do seu veículo</string>

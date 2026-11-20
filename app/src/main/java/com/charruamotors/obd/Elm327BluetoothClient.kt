@@ -2,12 +2,16 @@ package com.charruamotors.obd
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothSocket
 import com.charruamotors.domain.model.EstadoConexaoObd
+import com.charruamotors.obd.pid.CatalogoPids
+import com.charruamotors.obd.pid.DefinicaoPid
+import com.charruamotors.obd.pid.Pids
+import com.charruamotors.obd.transporte.ClassicBluetoothTransport
+import com.charruamotors.obd.transporte.ObdTransport
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,25 +19,21 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import java.io.IOException
-import java.io.InputStream
-import java.io.OutputStream
-import java.util.UUID
-import kotlin.concurrent.thread
 
 /**
- * Cliente OBD2 real para adaptadores ELM327 em Bluetooth Clássico (perfil SPP / RFCOMM).
+ * Cliente OBD2 real para adaptadores ELM327. Implementa o protocolo (comandos AT, PIDs, DTCs);
+ * o meio físico fica num [ObdTransport] — hoje [ClassicBluetoothTransport] (RFCOMM), amanhã BLE.
  *
- * - Toda I/O roda em `Dispatchers.IO`; a main thread nunca é bloqueada.
+ * - Na conexão, lê os bitmasks `0100`/`0120`/`0140` e só consulta os PIDs que a ECU suporta.
+ * - PIDs do modo 01 vão com o sufixo de resposta única (`010C1`): o ELM327 devolve a resposta
+ *   assim que a primeira ECU responde, sem esperar o timeout de outras. Se o adaptador não
+ *   aceitar o sufixo (clones antigos respondem `?`), ele é desligado automaticamente.
  * - Um [Mutex] serializa os comandos (o ELM327 atende um comando por vez), permitindo
  *   que o polling de PIDs e a leitura de DTCs coexistam sem misturar respostas.
- * - Leituras usam polling de `available()` com timeout, então são canceláveis
- *   (pausar o polling em `onPause` realmente interrompe a leitura).
  * - Queda de conexão (`IOException`, vários timeouts seguidos) leva o [estado] a `Erro`
  *   e encerra o fluxo de leituras, sem exceções chegando à UI.
  *
@@ -41,24 +41,33 @@ import kotlin.concurrent.thread
  * antes de conectar; se faltarem, a `SecurityException` é convertida em estado `Erro`.
  *
  * @param adaptador `BluetoothAdapter` do aparelho (nulo se não houver Bluetooth).
+ * @param catalogo definições (fórmula, faixa) dos PIDs que o app sabe interpretar.
+ * @param criarTransporte fábrica do canal para o dispositivo escolhido.
  */
 @SuppressLint("MissingPermission") // SecurityException é tratada e convertida em EstadoConexaoObd.Erro
 class Elm327BluetoothClient(
     private val adaptador: BluetoothAdapter?,
-    private val timeoutConexaoMs: Long = 10_000,
-    private val timeoutComandoMs: Long = 3_000,
+    private val catalogo: CatalogoPids,
+    private val criarTransporte: (DispositivoObd) -> ObdTransport = { ClassicBluetoothTransport(adaptador, it.endereco) },
+    private val timeoutComandoMs: Long = ObdTransport.TIMEOUT_PADRAO_MS,
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ObdClient {
 
     private val _estado = MutableStateFlow<EstadoConexaoObd>(EstadoConexaoObd.Desconectado)
     override val estado: StateFlow<EstadoConexaoObd> = _estado.asStateFlow()
 
+    private val _pidsSuportados = MutableStateFlow<Set<String>>(emptySet())
+    override val pidsSuportados: StateFlow<Set<String>> = _pidsSuportados.asStateFlow()
+
     private val mutexComandos = Mutex()
 
-    @Volatile private var socket: BluetoothSocket? = null
-    @Volatile private var entrada: InputStream? = null
-    @Volatile private var saida: OutputStream? = null
+    @Volatile private var transporte: ObdTransport? = null
 
-    override suspend fun listarDispositivos(): List<DispositivoObd> = withContext(Dispatchers.IO) {
+    /** O adaptador aceita o sufixo de resposta única (`010C1`)? Detectado na inicialização. */
+    @Volatile var usaSufixoRespostaUnica: Boolean = false
+        private set
+
+    override suspend fun listarDispositivos(): List<DispositivoObd> = withContext(dispatcher) {
         try {
             adaptador?.bondedDevices.orEmpty()
                 .map { DispositivoObd(it.name ?: it.address, it.address) }
@@ -68,28 +77,20 @@ class Elm327BluetoothClient(
         }
     }
 
-    override suspend fun conectar(dispositivo: DispositivoObd): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun conectar(dispositivo: DispositivoObd): Result<Unit> = withContext(dispatcher) {
         val atual = _estado.value
         if (atual == EstadoConexaoObd.Conectando || atual == EstadoConexaoObd.Conectado) {
             return@withContext Result.failure(ObdException("Já existe uma conexão ativa ou em andamento"))
         }
         _estado.value = EstadoConexaoObd.Conectando
         try {
-            val bt = adaptador ?: throw ObdException("Este aparelho não possui Bluetooth")
-            if (!bt.isEnabled) throw ObdException("Bluetooth desligado. Ligue-o e tente novamente")
-
-            bt.cancelDiscovery() // descoberta ativa deixa a conexão RFCOMM lenta/instável
-            val novo = bt.getRemoteDevice(dispositivo.endereco).createRfcommSocketToServiceRecord(SPP_UUID)
-            socket = novo
-            conectarSocket(novo)
-            entrada = novo.inputStream
-            saida = novo.outputStream
+            val canal = criarTransporte(dispositivo)
+            transporte = canal
+            canal.conectar()
 
             inicializarAdaptador()
             _estado.value = EstadoConexaoObd.Conectado
             Result.success(Unit)
-        } catch (e: TimeoutCancellationException) {
-            falharConexao(ObdException("Tempo esgotado ao conectar com o scanner", e))
         } catch (e: CancellationException) {
             fecharRecursos()
             _estado.value = EstadoConexaoObd.Desconectado
@@ -107,11 +108,11 @@ class Elm327BluetoothClient(
         }
     }
 
-    override fun lerDadosEmTempoReal(intervaloMs: Long): Flow<DadosObd> = flow {
+    override fun lerDadosEmTempoReal(intervaloMs: Long, comandos: Collection<String>?): Flow<DadosObd> = flow {
         var ciclosSemResposta = 0
         while (_estado.value == EstadoConexaoObd.Conectado) {
             val dados = try {
-                lerCiclo()
+                lerCiclo(comandos)
             } catch (e: ObdException) {
                 perderConexao(e.message ?: "Conexão com o scanner perdida")
                 break
@@ -128,15 +129,43 @@ class Elm327BluetoothClient(
             }
             delay(intervaloMs)
         }
-    }.flowOn(Dispatchers.IO)
+    }.flowOn(dispatcher)
 
-    override suspend fun lerCodigosFalha(): Result<List<DtcLido>> = operacao {
+    override suspend fun lerCodigosFalha(): Result<List<DtcLido>> =
+        lerDtcs("03", "ler os códigos de falha", ObdParser::parseDtcs)
+
+    override suspend fun lerCodigosPendentes(): Result<List<DtcLido>> =
+        lerDtcs("07", "ler os códigos pendentes", ObdParser::parseDtcsPendentes)
+
+    override suspend fun lerCodigosPermanentes(): Result<List<DtcLido>> =
+        lerDtcs("0A", "ler os códigos permanentes", ObdParser::parseDtcsPermanentes)
+
+    override suspend fun lerFreezeFrame(): Result<FreezeFrame> = operacao {
         exigirConectado()
-        val bruto = enviar("03", TIMEOUT_DTC_MS)
-        when (val r = ObdParser.parseDtcs(bruto)) {
-            is RespostaObd.Ok -> r.valor.map { DtcLido(it, DescricaoDtc.descricaoDe(it)) }
-            RespostaObd.SemDados -> emptyList() // ECU sem códigos armazenados
-            else -> throw respostaInesperada(r, "ler os códigos de falha")
+        val dtc = when (val r = ObdParser.parseDtcFreezeFrame(enviar("020200", TIMEOUT_DTC_MS))) {
+            is RespostaObd.Ok -> r.valor
+            RespostaObd.SemConexao -> throw respostaInesperada(r, "ler o freeze frame")
+            else -> null // ECU não informa o DTC do quadro; os valores ainda podem existir
+        }
+        val valores = buildMap {
+            for (comando in Pids.FREEZE_FRAME) {
+                val definicao = catalogo[comando] ?: continue
+                val bruto = enviar(ObdParser.comandoFreezeFrame(definicao))
+                when (val r = ObdParser.parseFreezeFrame(bruto, definicao)) {
+                    is RespostaObd.Ok -> put(definicao.comando, r.valor)
+                    RespostaObd.SemConexao -> throw respostaInesperada(r, "ler o freeze frame")
+                    else -> Unit // PID não congelado por esta ECU
+                }
+            }
+        }
+        FreezeFrame(dtc, valores)
+    }
+
+    override suspend fun lerVin(): Result<String> = operacao {
+        exigirConectado()
+        when (val r = ObdParser.parseVin(enviar("0902", TIMEOUT_DTC_MS))) {
+            is RespostaObd.Ok -> r.valor
+            else -> throw respostaInesperada(r, "ler o VIN")
         }
     }
 
@@ -150,9 +179,9 @@ class Elm327BluetoothClient(
     }
 
     override suspend fun desconectar() {
-        // NonCancellable: o fechamento do socket precisa acontecer mesmo se o chamador for cancelado
+        // NonCancellable: o fechamento do canal precisa acontecer mesmo se o chamador for cancelado
         // (ex.: ViewModel.onCleared → onDestroy definitivo da tela).
-        withContext(Dispatchers.IO + NonCancellable) {
+        withContext(dispatcher + NonCancellable) {
             fecharRecursos()
             _estado.value = EstadoConexaoObd.Desconectado
         }
@@ -160,101 +189,136 @@ class Elm327BluetoothClient(
 
     // ---------------------------------------------------------------- protocolo ELM327
 
-    /** Sequência de inicialização AT e validação do link com a ECU. */
+    /** Sequência de inicialização AT, detecção dos PIDs suportados e do sufixo de resposta única. */
     private suspend fun inicializarAdaptador() {
         enviar("ATZ", TIMEOUT_RESET_MS) // reset (responde com a versão do ELM327)
         enviar("ATE0") // sem eco
         enviar("ATL0") // sem line feed
         enviar("ATSP0") // protocolo automático
-        // 0100 força a busca de protocolo e confirma que a ECU está respondendo.
-        when (ObdParser.parsePidsSuportados(enviar("0100", TIMEOUT_BUSCA_PROTOCOLO_MS))) {
-            is RespostaObd.Ok -> Unit
-            RespostaObd.SemConexao, RespostaObd.SemDados -> throw ObdException(
-                "Scanner conectado, mas sem comunicação com a ECU. Ligue a ignição e tente novamente",
-            )
-            else -> throw ObdException("O dispositivo não respondeu como um adaptador ELM327")
-        }
-    }
-
-    /** Lê todos os PIDs uma vez. Devolve `null` se *todos* estouraram o timeout. */
-    private suspend fun lerCiclo(): DadosObd? {
-        var timeouts = 0
-        suspend fun <T> pid(comando: String, interpretar: (String) -> RespostaObd<T>): T? = try {
-            when (val r = interpretar(enviar(comando))) {
-                is RespostaObd.Ok -> r.valor
-                RespostaObd.SemConexao -> throw ObdException("A ECU deixou de responder")
-                else -> null // NO DATA, "?" ou lixo: PID indisponível neste ciclo
-            }
-        } catch (e: ObdTimeoutException) {
-            timeouts++
-            null
-        }
-
-        val dados = DadosObd(
-            rpm = pid("010C") { ObdParser.parseRpm(it) },
-            velocidade = pid("010D") { ObdParser.parseVelocidade(it) },
-            temperaturaMotor = pid("0105") { ObdParser.parseTemperaturaMotor(it) },
-            cargaMotor = pid("0104") { ObdParser.parseCargaMotor(it) },
-            tensaoBateria = pid("ATRV") { ObdParser.parseTensao(it) },
-        )
-        return if (timeouts == TOTAL_PIDS) null else dados
+        val suportados = detectarPidsSuportados()
+        usaSufixoRespostaUnica = testarSufixoRespostaUnica()
+        // Só o que o app sabe interpretar: PIDs do catálogo presentes no bitmask + comandos AT do adaptador.
+        _pidsSuportados.value = catalogo.pids
+            .filter { it.ehComandoAt || it.pid in suportados }
+            .mapTo(linkedSetOf()) { it.comando }
     }
 
     /**
-     * Envia [comando] + `\r` e lê até o prompt `>` do ELM327. Serializado por [mutexComandos].
+     * Lê os bitmasks `0100` → `0120` → `0140`, seguindo para a próxima faixa só se a ECU indicar
+     * suporte a ela (último bit da faixa). `0100` também força a busca de protocolo e confirma
+     * que a ECU está respondendo. Devolve os PIDs de dados (sem os próprios PIDs de bitmask).
+     */
+    private suspend fun detectarPidsSuportados(): Set<Int> {
+        val pids = sortedSetOf<Int>()
+        for (base in FAIXAS_BITMASK) {
+            val primeira = base == FAIXAS_BITMASK.first()
+            val bruto = try {
+                enviar("01%02X".format(base), if (primeira) TIMEOUT_BUSCA_PROTOCOLO_MS else timeoutComandoMs)
+            } catch (e: ObdTimeoutException) {
+                if (primeira) throw e
+                break // faixa seguinte sem resposta: fica só com o que já foi detectado
+            }
+            when (val r = ObdParser.parsePidsSuportados(bruto, base)) {
+                is RespostaObd.Ok -> {
+                    pids += r.valor
+                    if (base + TAMANHO_FAIXA !in r.valor) break
+                }
+                RespostaObd.SemConexao, RespostaObd.SemDados -> if (primeira) {
+                    throw ObdException("Scanner conectado, mas sem comunicação com a ECU. Ligue a ignição e tente novamente")
+                } else {
+                    break
+                }
+                else -> if (primeira) {
+                    throw ObdException("O dispositivo não respondeu como um adaptador ELM327")
+                } else {
+                    break
+                }
+            }
+        }
+        return pids.filterTo(sortedSetOf()) { it % TAMANHO_FAIXA != 0 }
+    }
+
+    /** O ELM327 v1.3+ aceita `01001`; clones antigos respondem `?` (ou nem respondem). */
+    private suspend fun testarSufixoRespostaUnica(): Boolean = try {
+        ObdParser.parsePidsSuportados(enviar("01001"), 0x00, "01001") is RespostaObd.Ok
+    } catch (e: ObdTimeoutException) {
+        false
+    }
+
+    /** Comando efetivamente enviado: PIDs do modo 01 ganham o sufixo `1` quando suportado. */
+    private fun comandoDe(definicao: DefinicaoPid): String =
+        if (usaSufixoRespostaUnica && !definicao.ehComandoAt) definicao.comando + SUFIXO_RESPOSTA_UNICA else definicao.comando
+
+    /**
+     * Lê uma vez os [comandos] suportados (`null` = todos). Devolve `null` se *todos* estouraram
+     * o timeout (scanner mudo).
+     */
+    private suspend fun lerCiclo(comandos: Collection<String>?): DadosObd? {
+        val suportados = _pidsSuportados.value
+        val definicoes = (comandos ?: catalogo.comandos)
+            .mapNotNull { catalogo[it] }
+            .filter { it.comando in suportados }
+            .distinct()
+        if (definicoes.isEmpty()) return DadosObd()
+
+        var timeouts = 0
+        val valores = LinkedHashMap<String, Double>()
+        for (definicao in definicoes) {
+            try {
+                lerPid(definicao)?.let { valores[definicao.comando] = it }
+            } catch (e: ObdTimeoutException) {
+                timeouts++
+            }
+        }
+        return if (timeouts == definicoes.size) null else DadosObd(valores)
+    }
+
+    /** Lê um PID; `null` = indisponível neste ciclo (NO DATA, `?`, lixo ou fora da faixa). */
+    private suspend fun lerPid(definicao: DefinicaoPid): Double? {
+        val comando = comandoDe(definicao)
+        val r = ObdParser.parsePid(enviar(comando), definicao, comando)
+        if (r == RespostaObd.ComandoInvalido && comando != definicao.comando) {
+            // O adaptador passou a rejeitar o sufixo: desliga e repete sem ele.
+            usaSufixoRespostaUnica = false
+            return lerPid(definicao)
+        }
+        return when (r) {
+            is RespostaObd.Ok -> r.valor
+            RespostaObd.SemConexao -> throw ObdException("A ECU deixou de responder")
+            else -> null
+        }
+    }
+
+    private suspend fun lerDtcs(
+        comando: String,
+        acao: String,
+        interpretar: (String, String?) -> RespostaObd<List<String>>,
+    ): Result<List<DtcLido>> = operacao {
+        exigirConectado()
+        when (val r = interpretar(enviar(comando, TIMEOUT_DTC_MS), comando)) {
+            is RespostaObd.Ok -> r.valor.map { DtcLido(it, DescricaoDtc.descricaoDe(it)) }
+            RespostaObd.SemDados -> emptyList() // ECU sem códigos neste modo
+            else -> throw respostaInesperada(r, acao)
+        }
+    }
+
+    /**
+     * Envia [comando] pelo transporte e devolve a resposta até o prompt. Serializado por [mutexComandos].
      * @throws ObdTimeoutException se o prompt não chegar em [timeoutMs].
      * @throws ObdException em queda de conexão (o estado passa a `Erro`).
      */
     private suspend fun enviar(comando: String, timeoutMs: Long = timeoutComandoMs): String =
         mutexComandos.withLock {
-            withContext(Dispatchers.IO) {
-                val ent = entrada ?: throw ObdException("Scanner não conectado")
-                val sai = saida ?: throw ObdException("Scanner não conectado")
-                try {
-                    val pendentes = ent.available()
-                    if (pendentes > 0) ent.skip(pendentes.toLong()) // descarta resíduo de respostas antigas
-                    sai.write("$comando\r".toByteArray(Charsets.US_ASCII))
-                    sai.flush()
-                    lerAtePrompt(ent, comando, timeoutMs)
-                } catch (e: IOException) {
-                    perderConexao("Conexão com o scanner perdida")
-                    throw ObdException("Conexão com o scanner perdida", e)
-                }
+            val canal = transporte ?: throw ObdException("Scanner não conectado")
+            try {
+                canal.enviarComando(comando, timeoutMs)
+            } catch (e: IOException) {
+                perderConexao("Conexão com o scanner perdida")
+                throw ObdException("Conexão com o scanner perdida", e)
             }
         }
-
-    /** Lê bytes até o prompt `>`; usa polling de `available()` para respeitar timeout e cancelamento. */
-    private suspend fun lerAtePrompt(ent: InputStream, comando: String, timeoutMs: Long): String {
-        val resposta = StringBuilder()
-        val limite = System.nanoTime() + timeoutMs * 1_000_000
-        while (true) {
-            if (ent.available() > 0) {
-                val byte = ent.read()
-                if (byte < 0) throw IOException("Fim do fluxo")
-                if (byte.toChar() == '>') return resposta.toString()
-                resposta.append(byte.toChar())
-            } else {
-                if (System.nanoTime() > limite) {
-                    throw ObdTimeoutException("O scanner não respondeu ao comando $comando")
-                }
-                delay(INTERVALO_POLLING_LEITURA_MS) // cede a thread e permite cancelamento
-            }
-        }
-    }
 
     // ---------------------------------------------------------------- auxiliares
-
-    /** `connect()` é bloqueante e não responde a cancelamento: fechamos o socket para destravá-lo. */
-    private suspend fun conectarSocket(s: BluetoothSocket) {
-        withTimeout(timeoutConexaoMs) {
-            suspendCancellableCoroutine<Unit> { cont ->
-                cont.invokeOnCancellation { runCatching { s.close() } }
-                thread(isDaemon = true, name = "obd-connect") {
-                    cont.resumeWith(runCatching { s.connect() })
-                }
-            }
-        }
-    }
 
     private fun exigirConectado() {
         if (_estado.value != EstadoConexaoObd.Conectado) throw ObdException("Scanner não conectado")
@@ -287,23 +351,21 @@ class Elm327BluetoothClient(
     }
 
     private fun fecharRecursos() {
-        runCatching { entrada?.close() }
-        runCatching { saida?.close() }
-        runCatching { socket?.close() }
-        entrada = null
-        saida = null
-        socket = null
+        transporte?.fechar()
+        transporte = null
+        _pidsSuportados.value = emptySet()
+        usaSufixoRespostaUnica = false
     }
 
     companion object {
-        /** UUID do perfil Serial Port (SPP), usado pelos adaptadores ELM327 Bluetooth Clássico. */
-        val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+        /** Faixas de bitmask lidas na conexão: `0100` (PIDs 01–20), `0120` (21–40), `0140` (41–60). */
+        private val FAIXAS_BITMASK = listOf(0x00, 0x20, 0x40)
+        private const val TAMANHO_FAIXA = 0x20
+        private const val SUFIXO_RESPOSTA_UNICA = "1"
 
-        private const val TOTAL_PIDS = 5
         private const val MAX_CICLOS_SEM_RESPOSTA = 3
         private const val TIMEOUT_RESET_MS = 5_000L
         private const val TIMEOUT_BUSCA_PROTOCOLO_MS = 15_000L
         private const val TIMEOUT_DTC_MS = 10_000L
-        private const val INTERVALO_POLLING_LEITURA_MS = 15L
     }
 }

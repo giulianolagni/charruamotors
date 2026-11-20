@@ -2,9 +2,10 @@ package com.charruamotors.ui.diagnostico
 
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
-import com.charruamotors.ui.diagnostico.obd.ObdFragment
-import com.charruamotors.ui.diagnostico.manutencoes.ManutencoesFragment
 import androidx.viewpager2.adapter.FragmentStateAdapter
+import com.charruamotors.ui.diagnostico.abastecimentos.AbastecimentosFragment
+import com.charruamotors.ui.diagnostico.manutencoes.ManutencoesFragment
+import com.charruamotors.ui.diagnostico.obd.ObdFragment
 
 /** Páginas do ViewPager2: cada aba é um Fragment que recebe o id do veículo como argumento. */
 class DiagnosticoPagerAdapter(
@@ -17,7 +18,7 @@ class DiagnosticoPagerAdapter(
     override fun createFragment(position: Int): Fragment = when (position) {
         ABA_OBD -> ObdFragment.novo(veiculoId)
         ABA_MANUTENCOES -> ManutencoesFragment.novo(veiculoId)
-        else -> Fragment() // aba adicionada no próximo commit
+        else -> AbastecimentosFragment.novo(veiculoId)
     }
 
     companion object {

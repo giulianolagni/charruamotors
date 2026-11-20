@@ -4,12 +4,23 @@ Aplicativo Android para **controle de manutenção veicular**, **gestão de abas
 
 Projeto acadêmico, desenvolvido em Kotlin com layouts XML, arquitetura MVVM e persistência local com Room.
 
-**Autores:** Giuliano Chiochetta Lagni e Hugo Pizzatto
+## Integrantes da dupla
+
+| Nome | Matrícula |
+|---|---|
+| Giuliano Chiochetta Lagni | 199805 |
+| Hugo Pizzatto | 193213 |
+
+Disciplina: Desenvolvimento Mobile II. Professor: Jaqson.
 
 ---
 
 ## Sumário
 
+- [Integrantes da dupla](#integrantes-da-dupla)
+- [Proposta](#proposta)
+- [Tecnologias utilizadas](#tecnologias-utilizadas)
+- [Prints das telas](#prints-das-telas)
 - [Funcionalidades](#funcionalidades)
 - [Diferencial: integração OBD2](#diferencial-integração-obd2)
 - [Regras de negócio e cálculos](#regras-de-negócio-e-cálculos)
@@ -18,6 +29,20 @@ Projeto acadêmico, desenvolvido em Kotlin com layouts XML, arquitetura MVVM e p
 - [Estrutura de pacotes](#estrutura-de-pacotes)
 - [Testes unitários](#testes-unitários)
 - [Fluxo de trabalho no Git](#fluxo-de-trabalho-no-git)
+
+---
+
+## Proposta
+
+Muitos proprietários de veículos não têm um registro organizado de manutenções, abastecimentos e falhas do carro. O Charrua Motors reúne esse histórico em um só app, calcula consumo médio, custo por km e próximas manutenções, e lê dados e códigos de falha da ECU por um scanner Bluetooth OBD2 (ELM327). Sem scanner, o modo simulado permite demonstrar tudo no emulador.
+
+## Tecnologias utilizadas
+
+Kotlin, Android Studio, layouts XML com View Binding e Material Components 3, Activities e Fragments (`TabLayout` + `ViewPager2`), MVVM com `ViewModel`, Kotlin Coroutines e `Flow`, Room (SQLite), `SharedPreferences`, Bluetooth Clássico (SPP/RFCOMM) e Gradle Kotlin DSL com KSP. Detalhes em [Arquitetura e stack](#arquitetura-e-stack).
+
+## Prints das telas
+
+Os prints das telas do aplicativo estão em [docs/prints_telas.md](docs/prints_telas.md) (imagens em [docs/prints/](docs/prints/)).
 
 ---
 

@@ -133,6 +133,56 @@ object ObdParser {
 
     private const val NRC_RESPOSTA_PENDENTE = "78"
 
+    /**
+     * `ATDP`: descrição do protocolo ativo (ex.: `AUTO, ISO 15765-4 (CAN 11/500)`), para o card da
+     * ECU e o registro de campo; null se o adaptador não respondeu algo legível.
+     */
+    fun parseDescricaoProtocolo(bruto: String, comando: String? = "ATDP"): String? =
+        linhasLimpas(bruto, comando).firstOrNull { linha ->
+            erroElm(linha) == null && linha.any { it.isLetterOrDigit() } && linha != "OK"
+        }
+
+    // ---------------------------------------------------------------- respostas negativas (KWP2000 / UDS)
+
+    /**
+     * NRC da resposta negativa `7F <serviço> <NRC>` ao [servico] (ex.: `7F 01 11` ao `0100` → `"11"`).
+     * Ignora o `78` (responsePending), que é só um aviso de espera; null se não houver negativa.
+     */
+    fun respostaNegativa(bruto: String, servico: String, comando: String? = null): String? {
+        val prefixo = "7F" + servico.uppercase()
+        return linhasLimpas(bruto, comando)
+            .map(::compactar)
+            .filter { it.startsWith(prefixo) && it.length >= prefixo.length + 2 }
+            .map { it.substring(prefixo.length, prefixo.length + 2) }
+            .firstOrNull { it != NRC_RESPOSTA_PENDENTE }
+    }
+
+    /** Nome padronizado (ISO 14229) do NRC, para o registro: `11` → `serviceNotSupported`. */
+    fun descricaoNrc(nrc: String): String = NRCS[nrc.uppercase()] ?: "NRC $nrc"
+
+    private val NRCS = mapOf(
+        "10" to "generalReject",
+        "11" to "serviceNotSupported",
+        "12" to "subFunctionNotSupported",
+        "13" to "incorrectMessageLength",
+        "21" to "busyRepeatRequest",
+        "22" to "conditionsNotCorrect",
+        "31" to "requestOutOfRange",
+        "33" to "securityAccessDenied",
+        "78" to "responsePending",
+    )
+
+    /**
+     * A ECU respondeu positivamente ao [comando] (`serviço + 0x40`)? No serviço 21 o identificador
+     * também precisa bater (`2101` → `61 01 ...`).
+     */
+    fun respostaPositiva(bruto: String, comando: String): Boolean {
+        val c = compactar(comando).uppercase()
+        val servico = c.take(2).toIntOrNull(16) ?: return false
+        val prefixo = "%02X".format(servico + 0x40) + if (c.startsWith("21")) c.drop(2).take(2) else ""
+        return linhasLimpas(bruto, comando).any { compactar(it).startsWith(prefixo) }
+    }
+
     // ---------------------------------------------------------------- PIDs suportados (bitmasks)
 
     /**
@@ -271,6 +321,28 @@ object ObdParser {
             }
         }
         return if (achouResposta) RespostaObd.Ok(codigos.toList()) else classificarErro(linhas, bruto)
+    }
+
+    /**
+     * `18 00 FF 00` (KWP2000 *readDiagnosticTroubleCodesByStatus*, Toyota M-OBD): resposta
+     * `58 <quantidade> [DTC_alto DTC_baixo status]...`, com o DTC no mesmo formato SAE do modo 03.
+     * Negativa `7F 18 xx` = [RespostaObd.SemDados] (serviço não suportado por esta ECU).
+     */
+    fun parseDtcsKwp(bruto: String, comando: String? = "1800FF00"): RespostaObd<List<String>> {
+        val linhas = linhasLimpas(bruto, comando)
+        val codigos = linkedSetOf<String>()
+        var achouResposta = false
+        for (linha in linhas) {
+            val compacta = compactar(linha)
+            if (!compacta.startsWith("58")) continue
+            achouResposta = true
+            hexParaBytes(compacta.substring(2)).drop(1).chunked(3).filter { it.size == 3 }.forEach { (b1, b2, _) ->
+                if (b1 != 0 || b2 != 0) codigos += decodificarDtc(b1, b2)
+            }
+        }
+        if (achouResposta) return RespostaObd.Ok(codigos.toList())
+        if (respostaNegativa(bruto, "18", comando) != null) return RespostaObd.SemDados
+        return classificarErro(linhas, bruto)
     }
 
     /** `04`: confirmação da limpeza dos códigos. Resposta positiva = `44`. */

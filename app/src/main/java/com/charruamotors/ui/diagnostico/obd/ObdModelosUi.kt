@@ -5,6 +5,7 @@ import com.charruamotors.domain.calculo.EstadoCronometro
 import com.charruamotors.domain.calculo.ParametrosMotor
 import com.charruamotors.domain.calculo.ResumoViagem
 import com.charruamotors.obd.FreezeFrame
+import com.charruamotors.obd.InfoConexao
 import com.charruamotors.obd.ResultadoPerfil
 import com.charruamotors.obd.dtc.InfoDtc
 import com.charruamotors.obd.dtc.TipoDtc
@@ -22,6 +23,8 @@ data class InfoEcu(
     val quantidadePids: Int = 0,
     /** Perfil de montadora (modos 21/22); null = ainda verificando ou desconectado. */
     val perfil: ResultadoPerfil? = null,
+    /** Protocolo (`ATDP`) e modo de comunicação (OBD2 padrão / Toyota M-OBD). */
+    val conexao: InfoConexao = InfoConexao(),
 )
 
 /** Card do computador de bordo: consumo instantâneo e totais da viagem desde a conexão. */

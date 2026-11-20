@@ -76,7 +76,7 @@ class Elm327BluetoothClientTest {
         assertTrue(obd.conectar(dispositivo).isSuccess)
         assertEquals(EstadoConexaoObd.Conectado, obd.estado.value)
         assertEquals(
-            listOf("ATZ", "ATE0", "ATL0", "ATS0", "ATH0", "ATSP0", "0100", "0120", "0140", "01001", "ATDP", "ATRV"),
+            listOf("ATZ", "ATE0", "ATL0", "ATS0", "ATH0", "ATSP0", "0100", "ATDP", "ATRV", "0120", "0140", "01001"),
             t.enviados,
         )
 

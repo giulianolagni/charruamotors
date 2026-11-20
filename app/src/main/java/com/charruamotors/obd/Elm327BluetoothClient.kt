@@ -293,7 +293,7 @@ class Elm327BluetoothClient(
 
     /** Sequência de inicialização AT, detecção dos PIDs suportados e do sufixo de resposta única. */
     private suspend fun inicializarAdaptador() {
-        try {
+        val respostaAtz = try {
             enviar("ATZ", TIMEOUT_RESET_MS) // reset (responde com a versão do ELM327)
         } catch (e: ObdTimeoutException) {
             // Alguns clones ignoram o primeiro comando depois que o link RFCOMM abre.
@@ -306,7 +306,34 @@ class Elm327BluetoothClient(
                 )
             }
         }
-        for (comando in CONFIGURACAO) enviar(comando)
+        // Identificação tolerante: clones respondem ao ATZ com lixo, bytes nulos ou sem "ELM327".
+        var identificado = ObdParser.limparResposta(respostaAtz).contains("ELM")
+        var identificacao = respostaAtz
+        if (!identificado) {
+            registro.evento("ATZ sem 'ELM' (${RegistroComunicacao.visivel(respostaAtz)}); consultando ATI")
+            val respostaAti = try {
+                enviar("ATI")
+            } catch (e: ObdTimeoutException) {
+                ""
+            }
+            identificacao = respostaAti
+            identificado = identificaAdaptador(ObdParser.limparResposta(respostaAti))
+        }
+        for (comando in CONFIGURACAO) {
+            val resposta = enviar(comando)
+            // ATE0 respondendo OK prova que o interpretador AT está ativo, mesmo sem identificação.
+            if (comando == "ATE0" && !identificado && "OK" in ObdParser.limparResposta(resposta)) {
+                registro.evento("Adaptador sem identificação reconhecível, mas o ATE0 respondeu OK; seguindo")
+                identificado = true
+            }
+            if (!identificado) {
+                registro.evento(
+                    "Adaptador não reconhecido. ATZ=\"${RegistroComunicacao.visivel(respostaAtz)}\" " +
+                        "ATI=\"${RegistroComunicacao.visivel(identificacao)}\" ATE0=\"${RegistroComunicacao.visivel(resposta)}\"",
+                )
+                throw ObdException("O dispositivo não respondeu como um adaptador ELM327")
+            }
+        }
         enviar("ATSP0") // protocolo automático
         val suportados = detectarPidsSuportados()
         usaSufixoRespostaUnica = testarSufixoRespostaUnica()
@@ -326,6 +353,10 @@ class Elm327BluetoothClient(
                 if (usaSufixoRespostaUnica) "sim" else "não",
         )
     }
+
+    /** [limpa] é o texto já saneado por [ObdParser.limparResposta]. */
+    private fun identificaAdaptador(limpa: String): Boolean =
+        IDENTIFICADORES_ADAPTADOR.any { it in limpa }
 
     /**
      * Lê os bitmasks `0100` → `0120` → `0140`, seguindo para a próxima faixa só se a ECU indicar
@@ -653,6 +684,9 @@ class Elm327BluetoothClient(
         private val FAIXAS_BITMASK = listOf(0x00, 0x20, 0x40)
         private const val TAMANHO_FAIXA = 0x20
         private const val SUFIXO_RESPOSTA_UNICA = "1"
+
+        /** Trechos (em maiúsculas) da resposta ao `ATI` de adaptadores ELM327 e compatíveis. */
+        private val IDENTIFICADORES_ADAPTADOR = listOf("ELM", "OBD", "STN", "VGATE", "V1.", "V2.")
 
         /** Sem eco, sem line feed, sem espaços (metade dos bytes no Bluetooth), sem cabeçalhos CAN. */
         private val CONFIGURACAO = listOf("ATE0", "ATL0", "ATS0", "ATH0")

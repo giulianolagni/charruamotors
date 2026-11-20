@@ -3,22 +3,32 @@ package com.charruamotors.obd
 import com.charruamotors.domain.model.CodigoFalha
 import com.charruamotors.domain.model.LeituraObd
 import com.charruamotors.domain.model.StatusCodigoFalha
+import com.charruamotors.obd.pid.Pids
 import java.time.LocalDateTime
+import kotlin.math.roundToInt
 
 /** Scanner Bluetooth pareado (ou simulado) que pode ser escolhido para conexão. */
 data class DispositivoObd(val nome: String, val endereco: String)
 
 /**
- * Instantâneo dos PIDs lidos em um ciclo de polling.
- * Campos nulos = PID não suportado ou sem resposta (`NO DATA`).
+ * Conjunto de valores de sensores indexados pelo comando do catálogo (`010C`, `ATRV`...),
+ * já convertidos para a unidade da [com.charruamotors.obd.pid.DefinicaoPid].
+ * Ausência de chave = PID não suportado ou sem resposta (`NO DATA`).
  */
-data class DadosObd(
-    val rpm: Int? = null,
-    val velocidade: Int? = null,
-    val temperaturaMotor: Int? = null,
-    val cargaMotor: Double? = null,
-    val tensaoBateria: Double? = null,
-) {
+interface ValoresSensores {
+    val valores: Map<String, Double>
+
+    operator fun get(comando: String): Double? = valores[comando]
+
+    val rpm: Int? get() = valores[Pids.RPM]?.roundToInt()
+    val velocidade: Int? get() = valores[Pids.VELOCIDADE]?.roundToInt()
+    val temperaturaMotor: Int? get() = valores[Pids.TEMPERATURA_MOTOR]?.roundToInt()
+    val cargaMotor: Double? get() = valores[Pids.CARGA_MOTOR]
+    val tensaoBateria: Double? get() = valores[Pids.TENSAO_BATERIA]
+}
+
+/** Instantâneo dos sensores lidos em um ciclo de polling (qualquer PID do catálogo). */
+data class DadosObd(override val valores: Map<String, Double> = emptyMap()) : ValoresSensores {
     /** Converte para a entidade persistida no histórico do veículo. */
     fun paraLeitura(veiculoId: Long, dataHora: LocalDateTime = LocalDateTime.now()) = LeituraObd(
         veiculoId = veiculoId,
@@ -40,6 +50,19 @@ data class DtcLido(val codigo: String, val descricao: String) {
         descricao = descricao,
         status = StatusCodigoFalha.ATIVO,
     )
+}
+
+/**
+ * Freeze Frame (modo 02, quadro 0): valores congelados pela ECU no instante em que a falha
+ * [dtc] foi registrada. As chaves de [valores] são os comandos do modo 01 (`010C`...).
+ */
+data class FreezeFrame(
+    /** DTC que disparou o congelamento (PID 02); null se a ECU não informou. */
+    val dtc: String? = null,
+    override val valores: Map<String, Double> = emptyMap(),
+) : ValoresSensores {
+    /** Nenhum quadro armazenado (ECU sem falhas ou memória limpa). */
+    val vazio: Boolean get() = dtc == null && valores.isEmpty()
 }
 
 /** Falha de comunicação com o scanner/ECU (timeout, conexão perdida, resposta inválida...). */

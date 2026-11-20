@@ -21,4 +21,3 @@ keystore.properties
 *.keystore
 
 # APKs gerados para instalar
-/dist/

@@ -32,6 +32,10 @@ interface VeiculoDao {
     @Delete
     suspend fun excluir(veiculo: Veiculo)
 
+    /** Só aumenta a km: ignora valores menores ou iguais à km atual. */
+    @Query("UPDATE veiculos SET kmAtual = :km WHERE id = :id AND kmAtual < :km")
+    suspend fun atualizarKmSeMaior(id: Long, km: Int)
+
     /** Conta outros veículos com a mesma placa (ignorando o próprio veículo em edição). */
     @Query("SELECT COUNT(*) FROM veiculos WHERE placa = :placa AND id != :idIgnorado")
     suspend fun contarPorPlaca(placa: String, idIgnorado: Long): Int

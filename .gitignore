@@ -9,6 +9,7 @@ local.properties
 .externalNativeBuild
 .cxx
 *.apk
+!/dist/*.apk
 *.aab
 
 # Instruções locais do Claude Code
@@ -20,4 +21,3 @@ keystore.properties
 *.jks
 *.keystore
 
-# APKs gerados para instalar

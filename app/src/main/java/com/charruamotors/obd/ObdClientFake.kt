@@ -45,6 +45,9 @@ class ObdClientFake(
     private val _pidsSuportados = MutableStateFlow<Set<String>>(emptySet())
     override val pidsSuportados: StateFlow<Set<String>> = _pidsSuportados.asStateFlow()
 
+    private val _infoConexao = MutableStateFlow(InfoConexao())
+    override val infoConexao: StateFlow<InfoConexao> = _infoConexao.asStateFlow()
+
     /** Registro ilustrativo (o que um ELM327 v1.5 em CAN responderia), para demonstrar o log de campo. */
     private val registro = RegistroComunicacao()
 
@@ -87,7 +90,7 @@ class ObdClientFake(
         DispositivoObd("Scanner Reserva (simulado)", "00:00:00:00:00:02"),
     )
 
-    override suspend fun conectar(dispositivo: DispositivoObd): Result<Unit> {
+    override suspend fun conectar(dispositivo: DispositivoObd, marcaVeiculo: String?): Result<Unit> {
         _estado.value = EstadoConexaoObd.Conectando
         delay(latenciaMs)
         registro.limpar()
@@ -110,6 +113,7 @@ class ObdClientFake(
         registro.comando("0100", "SEARCHING...\r4100BE3FB813\r\r", 1_350)
         registro.comando("ATDP", "AUTO, ISO 15765-4 (CAN 11/500)\r\r", 30)
         registro.comando("ATRV", "14.2V\r\r", 40)
+        _infoConexao.value = InfoConexao(protocolo = "AUTO, ISO 15765-4 (CAN 11/500)")
         _pidsSuportados.value = COMANDOS_SIMULADOS
         _estado.value = EstadoConexaoObd.Conectado
         return Result.success(Unit)
@@ -191,6 +195,7 @@ class ObdClientFake(
 
     override suspend fun desconectar() {
         _pidsSuportados.value = emptySet()
+        _infoConexao.value = InfoConexao()
         estendidosAtivos = emptySet()
         faseArrancada = FaseArrancada.NENHUMA
         _estado.value = EstadoConexaoObd.Desconectado

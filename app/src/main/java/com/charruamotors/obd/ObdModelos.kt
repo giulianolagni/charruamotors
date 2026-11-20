@@ -78,6 +78,27 @@ sealed interface ResultadoPerfil {
     data class Ativo(val fabricante: String, val pids: List<DefinicaoPid>, val observacao: String = "") : ResultadoPerfil
 }
 
+/** Como o app conversa com a ECU nesta conexão. */
+enum class ModoComunicacaoEcu {
+    /** OBD2 genérico (SAE J1979): modo 01 pelo cabeçalho funcional. */
+    OBD2_PADRAO,
+
+    /**
+     * Toyota M-OBD: a ECU recusa o modo 01 (`7F 01 11`) e só responde ao serviço 21 endereçado
+     * fisicamente ao motor (`ATSH 7E0`), caso das centrais Denso da Hilux/SW4 D-4D Mercosul.
+     */
+    TOYOTA_MOBD,
+}
+
+/** Detalhes da conexão atual para o card da ECU. */
+data class InfoConexao(
+    /** Protocolo informado pelo `ATDP` (ex.: `AUTO, ISO 15765-4 (CAN 11/500)`); null = não lido. */
+    val protocolo: String? = null,
+    val modo: ModoComunicacaoEcu = ModoComunicacaoEcu.OBD2_PADRAO,
+    /** Comandos do serviço 21 que responderam positivamente na conexão (`2101`, `2104`...). */
+    val comandosModo21: List<String> = emptyList(),
+)
+
 /** Falha de comunicação com o scanner/ECU (timeout, conexão perdida, resposta inválida...). */
 open class ObdException(mensagem: String, causa: Throwable? = null) : Exception(mensagem, causa)
 

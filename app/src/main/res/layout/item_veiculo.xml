@@ -51,6 +51,49 @@
             app:layout_constraintTop_toBottomOf="@id/texto_descricao"
             tools:text="45000 km • Flex" />
 
+        <TextView
+            android:id="@+id/texto_consumo"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_pequeno"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="@color/texto_secundario"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/texto_detalhes"
+            tools:text="Consumo médio: 11,5 km/l" />
+
+        <TextView
+            android:id="@+id/texto_proxima_manutencao"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="@color/texto_secundario"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/texto_consumo"
+            tools:text="Próxima manutenção: Troca de óleo — aos 55.000 km (vencida)" />
+
+        <!-- Alerta de DTCs ativos no histórico OBD2 -->
+        <TextView
+            android:id="@+id/texto_alerta_falhas"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_pequeno"
+            android:drawablePadding="@dimen/espaco_pequeno"
+            android:gravity="center_vertical"
+            android:textAppearance="?attr/textAppearanceLabelLarge"
+            android:textColor="@color/erro"
+            android:visibility="gone"
+            app:drawableStartCompat="@android:drawable/ic_dialog_alert"
+            app:drawableTint="@color/erro"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/texto_proxima_manutencao"
+            tools:text="2 códigos de falha ativos"
+            tools:visibility="visible" />
+
         <!-- Atalho para o diagnóstico OBD2 / manutenções do veículo -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/botao_diagnostico"
@@ -60,6 +103,6 @@
             android:layout_marginTop="@dimen/espaco_pequeno"
             android:text="@string/botao_diagnostico"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/texto_detalhes" />
+            app:layout_constraintTop_toBottomOf="@id/texto_alerta_falhas" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </com.google.android.material.card.MaterialCardView>

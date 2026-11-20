@@ -51,6 +51,8 @@ dependencies {
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.recyclerview)
+    implementation(libs.androidx.fragment.ktx)
+    implementation(libs.androidx.viewpager2)
     implementation(libs.material)
 
     // Arquitetura: ViewModel e lifecycleScope

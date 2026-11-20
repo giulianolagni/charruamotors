@@ -46,6 +46,7 @@
     <string name="botao_salvar">Salvar</string>
     <string name="botao_excluir">Excluir</string>
     <string name="botao_cancelar">Cancelar</string>
+    <string name="botao_fechar">Fechar</string>
     <string name="voltar">Voltar</string>
     <string name="veiculo_excluir_titulo">Excluir veículo?</string>
     <string name="veiculo_excluir_mensagem">O veículo e todo o seu histórico serão removidos. Esta ação não pode ser desfeita.</string>
@@ -91,7 +92,17 @@
     <string name="obd_sem_bluetooth">Este aparelho não possui Bluetooth. Use o modo simulado.</string>
     <string name="obd_permissao_negada">Permissão de Bluetooth necessária para usar o scanner</string>
     <string name="obd_bluetooth_desligado">Ligue o Bluetooth para conectar ao scanner</string>
-    <string name="obd_erro_sem_dispositivo">Selecione um scanner</string>
+    <string name="obd_erro_sem_dispositivo">Selecione o scanner OBD2 na lista de pareados</string>
+    <string name="obd_permissao_bloqueada">A permissão \"Dispositivos próximos\" foi negada. Libere-a nas configurações do app para usar o scanner.</string>
+    <string name="obd_permissao_configuracoes">Configurações</string>
+    <string name="obd_cancelar_conexao">Cancelar</string>
+    <string name="obd_registro_botao">Log de comunicação</string>
+    <string name="obd_registro_titulo">Comunicação com o ELM327</string>
+    <string name="obd_registro_vazio">Nenhuma troca registrada ainda. Conecte ao scanner no modo Bluetooth.</string>
+    <string name="obd_registro_copiar">Copiar</string>
+    <string name="obd_registro_copiado">Log copiado</string>
+    <string name="obd_registro_compartilhar">Compartilhar</string>
+    <string name="obd_registro_rotulo">Log ELM327 — Charrua OBD Pro</string>
     <string name="obd_erro_sem_leitura">Ainda não há leitura para salvar</string>
     <string name="obd_leitura_salva">Leitura salva no histórico</string>
     <string name="obd_tempo_real">Dados em tempo real</string>

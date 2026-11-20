@@ -26,11 +26,17 @@
             android:textColor="@color/texto_secundario"
             tools:text="Fluxo de massa de ar (MAF)" />
 
+        <!-- Altura fixa + autoajuste: o valor nunca é cortado (fonte grande do sistema, "−10,00 mm³")
+             e trocar o texto a cada ciclo não refaz o layout da aba inteira. -->
         <TextView
             android:id="@+id/texto_valor"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="@dimen/altura_valor_sensor"
             android:layout_marginTop="@dimen/espaco_minimo"
+            android:autoSizeMaxTextSize="22sp"
+            android:autoSizeMinTextSize="12sp"
+            android:autoSizeTextType="uniform"
+            android:gravity="center_vertical"
             android:maxLines="1"
             android:textAppearance="?attr/textAppearanceTitleLarge"
             tools:text="4,35 g/s" />

@@ -29,6 +29,7 @@ import com.charruamotors.obd.dtc.CatalogoDtc
 import com.charruamotors.obd.dtc.TipoDtc
 import com.charruamotors.obd.log.DataLogger
 import com.charruamotors.obd.log.GeradorCsv
+import com.charruamotors.obd.log.RegistroComunicacao
 import com.charruamotors.obd.log.SessaoLog
 import com.charruamotors.obd.pid.CatalogoPids
 import com.charruamotors.obd.pid.DefinicaoPid
@@ -43,7 +44,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -190,6 +190,14 @@ class ObdViewModel(
     private val _estadoLog = MutableStateFlow(EstadoLog())
     val estadoLog: StateFlow<EstadoLog> = _estadoLog.asStateFlow()
 
+    /**
+     * A tela deve ficar acesa: conectando, conectado (telemetria ao vivo) ou gravando o log CSV.
+     * O Fragment só aplica enquanto a aba está em primeiro plano.
+     */
+    val manterTelaAcesa: StateFlow<Boolean> = combine(estado, _estadoLog) { e, log ->
+        e is EstadoConexaoObd.Conectado || e is EstadoConexaoObd.Conectando || log.gravando
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     private val _eventos = Channel<EventoObd>(Channel.BUFFERED)
     val eventos: Flow<EventoObd> = _eventos.receiveAsFlow()
 
@@ -262,13 +270,13 @@ class ObdViewModel(
 
     /** Lista os scanners disponíveis (pareados, no Bluetooth real — exige permissão concedida). */
     fun carregarDispositivos() {
-        viewModelScope.launch {
-            val lista = cliente.listarDispositivos()
-            _dispositivos.value = lista
-            val atual = _dispositivoSelecionado.value
-            _dispositivoSelecionado.value = lista.firstOrNull { it.endereco == atual?.endereco }
-                ?: lista.firstOrNull()
-        }
+        viewModelScope.launch { atualizarDispositivos() }
+    }
+
+    private suspend fun atualizarDispositivos() {
+        val lista = cliente.listarDispositivos()
+        _dispositivos.value = lista
+        _dispositivoSelecionado.value = escolherDispositivo(lista, _dispositivoSelecionado.value)
     }
 
     fun selecionarDispositivo(dispositivo: DispositivoObd) {
@@ -277,14 +285,23 @@ class ObdViewModel(
 
     // ------------------------------------------------------------------ conexão
 
+    /**
+     * Conecta ao scanner escolhido. Sem escolha (lista ainda vazia porque a permissão ou o
+     * Bluetooth acabaram de ser liberados), recarrega os pareados e só segue sozinho se achar
+     * um que pareça adaptador OBD — nunca tenta conectar num fone ou relógio.
+     */
     fun conectar() {
-        val dispositivo = _dispositivoSelecionado.value
-        if (dispositivo == null) {
-            _eventos.trySend(EventoObd.Mensagem(R.string.obd_erro_sem_dispositivo))
-            return
-        }
         if (conexaoJob?.isActive == true) return
         conexaoJob = viewModelScope.launch {
+            var dispositivo = _dispositivoSelecionado.value
+            if (dispositivo == null) {
+                atualizarDispositivos()
+                dispositivo = _dispositivoSelecionado.value?.takeIf { pareceScannerObd(it) }
+            }
+            if (dispositivo == null) {
+                _eventos.send(EventoObd.Mensagem(R.string.obd_erro_sem_dispositivo))
+                return@launch
+            }
             // Falhas já chegam como EstadoConexaoObd.Erro (tratado no init); aqui só o sucesso.
             cliente.conectar(dispositivo).onSuccess {
                 _eventos.send(EventoObd.Mensagem(R.string.obd_conectado))
@@ -292,15 +309,22 @@ class ObdViewModel(
         }
     }
 
+    /**
+     * Desconecta (ou cancela uma conexão em andamento). O cliente fecha o socket na hora, o que
+     * destrava um comando preso esperando o ELM327, e descarta a falha da leitura interrompida:
+     * não é preciso (nem seguro) esperar o polling terminar antes, porque um comando travado
+     * nunca terminaria sem o socket fechado.
+     */
     fun desconectar() {
-        viewModelScope.launch {
-            // Espera o polling terminar de fato antes de fechar o socket: senão uma leitura em
-            // andamento falharia com IOException e o estado viraria Erro depois de Desconectado.
-            pollingJob?.cancelAndJoin()
-            pollingJob = null
-            cliente.desconectar()
-        }
+        conexaoJob?.cancel()
+        pollingJob?.cancel()
+        pollingJob = null
+        viewModelScope.launch { cliente.desconectar() }
     }
+
+    /** Registro das últimas trocas com o ELM327, pronto para exibir/copiar; null se vazio. */
+    fun textoRegistroComunicacao(): String? =
+        cliente.registroComunicacao().takeIf { it.isNotEmpty() }?.let(RegistroComunicacao::formatar)
 
     /** Nova conexão: zera a viagem e o gráfico, lê o VIN e tenta ativar o perfil da montadora. */
     private fun iniciarSessao() {
@@ -572,6 +596,23 @@ class ObdViewModel(
 
     companion object {
         private const val MAX_HISTORICO = 10
+
+        /** Nomes comuns de adaptadores ELM327/OBD2 Bluetooth (o S24 costuma ter fones, relógio e carro pareados). */
+        private val regexNomeScanner = Regex(
+            "obd|elm|v-?link|vgate|icar|konnwei|veepeak|obdlink|carista|viecar|scan",
+            RegexOption.IGNORE_CASE,
+        )
+
+        fun pareceScannerObd(dispositivo: DispositivoObd): Boolean = regexNomeScanner.containsMatchIn(dispositivo.nome)
+
+        /**
+         * Escolha padrão na lista de pareados: mantém a [atual] se ainda existir; senão o primeiro
+         * com nome de scanner OBD; senão o primeiro da lista (o usuário pode trocar no menu).
+         */
+        fun escolherDispositivo(lista: List<DispositivoObd>, atual: DispositivoObd?): DispositivoObd? =
+            lista.firstOrNull { it.endereco == atual?.endereco }
+                ?: lista.firstOrNull(::pareceScannerObd)
+                ?: lista.firstOrNull()
 
         val Factory = viewModelFactory {
             initializer {

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Diálogo do log de comunicação com o ELM327: texto bruto, selecionável, em fonte monoespaçada. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingHorizontal="@dimen/espaco_grande"
+    android:paddingTop="@dimen/espaco_pequeno"
+    android:scrollbarStyle="outsideOverlay">
+
+    <TextView
+        android:id="@+id/texto_registro"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="monospace"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textIsSelectable="true"
+        tools:text="14:02:07.120  ATZ → &quot;\r\rELM327 v1.5\r\r&quot; (812 ms)" />
+</ScrollView>

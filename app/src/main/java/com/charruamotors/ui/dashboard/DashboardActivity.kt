@@ -14,6 +14,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.databinding.ActivityDashboardBinding
+import com.charruamotors.domain.calculo.ResumoVeiculo
 import com.charruamotors.domain.model.Veiculo
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.login.LoginActivity
@@ -30,8 +31,8 @@ class DashboardActivity : AppCompatActivity() {
     private val sessao by lazy { (application as CharruaMotorsApp).sessao }
     private val viewModel: DashboardViewModel by viewModels { DashboardViewModel.Factory }
     private val adapter = VeiculoAdapter(
-        aoClicar = { veiculo -> startActivity(VeiculoFormActivity.intent(this, veiculo.id)) },
-        aoDiagnosticar = ::abrirDiagnostico,
+        aoClicar = { resumo -> startActivity(VeiculoFormActivity.intent(this, resumo.veiculo.id)) },
+        aoDiagnosticar = { resumo -> abrirDiagnostico(resumo.veiculo) },
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,16 +56,16 @@ class DashboardActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.veiculos.collect { veiculos -> veiculos?.let(::mostrarVeiculos) }
+                viewModel.resumos.collect { resumos -> resumos?.let(::mostrarResumos) }
             }
         }
     }
 
-    private fun mostrarVeiculos(veiculos: List<Veiculo>) {
-        adapter.submitList(veiculos)
-        binding.textoListaVazia.isVisible = veiculos.isEmpty()
+    private fun mostrarResumos(resumos: List<ResumoVeiculo>) {
+        adapter.submitList(resumos)
+        binding.textoListaVazia.isVisible = resumos.isEmpty()
         binding.textoTotalVeiculos.text =
-            resources.getQuantityString(R.plurals.dashboard_total_veiculos, veiculos.size, veiculos.size)
+            resources.getQuantityString(R.plurals.dashboard_total_veiculos, resumos.size, resumos.size)
     }
 
     private fun abrirDiagnostico(veiculo: Veiculo) {
@@ -73,7 +74,7 @@ class DashboardActivity : AppCompatActivity() {
 
     /** Atalho do scanner: abre direto com um único veículo; com vários, pergunta qual. */
     private fun escolherVeiculoParaScanner() {
-        val veiculos = viewModel.veiculos.value.orEmpty()
+        val veiculos = viewModel.resumos.value.orEmpty().map { it.veiculo }
         when (veiculos.size) {
             0 -> Snackbar.make(binding.root, R.string.scanner_sem_veiculo, Snackbar.LENGTH_SHORT).show()
             1 -> abrirDiagnostico(veiculos.first())

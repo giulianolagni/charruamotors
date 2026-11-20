@@ -3,9 +3,11 @@ package com.charruamotors.obd
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import com.charruamotors.domain.model.EstadoConexaoObd
+import com.charruamotors.obd.pid.CatalogoEstendido
 import com.charruamotors.obd.pid.CatalogoPids
 import com.charruamotors.obd.pid.DefinicaoPid
 import com.charruamotors.obd.pid.Pids
+import com.charruamotors.obd.pid.RequisicaoEstendida
 import com.charruamotors.obd.transporte.ClassicBluetoothTransport
 import com.charruamotors.obd.transporte.ObdTransport
 import kotlinx.coroutines.CancellationException
@@ -34,6 +36,9 @@ import java.io.IOException
  *   aceitar o sufixo (clones antigos respondem `?`), ele é desligado automaticamente.
  * - Um [Mutex] serializa os comandos (o ELM327 atende um comando por vez), permitindo
  *   que o polling de PIDs e a leitura de DTCs coexistam sem misturar respostas.
+ * - Telemetria em duas filas ([EscalonadorPolling]): mostradores em todo ciclo, demais PIDs em rodízio.
+ * - Perfis de montadora (modo 21 Toyota / 22 UDS VW) com cabeçalho CAN físico (`ATSH 7E0`),
+ *   ativados só em CAN de 11 bits e se a ECU responder; o cabeçalho funcional volta sozinho.
  * - Queda de conexão (`IOException`, vários timeouts seguidos) leva o [estado] a `Erro`
  *   e encerra o fluxo de leituras, sem exceções chegando à UI.
  *
@@ -43,6 +48,7 @@ import java.io.IOException
  * @param adaptador `BluetoothAdapter` do aparelho (nulo se não houver Bluetooth).
  * @param catalogo definições (fórmula, faixa) dos PIDs que o app sabe interpretar.
  * @param criarTransporte fábrica do canal para o dispositivo escolhido.
+ * @param catalogoEstendido perfis de PIDs de montadora (`pids_estendidos.json`).
  */
 @SuppressLint("MissingPermission") // SecurityException é tratada e convertida em EstadoConexaoObd.Erro
 class Elm327BluetoothClient(
@@ -51,6 +57,7 @@ class Elm327BluetoothClient(
     private val criarTransporte: (DispositivoObd) -> ObdTransport = { ClassicBluetoothTransport(adaptador, it.endereco) },
     private val timeoutComandoMs: Long = ObdTransport.TIMEOUT_PADRAO_MS,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val catalogoEstendido: CatalogoEstendido = CatalogoEstendido.VAZIO,
 ) : ObdClient {
 
     private val _estado = MutableStateFlow<EstadoConexaoObd>(EstadoConexaoObd.Desconectado)
@@ -62,6 +69,12 @@ class Elm327BluetoothClient(
     private val mutexComandos = Mutex()
 
     @Volatile private var transporte: ObdTransport? = null
+
+    /** Cabeçalho CAN configurado no adaptador (`ATSH`); null = o funcional padrão (7DF). Protegido pelo mutex. */
+    private var cabecalhoAtivo: String? = null
+
+    /** PIDs de montadora ativados nesta conexão, por chave (`TOYOTA_ATF`...). */
+    @Volatile private var definicoesEstendidas: Map<String, DefinicaoPid> = emptyMap()
 
     /** O adaptador aceita o sufixo de resposta única (`010C1`)? Detectado na inicialização. */
     @Volatile var usaSufixoRespostaUnica: Boolean = false
@@ -130,6 +143,65 @@ class Elm327BluetoothClient(
             delay(intervaloMs)
         }
     }.flowOn(dispatcher)
+
+    override fun lerTelemetria(intervaloMinimoMs: Long, lentosPorCiclo: Int): Flow<DadosObd> = flow {
+        val escalonador = EscalonadorPolling(lentosPorCiclo)
+        var ciclosSemResposta = 0
+        while (_estado.value == EstadoConexaoObd.Conectado) {
+            val inicioNs = System.nanoTime()
+            // Relido a cada ciclo: um perfil de montadora pode ser ativado com o polling já rodando.
+            escalonador.atualizarSuportados(_pidsSuportados.value, ::grupoDe)
+            val ciclo = try {
+                lerChaves(escalonador.proximoCiclo())
+            } catch (e: ObdException) {
+                perderConexao(e.message ?: "Conexão com o scanner perdida")
+                break
+            }
+            if (ciclo == null) {
+                if (++ciclosSemResposta >= MAX_CICLOS_SEM_RESPOSTA) {
+                    perderConexao("O scanner parou de responder")
+                    break
+                }
+            } else {
+                ciclosSemResposta = 0
+                emit(DadosObd(escalonador.consolidar(ciclo.consultados, ciclo.lidos)))
+            }
+            val decorridoMs = (System.nanoTime() - inicioNs) / 1_000_000
+            delay((intervaloMinimoMs - decorridoMs).coerceAtLeast(INTERVALO_MINIMO_ENTRE_CICLOS_MS))
+        }
+    }.flowOn(dispatcher)
+
+    override suspend fun ativarPerfilFabricante(marca: String?): ResultadoPerfil = withContext(dispatcher) {
+        val perfil = catalogoEstendido.perfilPara(marca) ?: return@withContext ResultadoPerfil.SemPerfil
+        try {
+            exigirConectado()
+            val protocolo = ObdParser.parseProtocolo(enviar("ATDPN"))
+            if (protocolo !in ObdParser.PROTOCOLOS_CAN_11_BITS) {
+                return@withContext ResultadoPerfil.Indisponivel(
+                    perfil.nome,
+                    "o perfil exige CAN de 11 bits (o veículo usa o protocolo ${protocolo ?: "desconhecido"})",
+                )
+            }
+            val ativos = buildList {
+                for ((requisicao, definicoes) in perfil.requisicoes) {
+                    val bruto = try {
+                        enviar(requisicao.comando, timeoutComandoMs, requisicao.cabecalho)
+                    } catch (e: ObdTimeoutException) {
+                        continue // módulo ausente (ex.: carro sem câmbio automático)
+                    }
+                    addAll(definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok })
+                }
+            }
+            if (ativos.isEmpty()) {
+                return@withContext ResultadoPerfil.Indisponivel(perfil.nome, "a ECU não respondeu aos PIDs do perfil")
+            }
+            definicoesEstendidas = ativos.associateBy { it.comando }
+            _pidsSuportados.value = _pidsSuportados.value + ativos.map { it.comando }
+            ResultadoPerfil.Ativo(perfil.nome, ativos, perfil.observacao)
+        } catch (e: ObdException) {
+            ResultadoPerfil.Indisponivel(perfil.nome, e.message ?: "falha de comunicação")
+        }
+    }
 
     override suspend fun lerCodigosFalha(): Result<List<DtcLido>> =
         lerDtcs("03", "ler os códigos de falha", ObdParser::parseDtcs)
@@ -247,7 +319,7 @@ class Elm327BluetoothClient(
 
     /** Comando efetivamente enviado: PIDs do modo 01 ganham o sufixo `1` quando suportado. */
     private fun comandoDe(definicao: DefinicaoPid): String =
-        if (usaSufixoRespostaUnica && !definicao.ehComandoAt) definicao.comando + SUFIXO_RESPOSTA_UNICA else definicao.comando
+        if (usaSufixoRespostaUnica && definicao.ehModo01) definicao.comando + SUFIXO_RESPOSTA_UNICA else definicao.comando
 
     /**
      * Lê uma vez os [comandos] suportados (`null` = todos). Devolve `null` se *todos* estouraram
@@ -271,6 +343,51 @@ class Elm327BluetoothClient(
             }
         }
         return if (timeouts == definicoes.size) null else DadosObd(valores)
+    }
+
+    /** Resultado de um ciclo da telemetria: o que foi pedido e o que respondeu. */
+    private class Ciclo(val consultados: List<String>, val lidos: Map<String, Double>)
+
+    /** Definição de uma chave suportada: catálogo padrão ou perfil de montadora ativo. */
+    private fun definicaoDe(chave: String): DefinicaoPid? = catalogo[chave] ?: definicoesEstendidas[chave]
+
+    /** PIDs estendidos decodificados da mesma resposta compartilham uma posição na fila lenta. */
+    private fun grupoDe(chave: String): String {
+        val requisicao = definicoesEstendidas[chave]?.estendida ?: return chave
+        return definicoesEstendidas.values.first { it.estendida == requisicao }.comando
+    }
+
+    /**
+     * Lê as [chaves] do ciclo (PIDs estendidos do mesmo grupo numa única requisição).
+     * Devolve `null` se *todas* as requisições estouraram o timeout (scanner mudo).
+     */
+    private suspend fun lerChaves(chaves: List<String>): Ciclo? {
+        if (chaves.isEmpty()) return Ciclo(emptyList(), emptyMap())
+        val consultados = mutableListOf<String>()
+        val lidos = LinkedHashMap<String, Double>()
+        var requisicoes = 0
+        var timeouts = 0
+        for (chave in chaves) {
+            val definicao = definicaoDe(chave) ?: continue
+            requisicoes++
+            try {
+                val requisicao = definicao.estendida
+                if (requisicao == null) {
+                    consultados += chave
+                    lerPid(definicao)?.let { lidos[chave] = it }
+                } else {
+                    val grupo = definicoesEstendidas.values.filter { it.estendida == requisicao }
+                    consultados += grupo.map { it.comando }
+                    val bruto = enviar(requisicao.comando, timeoutComandoMs, requisicao.cabecalho)
+                    for (d in grupo) {
+                        (ObdParser.parsePid(bruto, d) as? RespostaObd.Ok)?.let { lidos[d.comando] = it.valor }
+                    }
+                }
+            } catch (e: ObdTimeoutException) {
+                timeouts++
+            }
+        }
+        return if (requisicoes > 0 && timeouts == requisicoes) null else Ciclo(consultados, lidos)
     }
 
     /** Lê um PID; `null` = indisponível neste ciclo (NO DATA, `?`, lixo ou fora da faixa). */
@@ -304,13 +421,24 @@ class Elm327BluetoothClient(
 
     /**
      * Envia [comando] pelo transporte e devolve a resposta até o prompt. Serializado por [mutexComandos].
+     *
+     * Comandos à ECU vão com o [cabecalho] CAN pedido (null = funcional 7DF): o `ATSH` necessário
+     * é enviado dentro do mesmo bloqueio, então uma leitura de DTC nunca sai com o cabeçalho
+     * físico que um PID de montadora deixou configurado. Se o adaptador recusar o `ATSH`, a
+     * resposta dele é devolvida no lugar (o parser a classifica como erro).
+     *
      * @throws ObdTimeoutException se o prompt não chegar em [timeoutMs].
      * @throws ObdException em queda de conexão (o estado passa a `Erro`).
      */
-    private suspend fun enviar(comando: String, timeoutMs: Long = timeoutComandoMs): String =
+    private suspend fun enviar(comando: String, timeoutMs: Long = timeoutComandoMs, cabecalho: String? = null): String =
         mutexComandos.withLock {
             val canal = transporte ?: throw ObdException("Scanner não conectado")
             try {
+                if (!comando.startsWith("AT") && cabecalho != cabecalhoAtivo) {
+                    val resposta = canal.enviarComando("ATSH" + (cabecalho ?: RequisicaoEstendida.CABECALHO_FUNCIONAL), timeoutComandoMs)
+                    if ("OK" !in resposta.uppercase()) return@withLock resposta
+                    cabecalhoAtivo = cabecalho
+                }
                 canal.enviarComando(comando, timeoutMs)
             } catch (e: IOException) {
                 perderConexao("Conexão com o scanner perdida")
@@ -354,6 +482,8 @@ class Elm327BluetoothClient(
         transporte?.fechar()
         transporte = null
         _pidsSuportados.value = emptySet()
+        definicoesEstendidas = emptyMap()
+        cabecalhoAtivo = null
         usaSufixoRespostaUnica = false
     }
 
@@ -364,6 +494,8 @@ class Elm327BluetoothClient(
         private const val SUFIXO_RESPOSTA_UNICA = "1"
 
         private const val MAX_CICLOS_SEM_RESPOSTA = 3
+        /** Respiro mínimo entre ciclos, para comandos de DTC/VIN conseguirem o mutex. */
+        private const val INTERVALO_MINIMO_ENTRE_CICLOS_MS = 10L
         private const val TIMEOUT_RESET_MS = 5_000L
         private const val TIMEOUT_BUSCA_PROTOCOLO_MS = 15_000L
         private const val TIMEOUT_DTC_MS = 10_000L

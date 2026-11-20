@@ -12,16 +12,19 @@ import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.data.repository.DiagnosticoRepository
 import com.charruamotors.domain.model.EstadoConexaoObd
+import com.charruamotors.domain.model.LeituraObd
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.DispositivoObd
 import com.charruamotors.obd.DtcLido
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
+import com.charruamotors.obd.ObdClientFake
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -32,6 +35,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -67,6 +71,21 @@ class ObdViewModel(
     val estado: StateFlow<EstadoConexaoObd> = _modo
         .flatMapLatest { clientePorModo(it).estado }
         .stateIn(viewModelScope, SharingStarted.Eagerly, clientePorModo(modoInicial).estado.value)
+
+    /** Últimas leituras salvas no histórico do veículo (a lista completa pode ser grande). */
+    val historicoLeituras: StateFlow<List<LeituraObd>> = repository.observarLeituras(veiculoId)
+        .map { it.take(MAX_HISTORICO) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Demonstração: o [ObdClientFake] (modo simulado) falha ao conectar, mostrando o estado Erro. */
+    private val clienteSimulado: ObdClientFake? get() = clientePorModo(ModoObd.SIMULADO) as? ObdClientFake
+    private val _simularFalha = MutableStateFlow(clienteSimulado?.simularFalhaNaConexao ?: false)
+    val simularFalha: StateFlow<Boolean> = _simularFalha.asStateFlow()
+
+    fun definirSimularFalha(ativa: Boolean) {
+        clienteSimulado?.simularFalhaNaConexao = ativa
+        _simularFalha.value = ativa
+    }
 
     private val _dispositivos = MutableStateFlow<List<DispositivoObd>>(emptyList())
     val dispositivos: StateFlow<List<DispositivoObd>> = _dispositivos.asStateFlow()
@@ -160,7 +179,10 @@ class ObdViewModel(
 
     fun desconectar() {
         viewModelScope.launch {
-            pollingJob?.cancel()
+            // Espera o polling terminar de fato antes de fechar o socket: senão uma leitura em
+            // andamento falharia com IOException e o estado viraria Erro depois de Desconectado.
+            pollingJob?.cancelAndJoin()
+            pollingJob = null
             cliente.desconectar()
         }
     }
@@ -268,6 +290,8 @@ class ObdViewModel(
     }
 
     companion object {
+        private const val MAX_HISTORICO = 10
+
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as CharruaMotorsApp

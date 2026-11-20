@@ -20,6 +20,7 @@ import com.charruamotors.domain.validacao.FormularioAbastecimento
 import com.charruamotors.ui.util.comoTexto
 import com.charruamotors.ui.util.mensagem
 import com.charruamotors.ui.util.mostrarSeletorData
+import com.charruamotors.ui.util.reconectarSeletorData
 import com.charruamotors.ui.util.paraDataOuNulo
 import com.charruamotors.ui.util.rotulo
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -97,6 +98,8 @@ class AbastecimentoSheet : BottomSheetDialogFragment() {
             }
         }
         campoData.setOnClickListener(abrirSeletor)
+        // Rotação com o calendário aberto: religa o listener ao seletor restaurado.
+        childFragmentManager.reconectarSeletorData { data -> campoData.setText(data.comoTexto()) }
         layoutData.setEndIconOnClickListener(abrirSeletor)
         botaoSalvar.setOnClickListener { salvar() }
     }

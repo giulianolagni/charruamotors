@@ -23,6 +23,9 @@ class ManutencaoRepository(
     /** Km mínima aceita para um novo registro: a km atual do veículo (sempre a maior já registrada). */
     suspend fun kmMinimo(veiculoId: Long): Int = veiculoDao.buscarPorId(veiculoId)?.kmAtual ?: 0
 
+    /** Maior km registrada nas manutenções do veículo (0 sem histórico). */
+    suspend fun maiorKmRegistrada(veiculoId: Long): Int = dao.maiorKm(veiculoId) ?: 0
+
     /** Salva a manutenção com suas peças e, se a km for maior, atualiza a km do veículo. */
     suspend fun salvar(manutencao: Manutencao, pecas: List<PecaTrocada>): Long {
         val id = dao.salvar(manutencao, pecas)

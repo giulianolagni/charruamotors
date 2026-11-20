@@ -73,4 +73,21 @@ class ValidadorVeiculoTest {
         assertEquals(ErroValidacao.NUMERO_INVALIDO, erros[CampoVeiculo.KM])
         assertEquals(ErroValidacao.NUMERO_INVALIDO, erros[CampoVeiculo.TANQUE])
     }
+
+    @Test
+    fun `km nao pode ficar abaixo da maior km do historico`() {
+        val erros = ValidadorVeiculo.validar(valido.copy(km = "40000"), anoAtual, kmMinimo = 50000)
+        assertEquals(ErroValidacao.KM_MENOR_QUE_ULTIMO, erros[CampoVeiculo.KM])
+    }
+
+    @Test
+    fun `km igual ou acima do historico e aceita`() {
+        assertTrue(ValidadorVeiculo.validar(valido.copy(km = "50000"), anoAtual, kmMinimo = 50000).isEmpty())
+        assertTrue(ValidadorVeiculo.validar(valido.copy(km = "60000"), anoAtual, kmMinimo = 50000).isEmpty())
+    }
+
+    @Test
+    fun `sem historico qualquer km nao negativa e aceita`() {
+        assertTrue(ValidadorVeiculo.validar(valido.copy(km = "0"), anoAtual).isEmpty())
+    }
 }

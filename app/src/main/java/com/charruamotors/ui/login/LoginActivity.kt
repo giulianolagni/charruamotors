@@ -68,7 +68,8 @@ class LoginActivity : AppCompatActivity() {
     private fun observarEstado() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.estado.collect(::renderizar)
+                launch { viewModel.estado.collect(::renderizar) }
+                launch { viewModel.eventos.collect(::tratarEvento) }
             }
         }
     }
@@ -83,10 +84,15 @@ class LoginActivity : AppCompatActivity() {
                 layoutEmail.error = estado.erroEmail?.mensagem(this@LoginActivity)
                 layoutSenha.error = estado.erroSenha?.mensagem(this@LoginActivity)
             }
-            EstadoLogin.CredenciaisInvalidas ->
-                Snackbar.make(root, R.string.erro_credenciais_invalidas, Snackbar.LENGTH_LONG).show()
             EstadoLogin.Sucesso -> abrirDashboard()
             EstadoLogin.Ocioso, EstadoLogin.Carregando -> Unit
+        }
+    }
+
+    private fun tratarEvento(evento: EventoLogin) {
+        when (evento) {
+            EventoLogin.CredenciaisInvalidas ->
+                Snackbar.make(binding.root, R.string.erro_credenciais_invalidas, Snackbar.LENGTH_LONG).show()
         }
     }
 

@@ -53,6 +53,10 @@ abstract class ManutencaoDao {
     @Query("SELECT * FROM manutencoes WHERE veiculoId = :veiculoId")
     abstract suspend fun listarPorVeiculo(veiculoId: Long): List<ManutencaoComPecas>
 
+    /** Maior km já registrada em manutenções do veículo; null se não houver nenhuma. */
+    @Query("SELECT MAX(km) FROM manutencoes WHERE veiculoId = :veiculoId")
+    abstract suspend fun maiorKm(veiculoId: Long): Int?
+
     @Transaction
     @Query("SELECT * FROM manutencoes WHERE id = :id")
     abstract suspend fun buscarPorId(id: Long): ManutencaoComPecas?

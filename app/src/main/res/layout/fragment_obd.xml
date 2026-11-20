@@ -57,6 +57,16 @@
                         android:text="@string/obd_modo_bluetooth" />
                 </com.google.android.material.button.MaterialButtonToggleGroup>
 
+                <!-- Só aparece no modo simulado: permite demonstrar o estado de Erro ao vivo -->
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_simular_falha"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:text="@string/obd_simular_falha"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="@color/texto_secundario" />
+
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/layout_dispositivo"
                     style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
@@ -290,6 +300,32 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/espaco_medio"
             android:text="@string/obd_salvar_leitura" />
+
+        <!-- Histórico das leituras salvas -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_grande"
+            android:text="@string/obd_historico_titulo"
+            android:textAppearance="?attr/textAppearanceTitleLarge" />
+
+        <TextView
+            android:id="@+id/texto_historico_vazio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingVertical="@dimen/espaco_pequeno"
+            android:text="@string/obd_historico_vazio"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="@color/texto_secundario" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/lista_historico_leituras"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:nestedScrollingEnabled="false"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            tools:itemCount="3"
+            tools:listitem="@layout/item_leitura_historico" />
 
         <!-- Códigos de falha (DTCs) -->
         <TextView

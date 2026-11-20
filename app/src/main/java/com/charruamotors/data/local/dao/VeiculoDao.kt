@@ -24,6 +24,10 @@ interface VeiculoDao {
     @Query("SELECT * FROM veiculos WHERE id = :id")
     suspend fun buscarPorId(id: Long): Veiculo?
 
+    /** Read reativo: emite novamente quando o veículo muda (ex.: km atualizada por um registro). */
+    @Query("SELECT * FROM veiculos WHERE id = :id")
+    fun observarPorId(id: Long): Flow<Veiculo?>
+
     /** Update */
     @Update
     suspend fun atualizar(veiculo: Veiculo)

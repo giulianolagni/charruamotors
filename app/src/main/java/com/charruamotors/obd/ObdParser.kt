@@ -75,8 +75,14 @@ object ObdParser {
     /**
      * Interpreta a resposta de qualquer PID do catálogo: extrai os [DefinicaoPid.bytes] bytes após
      * `41 <pid>` (ou o número em texto, nos comandos AT), aplica a fórmula e valida a faixa.
+     * PIDs estendidos (modos 21/22) seguem [parsePidEstendido].
      */
-    fun parsePid(bruto: String, definicao: DefinicaoPid, comando: String? = definicao.comando): RespostaObd<Double> {
+    fun parsePid(
+        bruto: String,
+        definicao: DefinicaoPid,
+        comando: String? = definicao.estendida?.comando ?: definicao.comando,
+    ): RespostaObd<Double> {
+        if (definicao.ehEstendido) return parsePidEstendido(bruto, definicao, comando)
         if (definicao.ehComandoAt) {
             val linhas = linhasLimpas(bruto, comando)
             for (linha in linhas) {
@@ -91,6 +97,41 @@ object ObdParser {
             else -> r.mapear { 0.0 }
         }
     }
+
+    // ---------------------------------------------------------------- PIDs de montadora (modos 21 / 22)
+
+    /**
+     * Resposta de um PID estendido: `61 <id> A B...` (serviço 21) ou `62 <DID> A B...` (UDS 22),
+     * em quadro único ou multi-frame ISO-TP (`0:`, `1:`...). Resposta negativa `7F <serviço> <NRC>`
+     * (ex.: `7F 22 31` requestOutOfRange) = [RespostaObd.SemDados]; o NRC `78` (responsePending)
+     * é só um aviso de espera e a resposta positiva que vier depois vale.
+     */
+    fun parsePidEstendido(
+        bruto: String,
+        definicao: DefinicaoPid,
+        comando: String? = definicao.estendida?.comando,
+    ): RespostaObd<Double> {
+        val requisicao = requireNotNull(definicao.estendida) { "${definicao.comando} não é um PID estendido" }
+        val r = bytesDaResposta(bruto, requisicao.prefixoResposta, definicao.bytes, comando)
+        if (r is RespostaObd.Ok) return validarFaixa(definicao.converter(r.valor), definicao, bruto)
+        val negativas = linhasLimpas(bruto, comando).map(::compactar).filter { it.startsWith(requisicao.prefixoNegativa) }
+        if (negativas.any { !it.startsWith(requisicao.prefixoNegativa + NRC_RESPOSTA_PENDENTE) }) return RespostaObd.SemDados
+        return r.mapear { 0.0 }
+    }
+
+    /**
+     * `ATDPN`: número do protocolo ativo (`A6` = automático, achou o 6). Devolve o dígito
+     * hexadecimal (6 = CAN 11 bits 500 kbps, 8 = CAN 11 bits 250 kbps) ou null se ilegível.
+     */
+    fun parseProtocolo(bruto: String, comando: String? = "ATDPN"): Int? =
+        linhasLimpas(bruto, comando)
+            .map(::compactar)
+            .firstNotNullOfOrNull { Regex("^A?([0-9A-C])$").matchEntire(it)?.groupValues?.get(1)?.toInt(16) }
+
+    /** Protocolos CAN de 11 bits, os únicos em que o app usa cabeçalhos físicos (`ATSH 7E0`). */
+    val PROTOCOLOS_CAN_11_BITS: Set<Int> = setOf(6, 8)
+
+    private const val NRC_RESPOSTA_PENDENTE = "78"
 
     // ---------------------------------------------------------------- PIDs suportados (bitmasks)
 

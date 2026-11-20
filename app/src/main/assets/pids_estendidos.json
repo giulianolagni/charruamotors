@@ -1,0 +1,29 @@
+{
+  "versao": 1,
+  "descricao": "PIDs específicos de montadora, lidos com cabeçalho CAN físico (ATSH) fora do OBD2 genérico. 'servico': 21 (KWP2000 readDataByLocalIdentifier, Toyota) ou 22 (UDS readDataByIdentifier, VW). 'identificador': 1 byte hex no serviço 21, 2 bytes (DID) no 22. 'formula': A..H = bytes de dados após o identificador. PIDs com o mesmo cabecalho+servico+identificador são decodificados da mesma resposta. Só CAN 11 bits (protocolos 6 e 8); cada requisição é testada na conexão e só entra no painel se a ECU responder positivamente com valor dentro de min..max.",
+  "perfis": [
+    {
+      "fabricante": "Toyota",
+      "aliases": ["toyota", "lexus"],
+      "observacao": "Endereços e fórmulas de referência da comunidade (Techstream/Torque) para Hilux/SW4 D-4D (1KD/2KD/1GD) e câmbios automáticos Aisin. Variam por motor e ano: confirme os valores com o Techstream antes de usá-los para diagnóstico.",
+      "pids": [
+        { "id": "TOYOTA_ATF", "cabecalho": "7E1", "servico": "21", "identificador": "82", "nome": "Temperatura do fluido da transmissão automática (ATF)", "unidade": "°C", "bytes": 4, "formula": "((256*C+D)*7/100-400)/10", "min": -40, "max": 215, "casas": 0 },
+        { "id": "TOYOTA_INJ1", "cabecalho": "7E0", "servico": "21", "identificador": "13", "nome": "Correção do injetor 1 (D-4D)", "unidade": "mm³/st", "bytes": 8, "formula": "(256*A+B-32768)/1000", "min": -10, "max": 10, "casas": 2 },
+        { "id": "TOYOTA_INJ2", "cabecalho": "7E0", "servico": "21", "identificador": "13", "nome": "Correção do injetor 2 (D-4D)", "unidade": "mm³/st", "bytes": 8, "formula": "(256*C+D-32768)/1000", "min": -10, "max": 10, "casas": 2 },
+        { "id": "TOYOTA_INJ3", "cabecalho": "7E0", "servico": "21", "identificador": "13", "nome": "Correção do injetor 3 (D-4D)", "unidade": "mm³/st", "bytes": 8, "formula": "(256*E+F-32768)/1000", "min": -10, "max": 10, "casas": 2 },
+        { "id": "TOYOTA_INJ4", "cabecalho": "7E0", "servico": "21", "identificador": "13", "nome": "Correção do injetor 4 (D-4D)", "unidade": "mm³/st", "bytes": 8, "formula": "(256*G+H-32768)/1000", "min": -10, "max": 10, "casas": 2 }
+      ]
+    },
+    {
+      "fabricante": "Volkswagen",
+      "aliases": ["vw", "volkswagen", "volks", "audi", "seat", "skoda"],
+      "observacao": "DIDs UDS de referência para motores EA211/EA888 (plataforma MQB) e câmbio DSG. Variam por central e versão de software: confirme com ODIS/VCDS antes de usá-los para diagnóstico.",
+      "pids": [
+        { "id": "VW_TEMP_OLEO", "cabecalho": "7E0", "servico": "22", "identificador": "11BD", "nome": "Temperatura do óleo do motor (VW)", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -40, "max": 215, "casas": 0 },
+        { "id": "VW_TURBO_REAL", "cabecalho": "7E0", "servico": "22", "identificador": "2029", "nome": "Pressão do turbo real (VW)", "unidade": "kPa", "bytes": 2, "formula": "(256*A+B)/10", "min": 0, "max": 400, "casas": 0 },
+        { "id": "VW_TURBO_ALVO", "cabecalho": "7E0", "servico": "22", "identificador": "202A", "nome": "Pressão do turbo especificada (VW)", "unidade": "kPa", "bytes": 2, "formula": "(256*A+B)/10", "min": 0, "max": 400, "casas": 0 },
+        { "id": "VW_TEMP_DSG", "cabecalho": "7E1", "servico": "22", "identificador": "2109", "nome": "Temperatura do óleo do câmbio DSG (VW)", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -40, "max": 215, "casas": 0 }
+      ]
+    }
+  ]
+}

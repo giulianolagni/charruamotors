@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Atributos do mostrador analógico (ui/componentes/GaugeView). -->
+    <declare-styleable name="GaugeView">
+        <attr name="gaugeTitulo" format="string" />
+        <attr name="gaugeUnidade" format="string" />
+        <attr name="gaugeMin" format="float" />
+        <attr name="gaugeMax" format="float" />
+        <!-- Início da zona vermelha; omitido = sem zona vermelha. -->
+        <attr name="gaugeZonaVermelha" format="float" />
+        <attr name="gaugeDivisoes" format="integer" />
+        <attr name="gaugeSubdivisoes" format="integer" />
+        <!-- Divide os rótulos da escala (ex.: 1000 para RPM). -->
+        <attr name="gaugeDivisorRotulos" format="float" />
+        <attr name="gaugeCasasDecimais" format="integer" />
+    </declare-styleable>
+</resources>

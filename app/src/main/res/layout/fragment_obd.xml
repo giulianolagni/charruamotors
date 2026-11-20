@@ -13,7 +13,7 @@
         android:orientation="vertical"
         android:padding="@dimen/margem_tela">
 
-        <!-- Scanner: modo, dispositivo e conexão -->
+        <!-- Scanner: modo, dispositivo, conexão e Data Logger -->
         <com.google.android.material.card.MaterialCardView
             style="@style/Widget.Material3.CardView.Filled"
             android:layout_width="match_parent"
@@ -119,150 +119,26 @@
                         android:layout_weight="1"
                         android:text="@string/obd_desconectar" />
                 </LinearLayout>
+
+                <!-- Data Logger: liga/desliga a gravação de todas as leituras em CSV -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_gravar_log"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:checkable="true"
+                    android:text="@string/obd_log_gravar" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Dados em tempo real -->
+        <!-- Painel de telemetria: mostradores principais -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/espaco_grande"
             android:text="@string/obd_tempo_real"
             android:textAppearance="?attr/textAppearanceTitleLarge" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/espaco_pequeno"
-            android:baselineAligned="false"
-            android:orientation="horizontal">
-
-            <com.google.android.material.card.MaterialCardView
-                style="@style/Widget.Material3.CardView.Elevated"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="@dimen/espaco_pequeno"
-                android:layout_weight="1"
-                app:cardCornerRadius="@dimen/raio_card">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="@dimen/espaco_medio">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/obd_rpm"
-                        android:textAppearance="?attr/textAppearanceLabelLarge"
-                        android:textColor="@color/texto_secundario" />
-
-                    <TextView
-                        android:id="@+id/valor_rpm"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textAppearance="?attr/textAppearanceHeadlineSmall"
-                        tools:text="2.150 rpm" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                style="@style/Widget.Material3.CardView.Elevated"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                app:cardCornerRadius="@dimen/raio_card">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="@dimen/espaco_medio">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/obd_velocidade"
-                        android:textAppearance="?attr/textAppearanceLabelLarge"
-                        android:textColor="@color/texto_secundario" />
-
-                    <TextView
-                        android:id="@+id/valor_velocidade"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textAppearance="?attr/textAppearanceHeadlineSmall"
-                        tools:text="60 km/h" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/espaco_pequeno"
-            android:baselineAligned="false"
-            android:orientation="horizontal">
-
-            <com.google.android.material.card.MaterialCardView
-                style="@style/Widget.Material3.CardView.Elevated"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="@dimen/espaco_pequeno"
-                android:layout_weight="1"
-                app:cardCornerRadius="@dimen/raio_card">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="@dimen/espaco_medio">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/obd_temperatura"
-                        android:textAppearance="?attr/textAppearanceLabelLarge"
-                        android:textColor="@color/texto_secundario" />
-
-                    <TextView
-                        android:id="@+id/valor_temperatura"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textAppearance="?attr/textAppearanceHeadlineSmall"
-                        tools:text="90 °C" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                style="@style/Widget.Material3.CardView.Elevated"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                app:cardCornerRadius="@dimen/raio_card">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="@dimen/espaco_medio">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/obd_carga"
-                        android:textAppearance="?attr/textAppearanceLabelLarge"
-                        android:textColor="@color/texto_secundario" />
-
-                    <TextView
-                        android:id="@+id/valor_carga"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textAppearance="?attr/textAppearanceHeadlineSmall"
-                        tools:text="35,0 %" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-        </LinearLayout>
 
         <com.google.android.material.card.MaterialCardView
             style="@style/Widget.Material3.CardView.Elevated"
@@ -275,23 +151,108 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="@dimen/espaco_medio">
+                android:padding="@dimen/espaco_pequeno">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/obd_bateria"
-                    android:textAppearance="?attr/textAppearanceLabelLarge"
-                    android:textColor="@color/texto_secundario" />
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
 
-                <TextView
-                    android:id="@+id/valor_bateria"
-                    android:layout_width="wrap_content"
+                    <com.charruamotors.ui.componentes.GaugeView
+                        android:id="@+id/gauge_rpm"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:padding="@dimen/espaco_minimo"
+                        app:gaugeDivisoes="8"
+                        app:gaugeDivisorRotulos="1000"
+                        app:gaugeMax="8000"
+                        app:gaugeMin="0"
+                        app:gaugeSubdivisoes="5"
+                        app:gaugeTitulo="@string/obd_rpm"
+                        app:gaugeUnidade="@string/unidade_rpm"
+                        app:gaugeZonaVermelha="6500" />
+
+                    <com.charruamotors.ui.componentes.GaugeView
+                        android:id="@+id/gauge_velocidade"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:padding="@dimen/espaco_minimo"
+                        app:gaugeDivisoes="6"
+                        app:gaugeMax="240"
+                        app:gaugeMin="0"
+                        app:gaugeSubdivisoes="4"
+                        app:gaugeTitulo="@string/obd_velocidade"
+                        app:gaugeUnidade="@string/unidade_kmh" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textAppearance="?attr/textAppearanceHeadlineSmall"
-                    tools:text="14,0 V" />
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <com.charruamotors.ui.componentes.GaugeView
+                        android:id="@+id/gauge_map"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:padding="@dimen/espaco_minimo"
+                        app:gaugeDivisoes="5"
+                        app:gaugeMax="250"
+                        app:gaugeMin="0"
+                        app:gaugeSubdivisoes="5"
+                        app:gaugeTitulo="@string/obd_map"
+                        app:gaugeUnidade="@string/unidade_kpa"
+                        app:gaugeZonaVermelha="200" />
+
+                    <com.charruamotors.ui.componentes.GaugeView
+                        android:id="@+id/gauge_temperatura"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:padding="@dimen/espaco_minimo"
+                        app:gaugeDivisoes="9"
+                        app:gaugeMax="130"
+                        app:gaugeMin="40"
+                        app:gaugeSubdivisoes="2"
+                        app:gaugeTitulo="@string/obd_temperatura"
+                        app:gaugeUnidade="@string/unidade_celsius"
+                        app:gaugeZonaVermelha="110" />
+                </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
+
+        <!-- Grade com todos os PIDs suportados pela ECU -->
+        <TextView
+            android:id="@+id/titulo_sensores"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_grande"
+            android:text="@string/obd_sensores_titulo"
+            android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+        <TextView
+            android:id="@+id/texto_sensores_vazio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingVertical="@dimen/espaco_pequeno"
+            android:text="@string/obd_sensores_vazio"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="@color/texto_secundario" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/lista_sensores"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_pequeno"
+            android:nestedScrollingEnabled="false"
+            tools:itemCount="6"
+            tools:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+            tools:listitem="@layout/item_sensor"
+            tools:spanCount="2" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/botao_salvar_leitura"
@@ -327,13 +288,75 @@
             tools:itemCount="3"
             tools:listitem="@layout/item_leitura_historico" />
 
-        <!-- Códigos de falha (DTCs) -->
+        <!-- Diagnóstico avançado -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/espaco_grande"
-            android:text="@string/obd_codigos_falha"
+            android:text="@string/obd_diagnostico_titulo"
             android:textAppearance="?attr/textAppearanceTitleLarge" />
+
+        <!-- Informações da ECU -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Material3.CardView.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_pequeno"
+            app:cardCornerRadius="@dimen/raio_card">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/espaco_medio">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/obd_ecu_titulo"
+                    android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:text="@string/obd_ecu_vin"
+                    android:textAppearance="?attr/textAppearanceLabelMedium"
+                    android:textColor="@color/texto_secundario" />
+
+                <TextView
+                    android:id="@+id/texto_vin"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                    android:textIsSelectable="true"
+                    tools:text="9BWZZZ377VT004251" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:text="@string/obd_ecu_pids"
+                    android:textAppearance="?attr/textAppearanceLabelMedium"
+                    android:textColor="@color/texto_secundario" />
+
+                <TextView
+                    android:id="@+id/texto_pids_suportados"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                    tools:text="27 de 27 do catálogo" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Códigos de falha por categoria -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_medio"
+            android:text="@string/obd_codigos_falha"
+            android:textAppearance="?attr/textAppearanceTitleMedium" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -363,9 +386,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="@dimen/espaco_medio"
+            android:text="@string/obd_codigos_nao_lidos"
             android:textAppearance="?attr/textAppearanceBodyMedium"
-            android:textColor="@color/texto_secundario"
-            tools:text="Nenhum código lido ainda." />
+            android:textColor="@color/texto_secundario" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/lista_codigos"
@@ -373,7 +396,145 @@
             android:layout_height="wrap_content"
             android:nestedScrollingEnabled="false"
             app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-            tools:itemCount="2"
+            tools:itemCount="3"
             tools:listitem="@layout/item_codigo_falha" />
+
+        <!-- Quadro congelado (Freeze Frame, modo 02) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_freeze_frame"
+            style="@style/Widget.Material3.CardView.Elevated"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_medio"
+            android:visibility="gone"
+            app:cardCornerRadius="@dimen/raio_card"
+            tools:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/espaco_medio">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/obd_ff_titulo"
+                    android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/obd_ff_subtitulo"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="@color/texto_secundario" />
+
+                <TextView
+                    android:id="@+id/texto_ff_vazio"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textColor="@color/texto_secundario"
+                    tools:text="Nenhum quadro congelado armazenado." />
+
+                <LinearLayout
+                    android:id="@+id/grupo_ff_dados"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/texto_ff_dtc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_pequeno"
+                        android:textAppearance="?attr/textAppearanceTitleLarge"
+                        android:textColor="@color/erro"
+                        tools:text="P0300" />
+
+                    <TextView
+                        android:id="@+id/texto_ff_descricao"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        tools:text="Falhas de ignição aleatórias ou em múltiplos cilindros" />
+
+                    <GridLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_medio"
+                        android:columnCount="2"
+                        android:useDefaultMargins="false">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_columnWeight="1"
+                            android:text="@string/obd_rpm"
+                            android:textAppearance="?attr/textAppearanceLabelMedium"
+                            android:textColor="@color/texto_secundario" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_columnWeight="1"
+                            android:text="@string/obd_velocidade"
+                            android:textAppearance="?attr/textAppearanceLabelMedium"
+                            android:textColor="@color/texto_secundario" />
+
+                        <TextView
+                            android:id="@+id/valor_ff_rpm"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_columnWeight="1"
+                            android:textAppearance="?attr/textAppearanceTitleMedium"
+                            tools:text="2.350 rpm" />
+
+                        <TextView
+                            android:id="@+id/valor_ff_velocidade"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_columnWeight="1"
+                            android:textAppearance="?attr/textAppearanceTitleMedium"
+                            tools:text="62 km/h" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_columnWeight="1"
+                            android:layout_marginTop="@dimen/espaco_pequeno"
+                            android:text="@string/obd_temperatura"
+                            android:textAppearance="?attr/textAppearanceLabelMedium"
+                            android:textColor="@color/texto_secundario" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_columnWeight="1"
+                            android:layout_marginTop="@dimen/espaco_pequeno"
+                            android:text="@string/obd_carga"
+                            android:textAppearance="?attr/textAppearanceLabelMedium"
+                            android:textColor="@color/texto_secundario" />
+
+                        <TextView
+                            android:id="@+id/valor_ff_temperatura"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_columnWeight="1"
+                            android:textAppearance="?attr/textAppearanceTitleMedium"
+                            tools:text="97 °C" />
+
+                        <TextView
+                            android:id="@+id/valor_ff_carga"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_columnWeight="1"
+                            android:textAppearance="?attr/textAppearanceTitleMedium"
+                            tools:text="78,4 %" />
+                    </GridLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 </ScrollView>

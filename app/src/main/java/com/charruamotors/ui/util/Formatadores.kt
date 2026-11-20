@@ -18,6 +18,12 @@ fun Double.comoMoeda(): String = NumberFormat.getCurrencyInstance(localeBr).form
 /** Número com [casas] casas decimais no padrão brasileiro (vírgula decimal). */
 fun Double.comoDecimal(casas: Int = 2): String = String.format(localeBr, "%.${casas}f", this)
 
+/** Número com separador de milhar e exatamente [casas] decimais (ex.: 1.726 / 14,2 / 0,812). */
+fun Double.comoNumero(casas: Int = 0): String = NumberFormat.getNumberInstance(localeBr).apply {
+    minimumFractionDigits = casas
+    maximumFractionDigits = casas
+}.format(this)
+
 /** Inteiro com separador de milhar (ex.: 45.000). */
 fun Int.comoMilhar(): String = NumberFormat.getIntegerInstance(localeBr).format(this)
 

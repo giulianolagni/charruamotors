@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pastas expostas pelo FileProvider (Android 8/9: logs CSV salvos na pasta do app). -->
+<paths>
+    <external-files-path
+        name="logs_externos"
+        path="Download/" />
+    <files-path
+        name="logs_internos"
+        path="logs/" />
+</paths>

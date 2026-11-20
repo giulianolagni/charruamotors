@@ -13,7 +13,9 @@ import com.charruamotors.obd.Elm327BluetoothClient
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
 import com.charruamotors.obd.ObdClientFake
+import com.charruamotors.obd.dtc.CatalogoDtc
 import com.charruamotors.obd.pid.CatalogoPids
+import com.charruamotors.ui.util.ExportadorCsv
 
 /**
  * Classe Application: criada uma única vez quando o processo do app inicia,
@@ -56,6 +58,16 @@ class CharruaMotorsApp : Application() {
     val catalogoPids: CatalogoPids by lazy {
         CatalogoPids.deJson(assets.open(CatalogoPids.ARQUIVO_PADRAO).bufferedReader().use { it.readText() })
     }
+
+    /** Banco offline de códigos de falha (`assets/dtc_catalogo.json`); se faltar, usa o fallback por sistema. */
+    val catalogoDtc: CatalogoDtc by lazy {
+        runCatching {
+            CatalogoDtc.deJson(assets.open(CatalogoDtc.ARQUIVO_PADRAO).bufferedReader().use { it.readText() })
+        }.getOrElse { CatalogoDtc.VAZIO }
+    }
+
+    /** Salva os logs CSV do Data Logger em Downloads. */
+    val exportadorCsv: ExportadorCsv by lazy { ExportadorCsv(this) }
 
     // Um cliente por modo, criados sob demanda e mantidos vivos (a conexão sobrevive às telas).
     private val obdSimulado: ObdClient by lazy { ObdClientFake() }

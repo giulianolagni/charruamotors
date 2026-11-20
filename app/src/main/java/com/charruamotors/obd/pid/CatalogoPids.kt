@@ -121,6 +121,7 @@ class CatalogoPids(val pids: List<DefinicaoPid>) {
 object Pids {
     const val CARGA_MOTOR = "0104"
     const val TEMPERATURA_MOTOR = "0105"
+    const val PRESSAO_COLETOR = "010B"
     const val RPM = "010C"
     const val VELOCIDADE = "010D"
     const val TENSAO_BATERIA = "ATRV"

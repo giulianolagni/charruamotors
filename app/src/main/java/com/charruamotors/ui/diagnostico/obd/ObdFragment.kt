@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -23,7 +24,10 @@ import com.charruamotors.domain.model.LeituraObd
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.DispositivoObd
 import com.charruamotors.obd.ModoObd
+import com.charruamotors.obd.pid.Pids
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
+import com.charruamotors.ui.util.ArquivoExportado
+import com.charruamotors.ui.util.ExportadorCsv
 import com.charruamotors.ui.util.PermissoesBluetooth
 import com.charruamotors.ui.util.comoDecimal
 import com.charruamotors.ui.util.comoMilhar
@@ -31,7 +35,10 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 
-/** Aba 1 — Diagnóstico OBD2: conexão com o scanner, dados em tempo real e códigos de falha. */
+/**
+ * Aba 1 — Scanner OBD2: conexão, painel de telemetria (mostradores + grade de todos os PIDs
+ * suportados), Data Logger CSV e diagnóstico completo (VIN, falhas por categoria, Freeze Frame).
+ */
 class ObdFragment : Fragment() {
 
     // Binding só é válido entre onCreateView e onDestroyView; é liberado em onDestroyView.
@@ -39,7 +46,8 @@ class ObdFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val viewModel: ObdViewModel by viewModels { ObdViewModel.Factory }
-    private val adapterCodigos = CodigoFalhaAdapter()
+    private val adapterCodigos = DiagnosticoDtcAdapter()
+    private val adapterSensores = SensorAdapter()
     private val adapterHistorico = LeituraObdAdapter()
 
     /** Ação que aguarda a concessão das permissões / ligar o Bluetooth. */
@@ -75,6 +83,10 @@ class ObdFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         binding.listaCodigos.adapter = adapterCodigos
+        binding.listaSensores.layoutManager = GridLayoutManager(requireContext(), colunasDaGrade())
+        binding.listaSensores.adapter = adapterSensores
+        // A grade muda a cada ciclo de polling: sem animação de "change" para não piscar.
+        binding.listaSensores.itemAnimator = null
         binding.listaHistoricoLeituras.adapter = adapterHistorico
         configurarAcoes()
         observarViewModel()
@@ -99,6 +111,7 @@ class ObdFragment : Fragment() {
         botaoConectar.setOnClickListener { garantirBluetooth { viewModel.conectar() } }
         botaoDesconectar.setOnClickListener { viewModel.desconectar() }
         botaoSalvarLeitura.setOnClickListener { viewModel.salvarLeitura() }
+        botaoGravarLog.setOnClickListener { viewModel.alternarLog() }
         botaoLerCodigos.setOnClickListener { viewModel.lerCodigos() }
         botaoLimparCodigos.setOnClickListener { confirmarLimpezaCodigos() }
     }
@@ -147,7 +160,10 @@ class ObdFragment : Fragment() {
                 launch { viewModel.dispositivos.collect { mostrarDispositivos(it) } }
                 launch { viewModel.dispositivoSelecionado.collect { mostrarDispositivoSelecionado(it) } }
                 launch { viewModel.dados.collect { mostrarDados(it) } }
-                launch { viewModel.codigos.collect { mostrarCodigos() } }
+                launch { viewModel.sensores.collect { mostrarSensores(it) } }
+                launch { viewModel.infoEcu.collect { mostrarInfoEcu(it) } }
+                launch { viewModel.diagnostico.collect { mostrarDiagnostico(it) } }
+                launch { viewModel.estadoLog.collect { mostrarEstadoLog(it) } }
                 launch { viewModel.ocupado.collect { atualizarBotoes() } }
                 launch { viewModel.historicoLeituras.collect { mostrarHistorico(it) } }
                 launch {
@@ -157,12 +173,11 @@ class ObdFragment : Fragment() {
                 }
                 launch {
                     viewModel.eventos.collect { evento ->
-                        mostrarMensagem(
-                            when (evento) {
-                                is EventoObd.Mensagem -> getString(evento.resId)
-                                is EventoObd.Texto -> evento.texto
-                            },
-                        )
+                        when (evento) {
+                            is EventoObd.Mensagem -> mostrarMensagem(getString(evento.resId))
+                            is EventoObd.Texto -> mostrarMensagem(evento.texto)
+                            is EventoObd.LogSalvo -> oferecerCompartilhamento(evento.arquivo)
+                        }
                     }
                 }
             }
@@ -181,6 +196,7 @@ class ObdFragment : Fragment() {
     }
 
     private fun mostrarEstado(estado: EstadoConexaoObd) {
+        mostrarInfoEcu(viewModel.infoEcu.value)
         binding.textoEstado.text = when (estado) {
             EstadoConexaoObd.Desconectado -> getString(R.string.obd_estado_desconectado)
             EstadoConexaoObd.Conectando -> getString(R.string.obd_estado_conectando)
@@ -205,6 +221,8 @@ class ObdFragment : Fragment() {
         switchSimularFalha.isEnabled = livre
         botaoAtualizarDispositivos.isEnabled = livre
         botaoSalvarLeitura.isEnabled = conectado && viewModel.dados.value != null
+        // Gravando: o botão continua ativo para permitir parar mesmo após a queda da conexão.
+        botaoGravarLog.isEnabled = conectado || viewModel.estadoLog.value.gravando
         botaoLerCodigos.isEnabled = conectado && !ocupado
         botaoLimparCodigos.isEnabled = conectado && !ocupado
     }
@@ -227,13 +245,46 @@ class ObdFragment : Fragment() {
             }
     }
 
+    /** Mostradores principais: RPM, velocidade, MAP/turbo e temperatura do motor. */
     private fun mostrarDados(dados: DadosObd?) = with(binding) {
-        val vazio = getString(R.string.valor_indisponivel)
-        valorRpm.text = dados?.rpm?.let { getString(R.string.obd_valor_rpm, it.comoMilhar()) } ?: vazio
-        valorVelocidade.text = dados?.velocidade?.let { getString(R.string.obd_valor_velocidade, it) } ?: vazio
-        valorTemperatura.text = dados?.temperaturaMotor?.let { getString(R.string.obd_valor_temperatura, it) } ?: vazio
-        valorCarga.text = dados?.cargaMotor?.let { getString(R.string.obd_valor_carga, it.comoDecimal(1)) } ?: vazio
-        valorBateria.text = dados?.tensaoBateria?.let { getString(R.string.obd_valor_bateria, it.comoDecimal(1)) } ?: vazio
+        gaugeRpm.definirValor(dados?.get(Pids.RPM))
+        gaugeVelocidade.definirValor(dados?.get(Pids.VELOCIDADE))
+        gaugeMap.definirValor(dados?.get(Pids.PRESSAO_COLETOR))
+        gaugeTemperatura.definirValor(dados?.get(Pids.TEMPERATURA_MOTOR))
+        atualizarBotoes()
+    }
+
+    private fun mostrarSensores(sensores: List<LeituraSensor>) = with(binding) {
+        adapterSensores.submitList(sensores)
+        textoSensoresVazio.isVisible = sensores.isEmpty()
+        tituloSensores.text = if (sensores.isEmpty()) {
+            getString(R.string.obd_sensores_titulo)
+        } else {
+            getString(R.string.obd_sensores_titulo_qtd, sensores.size)
+        }
+    }
+
+    private fun mostrarInfoEcu(info: InfoEcu) = with(binding) {
+        val conectado = viewModel.estado.value is EstadoConexaoObd.Conectado
+        textoVin.text = when {
+            !conectado -> getString(R.string.obd_ecu_desconectado)
+            !info.vinLido -> getString(R.string.obd_ecu_vin_lendo)
+            else -> info.vin ?: getString(R.string.obd_ecu_vin_indisponivel)
+        }
+        textoPidsSuportados.text = if (conectado) {
+            getString(R.string.obd_ecu_pids_qtd, info.quantidadePids, viewModel.totalPidsCatalogo)
+        } else {
+            getString(R.string.valor_indisponivel)
+        }
+    }
+
+    private fun mostrarEstadoLog(log: EstadoLog) = with(binding) {
+        botaoGravarLog.isChecked = log.gravando
+        botaoGravarLog.text = if (log.gravando) {
+            getString(R.string.obd_log_gravando, log.amostras)
+        } else {
+            getString(R.string.obd_log_gravar)
+        }
         atualizarBotoes()
     }
 
@@ -242,12 +293,49 @@ class ObdFragment : Fragment() {
         binding.textoHistoricoVazio.isVisible = leituras.isEmpty()
     }
 
-    private fun mostrarCodigos() = with(binding) {
-        val codigos = viewModel.codigos.value
-        adapterCodigos.submitList(codigos.orEmpty())
-        textoCodigosVazio.isVisible = codigos.isNullOrEmpty()
-        textoCodigosVazio.setText(if (codigos == null) R.string.obd_codigos_nao_lidos else R.string.obd_sem_codigos)
+    private fun mostrarDiagnostico(resultado: ResultadoDiagnostico?) = with(binding) {
+        adapterCodigos.submitList(resultado?.itens().orEmpty())
+        textoCodigosVazio.isVisible = resultado == null
+        mostrarFreezeFrame(resultado)
     }
+
+    private fun mostrarFreezeFrame(resultado: ResultadoDiagnostico?) = with(binding) {
+        cardFreezeFrame.isVisible = resultado != null
+        if (resultado == null) return@with
+        val ff = resultado.freezeFrame
+        if (ff == null || ff.vazio) {
+            grupoFfDados.isVisible = false
+            textoFfVazio.isVisible = true
+            textoFfVazio.setText(if (ff == null) R.string.obd_ff_nao_suportado else R.string.obd_ff_vazio)
+            return@with
+        }
+        grupoFfDados.isVisible = true
+        textoFfVazio.isVisible = false
+        val vazio = getString(R.string.valor_indisponivel)
+        textoFfDtc.text = ff.dtc ?: getString(R.string.obd_ff_sem_dtc)
+        textoFfDescricao.isVisible = resultado.infoFreezeFrame != null
+        textoFfDescricao.text = resultado.infoFreezeFrame?.titulo
+        valorFfRpm.text = ff.rpm?.let { getString(R.string.obd_valor_rpm, it.comoMilhar()) } ?: vazio
+        valorFfVelocidade.text = ff.velocidade?.let { getString(R.string.obd_valor_velocidade, it) } ?: vazio
+        valorFfTemperatura.text = ff.temperaturaMotor?.let { getString(R.string.obd_valor_temperatura, it) } ?: vazio
+        valorFfCarga.text = ff.cargaMotor?.let { getString(R.string.obd_valor_carga, it.comoDecimal(1)) } ?: vazio
+    }
+
+    /** Log salvo: Snackbar com o local do arquivo e a ação de compartilhar. */
+    private fun oferecerCompartilhamento(arquivo: ArquivoExportado) {
+        val local = arquivo.local + "/" + arquivo.nome
+        Snackbar.make(requireView(), getString(R.string.obd_log_salvo, local), Snackbar.LENGTH_INDEFINITE)
+            .setAction(R.string.obd_log_compartilhar) {
+                val titulo = getString(R.string.obd_log_compartilhar_titulo)
+                runCatching { startActivity(ExportadorCsv.intentCompartilhar(arquivo, titulo)) }
+                    .onFailure { mostrarMensagem(it.message ?: "") }
+            }
+            .show()
+    }
+
+    /** 2 colunas no celular em pé; mais colunas em telas largas (paisagem/tablet). */
+    private fun colunasDaGrade(): Int =
+        (resources.configuration.screenWidthDp / LARGURA_MINIMA_CELULA_DP).coerceIn(2, 5)
 
     private fun mostrarMensagem(texto: String) {
         if (texto.isNotBlank()) Snackbar.make(requireView(), texto, Snackbar.LENGTH_LONG).show()
@@ -287,6 +375,7 @@ class ObdFragment : Fragment() {
 
     companion object {
         private const val TAG = "ObdFragment"
+        private const val LARGURA_MINIMA_CELULA_DP = 170
 
         fun novo(veiculoId: Long) = ObdFragment().apply {
             arguments = Bundle().apply { putLong(DiagnosticoActivity.EXTRA_VEICULO_ID, veiculoId) }

@@ -59,6 +59,17 @@
             android:exported="false"
             android:parentActivityName=".ui.dashboard.DashboardActivity"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- Compartilhamento dos logs CSV salvos na pasta do app (Android 8/9). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.arquivos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/caminhos_arquivos" />
+        </provider>
     </application>
 
 </manifest>

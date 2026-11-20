@@ -40,6 +40,26 @@ interface ObdClient {
         comandos: Collection<String>? = Pids.PAINEL,
     ): Flow<DadosObd>
 
+    /**
+     * Telemetria ao vivo em duas filas ([EscalonadorPolling]): RPM, velocidade, MAP e MAF/borboleta
+     * em todo ciclo e os demais PIDs suportados (inclusive os de montadora ativados) em rodízio,
+     * [lentosPorCiclo] por ciclo. Cada emissão é o instantâneo completo com o último valor
+     * conhecido de cada PID. Um ciclo começa a cada [intervaloMinimoMs] no mínimo (se a leitura
+     * demorar mais, o próximo começa logo em seguida). Termina se a conexão for perdida.
+     */
+    fun lerTelemetria(
+        intervaloMinimoMs: Long = INTERVALO_TELEMETRIA_MS,
+        lentosPorCiclo: Int = EscalonadorPolling.LENTOS_POR_CICLO,
+    ): Flow<DadosObd>
+
+    /**
+     * Ativa, se possível, o perfil de PIDs da montadora do veículo (`pids_estendidos.json`):
+     * exige perfil para a [marca], protocolo CAN de 11 bits e resposta positiva da ECU a cada
+     * requisição. Os PIDs ativados entram em [pidsSuportados] e na fila lenta da telemetria.
+     * Nunca lança: falhas viram [ResultadoPerfil.Indisponivel].
+     */
+    suspend fun ativarPerfilFabricante(marca: String?): ResultadoPerfil
+
     /** Lê os códigos de falha armazenados/confirmados (modo 03). Lista vazia = nenhum código. */
     suspend fun lerCodigosFalha(): Result<List<DtcLido>>
 
@@ -63,5 +83,8 @@ interface ObdClient {
 
     companion object {
         const val INTERVALO_PADRAO_MS = 1000L
+
+        /** Período mínimo do ciclo da telemetria em duas filas (~4 atualizações/s dos mostradores). */
+        const val INTERVALO_TELEMETRIA_MS = 250L
     }
 }

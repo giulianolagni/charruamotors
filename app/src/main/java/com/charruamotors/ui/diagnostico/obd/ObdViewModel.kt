@@ -11,20 +11,30 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.data.repository.DiagnosticoRepository
+import com.charruamotors.domain.calculo.ComputadorBordo
+import com.charruamotors.domain.calculo.Cronometro0a100
+import com.charruamotors.domain.calculo.ParametrosMotor
+import com.charruamotors.domain.calculo.TelemetriaCalculada
 import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.model.LeituraObd
+import com.charruamotors.domain.model.Veiculo
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.DispositivoObd
 import com.charruamotors.obd.DtcLido
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
 import com.charruamotors.obd.ObdClientFake
+import com.charruamotors.obd.ResultadoPerfil
 import com.charruamotors.obd.dtc.CatalogoDtc
 import com.charruamotors.obd.dtc.TipoDtc
 import com.charruamotors.obd.log.DataLogger
 import com.charruamotors.obd.log.GeradorCsv
 import com.charruamotors.obd.log.SessaoLog
 import com.charruamotors.obd.pid.CatalogoPids
+import com.charruamotors.obd.pid.DefinicaoPid
+import com.charruamotors.obd.pid.Pids
+import com.charruamotors.ui.componentes.JanelaTelemetria
+import com.charruamotors.ui.componentes.PontoTelemetria
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.util.ArquivoExportado
 import kotlinx.coroutines.CoroutineScope
@@ -32,6 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -61,12 +72,14 @@ sealed interface EventoObd {
 
 /**
  * ViewModel da aba OBD2. Preserva a conexão e as leituras em mudanças de configuração
- * (o `ObdClient` vive no Application; o ViewModel só o usa) e controla o polling de PIDs,
- * o Data Logger e a leitura completa de falhas (modos 03, 07, 0A e 02).
+ * (o `ObdClient` vive no Application; o ViewModel só o usa) e controla a telemetria em duas
+ * filas, o computador de bordo, o cronômetro 0–100 km/h, o gráfico ao vivo, o perfil de PIDs
+ * da montadora, o Data Logger e a leitura completa de falhas (modos 03, 07, 0A e 02).
  *
  * @param clientePorModo devolve o [ObdClient] do modo pedido (simulado ou Bluetooth real)
  * @param aoSelecionarModo avisa o Application qual modo está ativo
- * @param marcaVeiculo marca do veículo, para escolher a tabela de DTCs do fabricante
+ * @param veiculo veículo do diagnóstico: marca (tabela de DTCs e perfil de PIDs da montadora),
+ *   modelo (cilindrada) e combustível (computador de bordo)
  * @param salvarCsv grava um arquivo (nome + escrita em streaming) e devolve onde ficou
  */
 @OptIn(ExperimentalCoroutinesApi::class) // flatMapLatest
@@ -78,7 +91,7 @@ class ObdViewModel(
     private val repository: DiagnosticoRepository,
     private val catalogoPids: CatalogoPids,
     private val catalogoDtc: CatalogoDtc,
-    private val marcaVeiculo: suspend () -> String?,
+    private val veiculo: suspend () -> Veiculo?,
     private val salvarCsv: suspend (String, (Writer) -> Unit) -> ArquivoExportado,
     private val relogio: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
@@ -122,10 +135,37 @@ class ObdViewModel(
     private val _dados = MutableStateFlow<DadosObd?>(null)
     val dados: StateFlow<DadosObd?> = _dados.asStateFlow()
 
-    /** Todos os PIDs suportados com o valor do último ciclo, na ordem do catálogo (grade ao vivo). */
-    val sensores: StateFlow<List<LeituraSensor>> = combine(pidsSuportados, _dados) { suportados, dados ->
-        catalogoPids.pids.filter { it.comando in suportados }.map { LeituraSensor(it, dados?.get(it.comando)) }
+    /** Perfil de PIDs da montadora desta conexão; null = verificando ou desconectado. */
+    private val _perfil = MutableStateFlow<ResultadoPerfil?>(null)
+
+    /** PIDs de montadora ativos (entram na grade e no log depois dos PIDs padrão). */
+    private val pidsDaMontadora: List<DefinicaoPid>
+        get() = (_perfil.value as? ResultadoPerfil.Ativo)?.pids.orEmpty()
+
+    /** Definições de todos os sensores suportados agora, na ordem do catálogo + montadora. */
+    private fun definicoesSuportadas(suportados: Set<String>): List<DefinicaoPid> =
+        (catalogoPids.pids + pidsDaMontadora).filter { it.comando in suportados }
+
+    /** Todos os PIDs suportados com o último valor conhecido (grade ao vivo; a fila lenta a atualiza aos poucos). */
+    val sensores: StateFlow<List<LeituraSensor>> = combine(pidsSuportados, _dados, _perfil) { suportados, dados, _ ->
+        definicoesSuportadas(suportados).map { LeituraSensor(it, dados?.get(it.comando)) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    // ------------------------------------------------------------------ telemetria derivada
+
+    private val computadorBordo = ComputadorBordo()
+    private val _computador = MutableStateFlow(ComputadorBordoUi())
+    /** Consumo instantâneo (MAF ou Speed-Density) e média da viagem. */
+    val computador: StateFlow<ComputadorBordoUi> = _computador.asStateFlow()
+
+    private val cronometro0a100 = Cronometro0a100()
+    private val _cronometro = MutableStateFlow(CronometroUi())
+    val cronometro: StateFlow<CronometroUi> = _cronometro.asStateFlow()
+
+    private val janelaGrafico = JanelaTelemetria()
+    private val _grafico = MutableStateFlow<List<PontoTelemetria>>(emptyList())
+    /** Últimos 60 s de RPM e MAP para o gráfico ao vivo. */
+    val grafico: StateFlow<List<PontoTelemetria>> = _grafico.asStateFlow()
 
     /** Tamanho do catálogo, para "N de M PIDs suportados". */
     val totalPidsCatalogo: Int get() = catalogoPids.pids.size
@@ -133,9 +173,9 @@ class ObdViewModel(
     private val _vin = MutableStateFlow<String?>(null)
     private val _vinLido = MutableStateFlow(false)
 
-    /** VIN (modo 09) e quantidade de PIDs detectados. */
-    val infoEcu: StateFlow<InfoEcu> = combine(_vin, _vinLido, pidsSuportados) { vin, lido, pids ->
-        InfoEcu(vin, lido, pids.size)
+    /** VIN (modo 09), quantidade de PIDs padrão detectados e perfil de montadora. */
+    val infoEcu: StateFlow<InfoEcu> = combine(_vin, _vinLido, pidsSuportados, _perfil) { vin, lido, pids, perfil ->
+        InfoEcu(vin, lido, pids.count { it in catalogoPids }, perfil)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InfoEcu())
 
     /** Falhas lidas por categoria + Freeze Frame; null = ainda não lidas nesta conexão. */
@@ -156,9 +196,16 @@ class ObdViewModel(
     private var pollingJob: Job? = null
     private var conexaoJob: Job? = null
     private var vinJob: Job? = null
+    private var perfilJob: Job? = null
+
+    /** Veículo do diagnóstico, carregado uma vez (marca, modelo e combustível). */
+    private val dadosVeiculo = viewModelScope.async { runCatching { veiculo() }.getOrNull() }
 
     /** Marca do veículo (carregada uma vez) para a tabela de DTCs do fabricante. */
     private var marca: String? = null
+
+    /** Cilindrada e combustível para o consumo; padrão até o veículo carregar. */
+    private var parametrosMotor = ParametrosMotor()
 
     /** A tela está visível (entre onStart/onResume e onPause/onStop do Fragment)? */
     private var telaVisivel = false
@@ -169,13 +216,16 @@ class ObdViewModel(
             // drop(1): ignora o valor inicial, para não repetir um erro antigo ao reabrir a tela.
             estado.drop(1).collect { novo ->
                 if (novo is EstadoConexaoObd.Conectado) {
-                    lerVin()
+                    iniciarSessao()
                 } else {
                     _dados.value = null
                     _diagnostico.value = null
                     vinJob?.cancel()
+                    perfilJob?.cancel()
                     _vin.value = null
                     _vinLido.value = false
+                    _perfil.value = null
+                    if (cronometro0a100.armado) _cronometro.value = CronometroUi(cronometro0a100.desarmar(), cronometro0a100.melhorTempoMs)
                     // Conexão caiu durante a gravação: salva o que já foi coletado.
                     if (logger.gravando) pararLog()
                 }
@@ -183,9 +233,14 @@ class ObdViewModel(
                 atualizarPolling()
             }
         }
-        // Já conectado (ex.: rotação de tela / reabertura com o cliente vivo no Application).
-        if (estado.value is EstadoConexaoObd.Conectado) lerVin()
-        viewModelScope.launch { marca = runCatching { marcaVeiculo() }.getOrNull() }
+        // Já conectado (ex.: reabertura da tela com o cliente vivo no Application).
+        if (estado.value is EstadoConexaoObd.Conectado) iniciarSessao()
+        viewModelScope.launch {
+            val v = dadosVeiculo.await()
+            marca = v?.marca
+            parametrosMotor = ParametrosMotor.deVeiculo(v?.modelo, v?.tipoCombustivel)
+            _computador.value = _computador.value.copy(motor = parametrosMotor)
+        }
         carregarDispositivos()
     }
 
@@ -247,6 +302,32 @@ class ObdViewModel(
         }
     }
 
+    /** Nova conexão: zera a viagem e o gráfico, lê o VIN e tenta ativar o perfil da montadora. */
+    private fun iniciarSessao() {
+        computadorBordo.zerar()
+        janelaGrafico.limpar()
+        _grafico.value = emptyList()
+        _computador.value = ComputadorBordoUi(motor = parametrosMotor)
+        lerVin()
+        ativarPerfilFabricante()
+    }
+
+    /**
+     * Perfil de PIDs da montadora (Toyota modo 21 / VW UDS 22) conforme a marca cadastrada; os
+     * PIDs que a ECU responder entram na fila lenta da telemetria, na grade e no log.
+     */
+    private fun ativarPerfilFabricante() {
+        if (perfilJob?.isActive == true) return
+        _perfil.value = null
+        perfilJob = viewModelScope.launch {
+            val resultado = cliente.ativarPerfilFabricante(dadosVeiculo.await()?.marca)
+            _perfil.value = resultado
+            if (resultado is ResultadoPerfil.Ativo) {
+                _eventos.send(EventoObd.Texto("Perfil ${resultado.fabricante} ativado: ${resultado.pids.size} PIDs da montadora"))
+            }
+        }
+    }
+
     /** VIN uma vez por conexão (modo 09); veículos antigos podem não suportar. */
     private fun lerVin() {
         if (vinJob?.isActive == true) return
@@ -280,14 +361,59 @@ class ObdViewModel(
         }
         if (pollingJob?.isActive == true) return
         pollingJob = viewModelScope.launch {
-            // comandos = null: todos os PIDs suportados (grade completa e Data Logger).
-            cliente.lerDadosEmTempoReal(comandos = null)
+            // Duas filas: mostradores em todo ciclo, o resto da grade (e do log) em rodízio.
+            cliente.lerTelemetria()
                 .catch { _eventos.send(EventoObd.Texto(it.message ?: "")) }
                 .collect { dados ->
                     _dados.value = dados
+                    processarTelemetria(dados, relogio())
                     registrarNoLog(dados)
                 }
         }
+    }
+
+    /** Computador de bordo, cronômetro 0–100 e gráfico, a cada instantâneo da telemetria. */
+    private fun processarTelemetria(dados: DadosObd, instanteMs: Long) {
+        val velocidade = dados[Pids.VELOCIDADE]
+        val consumo = TelemetriaCalculada.consumoInstantaneo(dados, parametrosMotor)
+        _computador.value = ComputadorBordoUi(
+            consumo = consumo,
+            viagem = computadorBordo.registrar(consumo, velocidade, instanteMs),
+            motor = parametrosMotor,
+        )
+        if (cronometro0a100.armado) {
+            _cronometro.value = CronometroUi(cronometro0a100.registrar(velocidade, instanteMs), cronometro0a100.melhorTempoMs)
+        }
+        _grafico.value = janelaGrafico.adicionar(PontoTelemetria(instanteMs, dados[Pids.RPM], dados[Pids.PRESSAO_COLETOR]))
+    }
+
+    // ------------------------------------------------------------------ cronômetro 0–100 km/h
+
+    /**
+     * Botão "Armar 0–100 km/h": arma (a contagem começa sozinha quando o carro sair do 0) ou
+     * cancela. No modo simulado, também dispara a arrancada de demonstração do [ObdClientFake].
+     */
+    fun alternarCronometro() {
+        if (cronometro0a100.armado) {
+            _cronometro.value = CronometroUi(cronometro0a100.desarmar(), cronometro0a100.melhorTempoMs)
+            return
+        }
+        if (estado.value !is EstadoConexaoObd.Conectado) {
+            _eventos.trySend(EventoObd.Mensagem(R.string.obd_cronometro_sem_conexao))
+            return
+        }
+        if (Pids.VELOCIDADE !in pidsSuportados.value) {
+            _eventos.trySend(EventoObd.Mensagem(R.string.obd_cronometro_sem_velocidade))
+            return
+        }
+        _cronometro.value = CronometroUi(cronometro0a100.armar(_dados.value?.get(Pids.VELOCIDADE)), cronometro0a100.melhorTempoMs)
+        if (_modo.value == ModoObd.SIMULADO) clienteSimulado?.simularArrancada()
+    }
+
+    /** Zera a média da viagem do computador de bordo. */
+    fun zerarViagem() {
+        computadorBordo.zerar()
+        _computador.value = _computador.value.copy(viagem = computadorBordo.resumo)
     }
 
     // ------------------------------------------------------------------ Data Logger CSV
@@ -302,8 +428,7 @@ class ObdViewModel(
             _eventos.trySend(EventoObd.Mensagem(R.string.obd_log_sem_conexao))
             return
         }
-        val suportados = pidsSuportados.value
-        val colunas = catalogoPids.pids.filter { it.comando in suportados }
+        val colunas = definicoesSuportadas(pidsSuportados.value)
         if (colunas.isEmpty()) {
             _eventos.trySend(EventoObd.Mensagem(R.string.obd_log_sem_pids))
             return
@@ -461,7 +586,7 @@ class ObdViewModel(
                     repository = app.diagnosticoRepository,
                     catalogoPids = app.catalogoPids,
                     catalogoDtc = app.catalogoDtc,
-                    marcaVeiculo = { app.veiculoRepository.buscarPorId(veiculoId)?.marca },
+                    veiculo = { app.veiculoRepository.buscarPorId(veiculoId) },
                     salvarCsv = { nome, escrever -> app.exportadorCsv.salvar(nome, escrever) },
                 )
             }

@@ -26,7 +26,7 @@ class SessaoLog(
  * Não é thread-safe: use sempre do mesmo contexto (no app, a main thread do ViewModel).
  *
  * @param limiteAmostras teto de memória; ao atingi-lo, [registrar] devolve `false` e o chamador
- *   deve encerrar a gravação (36 000 amostras ≈ 10 h a 1 leitura/s, poucos MB).
+ *   deve encerrar a gravação (36 000 amostras ≈ 2,5 h na telemetria a 4 leituras/s, poucos MB).
  */
 class DataLogger(val limiteAmostras: Int = LIMITE_PADRAO) {
 

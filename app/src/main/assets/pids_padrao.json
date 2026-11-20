@@ -26,6 +26,7 @@
     { "comando": "0145", "nome": "Posição relativa da borboleta", "unidade": "%", "bytes": 1, "formula": "A*100/255", "min": 0, "max": 100, "casas": 1 },
     { "comando": "0146", "nome": "Temperatura ambiente", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -40, "max": 215, "casas": 0 },
     { "comando": "0149", "nome": "Posição do pedal do acelerador", "unidade": "%", "bytes": 1, "formula": "A*100/255", "min": 0, "max": 100, "casas": 1 },
+    { "comando": "0152", "nome": "Percentual de etanol no combustível", "unidade": "%", "bytes": 1, "formula": "A*100/255", "min": 0, "max": 100, "casas": 0 },
     { "comando": "015C", "nome": "Temperatura do óleo do motor", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -40, "max": 215, "casas": 0 },
     { "comando": "015E", "nome": "Consumo instantâneo de combustível", "unidade": "L/h", "bytes": 2, "formula": "(256*A+B)/20", "min": 0, "max": 3276.75, "casas": 1 },
     { "comando": "ATRV", "nome": "Tensão da bateria", "unidade": "V", "bytes": 0, "formula": "X", "min": 0, "max": 40, "casas": 1 }

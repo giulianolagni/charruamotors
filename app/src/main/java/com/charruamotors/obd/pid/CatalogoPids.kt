@@ -7,10 +7,12 @@ import org.json.JSONObject
  * Definição de um sensor lido do veículo: comando enviado ao ELM327, fórmula de conversão
  * dos bytes da resposta, unidade e faixa teórica de valores.
  *
- * @property comando PID do modo 01 (ex.: `010C`) ou comando AT do ELM327 (ex.: `ATRV`).
+ * @property comando chave única do sensor: PID do modo 01 (ex.: `010C`), comando AT do ELM327
+ *   (ex.: `ATRV`) ou, nos PIDs de montadora, um identificador (ex.: `TOYOTA_ATF`).
  * @property bytes quantidade de bytes de dados da resposta (0 para comandos AT).
  * @property min limite inferior da faixa teórica; leituras fora de [min]..[max] são descartadas.
  * @property casasDecimais casas decimais sugeridas para exibição.
+ * @property estendida requisição específica de montadora (modos 21/22 com cabeçalho CAN); null nos PIDs padrão.
  */
 data class DefinicaoPid(
     val comando: String,
@@ -21,9 +23,14 @@ data class DefinicaoPid(
     val min: Double,
     val max: Double,
     val casasDecimais: Int = 0,
+    val estendida: RequisicaoEstendida? = null,
 ) {
     init {
-        require(ehComandoAt || REGEX_MODO_01.matches(comando)) { "Comando inválido: $comando" }
+        if (estendida == null) {
+            require(ehComandoAt || REGEX_MODO_01.matches(comando)) { "Comando inválido: $comando" }
+        } else {
+            require(REGEX_ID_ESTENDIDO.matches(comando)) { "Identificador de PID estendido inválido: $comando" }
+        }
         require(bytes in 0..MAX_BYTES) { "$comando: quantidade de bytes inválida ($bytes)" }
         require(formula.bytesNecessarios <= bytes) {
             "$comando: a fórmula \"$formula\" usa ${formula.bytesNecessarios} byte(s), mas o PID declara $bytes"
@@ -36,13 +43,22 @@ data class DefinicaoPid(
     }
 
     /** Comando AT do adaptador (não é enviado à ECU e não aparece nos bitmasks de suporte). */
-    val ehComandoAt: Boolean get() = comando.startsWith("AT")
+    val ehComandoAt: Boolean get() = estendida == null && comando.startsWith("AT")
 
-    /** Número do PID no modo 01 (`010C` → `0x0C`); null para comandos AT. */
-    val pid: Int? get() = if (ehComandoAt) null else comando.substring(2).toInt(16)
+    /** PID específico de montadora (modo 21 Toyota / 22 UDS), fora dos bitmasks do modo 01. */
+    val ehEstendido: Boolean get() = estendida != null
 
-    /** Byte hexadecimal do PID (`"0C"`); null para comandos AT. */
-    val pidHex: String? get() = if (ehComandoAt) null else comando.substring(2)
+    /** PID padrão SAE J1979 do modo 01. */
+    val ehModo01: Boolean get() = !ehComandoAt && !ehEstendido
+
+    /** Número do PID no modo 01 (`010C` → `0x0C`); null para comandos AT e PIDs estendidos. */
+    val pid: Int? get() = if (ehModo01) comando.substring(2).toInt(16) else null
+
+    /** Byte hexadecimal do PID (`"0C"`); null para comandos AT e PIDs estendidos. */
+    val pidHex: String? get() = if (ehModo01) comando.substring(2) else null
+
+    /** Rótulo técnico para a UI: `010C`, `ATRV` ou `7E1 · 2182` (cabeçalho · requisição). */
+    val rotuloComando: String get() = estendida?.let { "${it.cabecalho} · ${it.comando}" } ?: comando
 
     /** Converte os bytes de dados (ou o valor textual [x], em comandos AT) na unidade do sensor. */
     fun converter(dados: List<Int> = emptyList(), x: Double = 0.0): Double = formula.avaliar(dados, x)
@@ -53,6 +69,7 @@ data class DefinicaoPid(
 
     companion object {
         private val REGEX_MODO_01 = Regex("^01[0-9A-F]{2}$")
+        private val REGEX_ID_ESTENDIDO = Regex("^[A-Z][A-Z0-9_]{2,31}$")
         private const val MAX_BYTES = 8
         private const val TOLERANCIA = 1e-9
     }
@@ -79,7 +96,7 @@ class CatalogoPids(val pids: List<DefinicaoPid>) {
     operator fun contains(comando: String): Boolean = get(comando) != null
 
     /** PIDs do modo 01 (sem os comandos AT), na ordem do catálogo. */
-    val pidsModo01: List<DefinicaoPid> get() = pids.filter { !it.ehComandoAt }
+    val pidsModo01: List<DefinicaoPid> get() = pids.filter { it.ehModo01 }
 
     companion object {
         /** Nome do arquivo em `app/src/main/assets`. */
@@ -91,43 +108,63 @@ class CatalogoPids(val pids: List<DefinicaoPid>) {
          */
         fun deJson(json: String): CatalogoPids = try {
             val lista = JSONObject(json).getJSONArray("pids")
-            CatalogoPids(
-                (0 until lista.length()).map { i ->
-                    val o = lista.getJSONObject(i)
-                    val comando = o.getString("comando").trim().uppercase()
-                    try {
-                        DefinicaoPid(
-                            comando = comando,
-                            nome = o.getString("nome"),
-                            unidade = o.getString("unidade"),
-                            bytes = o.getInt("bytes"),
-                            formula = Formula.compilar(o.getString("formula")),
-                            min = o.getDouble("min"),
-                            max = o.getDouble("max"),
-                            casasDecimais = o.optInt("casas", 0),
-                        )
-                    } catch (e: IllegalArgumentException) {
-                        throw IllegalArgumentException("PID $comando: ${e.message}", e)
-                    }
-                },
-            )
+            CatalogoPids((0 until lista.length()).map { definicaoDeJson(lista.getJSONObject(it)) })
         } catch (e: JSONException) {
             throw IllegalArgumentException("Catálogo de PIDs com JSON inválido: ${e.message}", e)
+        }
+
+        /**
+         * Uma definição do JSON (campos comuns ao catálogo padrão e ao estendido). Nos PIDs
+         * estendidos a chave vem do campo `id`; nos padrão, de `comando`.
+         * @throws IllegalArgumentException com o comando no texto, se a definição for inválida.
+         * @throws JSONException se faltar um campo obrigatório.
+         */
+        internal fun definicaoDeJson(o: JSONObject, estendida: RequisicaoEstendida? = null): DefinicaoPid {
+            val comando = o.getString(if (estendida == null) "comando" else "id").trim().uppercase()
+            return try {
+                DefinicaoPid(
+                    comando = comando,
+                    nome = o.getString("nome"),
+                    unidade = o.getString("unidade"),
+                    bytes = o.getInt("bytes"),
+                    formula = Formula.compilar(o.getString("formula")),
+                    min = o.getDouble("min"),
+                    max = o.getDouble("max"),
+                    casasDecimais = o.optInt("casas", 0),
+                    estendida = estendida,
+                )
+            } catch (e: IllegalArgumentException) {
+                throw IllegalArgumentException("PID $comando: ${e.message}", e)
+            }
         }
     }
 }
 
-/** Comandos dos sensores usados diretamente pelo app (painel, histórico, freeze frame). */
+/** Comandos dos sensores usados diretamente pelo app (painel, filas de polling, cálculos, freeze frame). */
 object Pids {
     const val CARGA_MOTOR = "0104"
     const val TEMPERATURA_MOTOR = "0105"
+    const val STFT = "0106"
+    const val LTFT = "0107"
     const val PRESSAO_COLETOR = "010B"
     const val RPM = "010C"
     const val VELOCIDADE = "010D"
+    const val TEMPERATURA_AR_ADMISSAO = "010F"
+    const val MAF = "0110"
+    const val BORBOLETA = "0111"
+    const val LAMBDA_COMANDADO = "0144"
+    const val PERCENTUAL_ETANOL = "0152"
+    const val CONSUMO_ECU = "015E"
     const val TENSAO_BATERIA = "ATRV"
 
     /** Sensores exibidos no painel principal (lidos a cada ciclo de polling). */
     val PAINEL: List<String> = listOf(RPM, VELOCIDADE, TEMPERATURA_MOTOR, CARGA_MOTOR, TENSAO_BATERIA)
+
+    /**
+     * Candidatos da fila rápida do polling, em ordem de prioridade: os 4 primeiros suportados são
+     * lidos em todo ciclo (RPM, velocidade, MAP e MAF; sem MAF ou sem MAP entra a borboleta).
+     */
+    val CANDIDATOS_FILA_RAPIDA: List<String> = listOf(RPM, VELOCIDADE, PRESSAO_COLETOR, MAF, BORBOLETA)
 
     /** Sensores congelados no Freeze Frame (modo 02), no momento em que a falha foi registrada. */
     val FREEZE_FRAME: List<String> = listOf(RPM, VELOCIDADE, TEMPERATURA_MOTOR, CARGA_MOTOR)

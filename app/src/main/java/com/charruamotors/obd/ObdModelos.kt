@@ -3,6 +3,7 @@ package com.charruamotors.obd
 import com.charruamotors.domain.model.CodigoFalha
 import com.charruamotors.domain.model.LeituraObd
 import com.charruamotors.domain.model.StatusCodigoFalha
+import com.charruamotors.obd.pid.DefinicaoPid
 import com.charruamotors.obd.pid.Pids
 import java.time.LocalDateTime
 import kotlin.math.roundToInt
@@ -63,6 +64,18 @@ data class FreezeFrame(
 ) : ValoresSensores {
     /** Nenhum quadro armazenado (ECU sem falhas ou memória limpa). */
     val vazio: Boolean get() = dtc == null && valores.isEmpty()
+}
+
+/** Resultado da ativação do perfil de PIDs de montadora (modos 21/22). */
+sealed interface ResultadoPerfil {
+    /** A marca do veículo não tem perfil no catálogo estendido (ou não foi informada). */
+    data object SemPerfil : ResultadoPerfil
+
+    /** Há perfil, mas não deu para usá-lo: protocolo não CAN, ECU sem resposta, desconectado... */
+    data class Indisponivel(val fabricante: String, val motivo: String) : ResultadoPerfil
+
+    /** PIDs do perfil que a ECU respondeu, já incluídos nos suportados. */
+    data class Ativo(val fabricante: String, val pids: List<DefinicaoPid>, val observacao: String = "") : ResultadoPerfil
 }
 
 /** Falha de comunicação com o scanner/ECU (timeout, conexão perdida, resposta inválida...). */

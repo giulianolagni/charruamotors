@@ -14,6 +14,7 @@ import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
 import com.charruamotors.obd.ObdClientFake
 import com.charruamotors.obd.dtc.CatalogoDtc
+import com.charruamotors.obd.pid.CatalogoEstendido
 import com.charruamotors.obd.pid.CatalogoPids
 import com.charruamotors.ui.util.ExportadorCsv
 
@@ -59,6 +60,13 @@ class CharruaMotorsApp : Application() {
         CatalogoPids.deJson(assets.open(CatalogoPids.ARQUIVO_PADRAO).bufferedReader().use { it.readText() })
     }
 
+    /** Perfis de PIDs de montadora (`assets/pids_estendidos.json`); se o arquivo faltar ou for inválido, nenhum perfil. */
+    val catalogoEstendido: CatalogoEstendido by lazy {
+        runCatching {
+            CatalogoEstendido.deJson(assets.open(CatalogoEstendido.ARQUIVO_PADRAO).bufferedReader().use { it.readText() })
+        }.getOrElse { CatalogoEstendido.VAZIO }
+    }
+
     /** Banco offline de códigos de falha (`assets/dtc_catalogo.json`); se faltar, usa o fallback por sistema. */
     val catalogoDtc: CatalogoDtc by lazy {
         runCatching {
@@ -70,11 +78,11 @@ class CharruaMotorsApp : Application() {
     val exportadorCsv: ExportadorCsv by lazy { ExportadorCsv(this) }
 
     // Um cliente por modo, criados sob demanda e mantidos vivos (a conexão sobrevive às telas).
-    private val obdSimulado: ObdClient by lazy { ObdClientFake() }
+    private val obdSimulado: ObdClient by lazy { ObdClientFake(catalogoEstendido = catalogoEstendido) }
 
     private val obdBluetooth: ObdClient by lazy {
         val adaptador = getSystemService(BluetoothManager::class.java)?.adapter
-        Elm327BluetoothClient(adaptador, catalogoPids)
+        Elm327BluetoothClient(adaptador, catalogoPids, catalogoEstendido = catalogoEstendido)
     }
 
     /** Cliente OBD2 do modo atual; ViewModels dependem apenas da interface [ObdClient]. */

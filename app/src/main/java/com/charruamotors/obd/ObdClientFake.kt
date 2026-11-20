@@ -1,6 +1,7 @@
 package com.charruamotors.obd
 
 import com.charruamotors.domain.model.EstadoConexaoObd
+import com.charruamotors.obd.pid.CatalogoEstendido
 import com.charruamotors.obd.pid.Pids
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -18,7 +19,11 @@ import kotlin.random.Random
  * catálogo padrão): a velocidade oscila com aceleração/frenagem suaves, o RPM acompanha a
  * velocidade (marchas), o motor e o óleo esquentam até a temperatura de trabalho, carga, MAP,
  * MAF, borboleta e consumo seguem a aceleração, e a tensão varia em torno de 14 V (alternador).
- * Mantém códigos de falha armazenados, pendentes e permanentes, Freeze Frame e VIN de teste.
+ * A simulação avança pelo tempo de cada leitura (1 s no polling simples, 250 ms na telemetria).
+ *
+ * Também simula uma arrancada 0–100 km/h ([simularArrancada]), PIDs de montadora de
+ * [SIMULADOS_ESTENDIDOS] (os demais do perfil "não respondem", como numa ECU real), códigos de
+ * falha armazenados, pendentes e permanentes, Freeze Frame e VIN de teste.
  *
  * @param latenciaMs atraso simulado de conectar/ler DTCs (use 0 nos testes).
  */
@@ -29,6 +34,7 @@ class ObdClientFake(
     codigosPendentesIniciais: List<String> = listOf("P0133"),
     private val codigosPermanentes: List<String> = listOf("P0420"),
     private val vin: String = "9BWZZZ377VT004251",
+    private val catalogoEstendido: CatalogoEstendido = CatalogoEstendido.VAZIO,
 ) : ObdClient {
 
     private val _estado = MutableStateFlow<EstadoConexaoObd>(EstadoConexaoObd.Desconectado)
@@ -47,15 +53,27 @@ class ObdClientFake(
     @Volatile
     var simularFalhaNaConexao: Boolean = false
 
+    /** PIDs de montadora ativados nesta conexão. */
+    private var estendidosAtivos: Set<String> = emptySet()
+
     // Estado interno da simulação (evolui a cada leitura)
     private var velocidade = 0.0
     private var velocidadeAlvo = 40.0
     private var temperatura = 35.0
     private var temperaturaOleo = 30.0
     private var nivelCombustivel = 62.0
-    private var segundosMotorLigado = 0
+    private var segundosMotorLigado = 0.0
     private var kmComLuzAcesa = KM_COM_LUZ_ACESA_INICIAL
     private var kmDesdeLimpeza = KM_DESDE_LIMPEZA_INICIAL
+
+    /** Roteiro da arrancada: para o carro, espera parado e acelera com tudo até passar de 100 km/h. */
+    private enum class FaseArrancada { NENHUMA, PARANDO, PARADO, ACELERANDO }
+
+    @Volatile private var faseArrancada = FaseArrancada.NENHUMA
+    private var segundosNaFase = 0.0
+
+    /** A arrancada simulada está em andamento? */
+    val arrancadaEmAndamento: Boolean get() = faseArrancada != FaseArrancada.NENHUMA
 
     override suspend fun listarDispositivos(): List<DispositivoObd> = listOf(
         DispositivoObd("OBDII Simulado (ELM327)", "00:00:00:00:00:01"),
@@ -74,7 +92,9 @@ class ObdClientFake(
         velocidadeAlvo = 40.0
         temperatura = 35.0
         temperaturaOleo = 30.0
-        segundosMotorLigado = 0
+        segundosMotorLigado = 0.0
+        faseArrancada = FaseArrancada.NENHUMA
+        estendidosAtivos = emptySet()
         _pidsSuportados.value = COMANDOS_SIMULADOS
         _estado.value = EstadoConexaoObd.Conectado
         return Result.success(Unit)
@@ -83,10 +103,45 @@ class ObdClientFake(
     override fun lerDadosEmTempoReal(intervaloMs: Long, comandos: Collection<String>?): Flow<DadosObd> = flow {
         val pedidos = comandos?.toSet()
         while (_estado.value == EstadoConexaoObd.Conectado) {
-            val leitura = proximaLeitura()
+            val leitura = proximaLeitura(PASSO_POLLING_SIMPLES_S)
             emit(DadosObd(if (pedidos == null) leitura else leitura.filterKeys { it in pedidos }))
             delay(intervaloMs)
         }
+    }
+
+    /** Mesmo escalonamento do cliente real: a grade se atualiza aos poucos, os mostradores sempre. */
+    override fun lerTelemetria(intervaloMinimoMs: Long, lentosPorCiclo: Int): Flow<DadosObd> = flow {
+        val escalonador = EscalonadorPolling(lentosPorCiclo)
+        while (_estado.value == EstadoConexaoObd.Conectado) {
+            escalonador.atualizarSuportados(_pidsSuportados.value)
+            val chaves = escalonador.proximoCiclo()
+            val leitura = proximaLeitura(intervaloMinimoMs / 1000.0)
+            emit(DadosObd(escalonador.consolidar(chaves, leitura.filterKeys { it in chaves })))
+            delay(intervaloMinimoMs)
+        }
+    }
+
+    override suspend fun ativarPerfilFabricante(marca: String?): ResultadoPerfil {
+        val perfil = catalogoEstendido.perfilPara(marca) ?: return ResultadoPerfil.SemPerfil
+        if (_estado.value != EstadoConexaoObd.Conectado) {
+            return ResultadoPerfil.Indisponivel(perfil.nome, "scanner não conectado")
+        }
+        delay(latenciaMs)
+        val ativos = perfil.pids.filter { it.comando in SIMULADOS_ESTENDIDOS }
+        if (ativos.isEmpty()) return ResultadoPerfil.Indisponivel(perfil.nome, "a ECU não respondeu aos PIDs do perfil")
+        estendidosAtivos = ativos.mapTo(linkedSetOf()) { it.comando }
+        _pidsSuportados.value = _pidsSuportados.value + estendidosAtivos
+        return ResultadoPerfil.Ativo(perfil.nome, ativos, perfil.observacao)
+    }
+
+    /**
+     * Demonstração do cronômetro 0–100 km/h: o "motorista" para o carro, espera
+     * ~[SEGUNDOS_PARADO_ARRANCADA] s e acelera com tudo (0–100 em ~12 s, como um 1.6 aspirado)
+     * até passar de [VELOCIDADE_FIM_ARRANCADA] km/h; depois volta ao trânsito normal.
+     */
+    fun simularArrancada() {
+        faseArrancada = FaseArrancada.PARANDO
+        segundosNaFase = 0.0
     }
 
     override suspend fun lerCodigosFalha(): Result<List<DtcLido>> = lerDtcs { codigos }
@@ -121,6 +176,8 @@ class ObdClientFake(
 
     override suspend fun desconectar() {
         _pidsSuportados.value = emptySet()
+        estendidosAtivos = emptySet()
+        faseArrancada = FaseArrancada.NENHUMA
         _estado.value = EstadoConexaoObd.Desconectado
     }
 
@@ -132,16 +189,50 @@ class ObdClientFake(
 
     private fun naoConectado() = ObdException("Scanner não conectado")
 
-    /** Avança a simulação um passo (~1 s de condução) e devolve todos os PIDs "lidos" da ECU. */
-    private fun proximaLeitura(): Map<String, Double> {
-        // De vez em quando escolhe uma nova velocidade-alvo (trânsito: para, acelera, freia).
-        if (random.nextInt(100) < 12) velocidadeAlvo = random.nextInt(0, 111).toDouble()
-        val aceleracao = (velocidadeAlvo - velocidade).coerceIn(-12.0, 8.0)
-        velocidade = (velocidade + aceleracao + random.nextDouble(-1.0, 1.0)).coerceIn(0.0, 180.0)
+    /** Nova velocidade após [dt] segundos; devolve a aceleração em km/h por segundo. */
+    private fun avancarVelocidade(dt: Double): Double {
+        val anterior = velocidade
+        when (faseArrancada) {
+            FaseArrancada.NENHUMA -> {
+                // De vez em quando escolhe uma nova velocidade-alvo (trânsito: para, acelera, freia).
+                if (random.nextDouble() < CHANCE_NOVO_ALVO_POR_S * dt) velocidadeAlvo = random.nextInt(0, 111).toDouble()
+                val delta = (velocidadeAlvo - velocidade).coerceIn(-12.0 * dt, 8.0 * dt)
+                velocidade = (velocidade + delta + random.nextDouble(-1.0, 1.0) * dt).coerceIn(0.0, 180.0)
+            }
+            FaseArrancada.PARANDO -> {
+                velocidade = (velocidade - 12.0 * dt).coerceAtLeast(0.0)
+                if (velocidade == 0.0) mudarFase(FaseArrancada.PARADO)
+            }
+            FaseArrancada.PARADO -> {
+                velocidade = 0.0
+                segundosNaFase += dt
+                if (segundosNaFase >= SEGUNDOS_PARADO_ARRANCADA) mudarFase(FaseArrancada.ACELERANDO)
+            }
+            FaseArrancada.ACELERANDO -> {
+                // Aceleração cai com a velocidade (arrasto + marchas mais longas): ~11 → 6 km/h/s.
+                val aceleracao = (11.0 - velocidade * 0.05).coerceAtLeast(3.0) + random.nextDouble(-0.3, 0.3)
+                velocidade += aceleracao * dt
+                if (velocidade >= VELOCIDADE_FIM_ARRANCADA) {
+                    velocidadeAlvo = 60.0
+                    mudarFase(FaseArrancada.NENHUMA)
+                }
+            }
+        }
+        return (velocidade - anterior) / dt
+    }
 
-        temperatura = (temperatura + random.nextDouble(1.0, 3.0)).coerceAtMost(90.0 + random.nextDouble(-1.0, 1.0))
+    private fun mudarFase(fase: FaseArrancada) {
+        faseArrancada = fase
+        segundosNaFase = 0.0
+    }
+
+    /** Avança a simulação [dt] segundos de condução e devolve todos os PIDs "lidos" da ECU. */
+    private fun proximaLeitura(dt: Double): Map<String, Double> {
+        val aceleracao = avancarVelocidade(dt)
+
+        temperatura = (temperatura + random.nextDouble(1.0, 3.0) * dt).coerceAtMost(90.0 + random.nextDouble(-1.0, 1.0))
         // O óleo esquenta mais devagar que o líquido de arrefecimento e estabiliza um pouco acima dele.
-        temperaturaOleo += (temperatura + 6.0 - temperaturaOleo) * 0.06
+        temperaturaOleo += (temperatura + 6.0 - temperaturaOleo) * (0.06 * dt).coerceAtMost(1.0)
 
         val rpm = if (velocidade < 1.0) {
             800.0 + random.nextDouble(-40.0, 40.0) // marcha lenta
@@ -164,42 +255,57 @@ class ObdClientFake(
         // Sonda lambda de banda estreita oscila entre pobre (~0,1 V) e rica (~0,8 V) em malha fechada.
         val sonda = if (enriquecendo || random.nextBoolean()) random.nextDouble(0.70, 0.88) else random.nextDouble(0.08, 0.25)
 
-        segundosMotorLigado += 1
-        val kmNoPasso = velocidade / 3600.0
+        segundosMotorLigado += dt
+        val kmNoPasso = velocidade / 3600.0 * dt
         kmDesdeLimpeza += kmNoPasso
         if (codigos.isNotEmpty()) kmComLuzAcesa += kmNoPasso
-        nivelCombustivel = (nivelCombustivel - consumoLh / 3600.0 / TANQUE_LITROS * 100.0).coerceAtLeast(0.0)
+        nivelCombustivel = (nivelCombustivel - consumoLh / 3600.0 * dt / TANQUE_LITROS * 100.0).coerceAtLeast(0.0)
 
-        return linkedMapOf(
+        val leitura = linkedMapOf(
             Pids.CARGA_MOTOR to carga.arredondar(1),
             Pids.TEMPERATURA_MOTOR to temperatura.roundToInt().toDouble(),
-            "0106" to random.nextDouble(-4.0, 4.0).arredondar(1), // STFT: correção rápida em torno de 0
-            "0107" to (2.3 + random.nextDouble(-0.2, 0.2)).arredondar(1), // LTFT: adaptação estável
+            Pids.STFT to random.nextDouble(-4.0, 4.0).arredondar(1), // correção rápida em torno de 0
+            Pids.LTFT to (2.3 + random.nextDouble(-0.2, 0.2)).arredondar(1), // adaptação estável
             "010A" to (PRESSAO_LINHA_COMBUSTIVEL + random.nextDouble(-9.0, 9.0)).roundToInt().toDouble(),
-            "010B" to map.roundToInt().toDouble(),
+            Pids.PRESSAO_COLETOR to map.roundToInt().toDouble(),
             Pids.RPM to rpm.roundToInt().toDouble(),
             Pids.VELOCIDADE to velocidade.roundToInt().toDouble(),
             "010E" to avanco.arredondar(1),
-            "010F" to (28.0 + (temperatura - 35.0) * 0.12 + random.nextDouble(-0.5, 0.5)).roundToInt().toDouble(),
-            "0110" to maf.arredondar(2),
-            "0111" to borboleta.arredondar(1),
+            Pids.TEMPERATURA_AR_ADMISSAO to (28.0 + (temperatura - 35.0) * 0.12 + random.nextDouble(-0.5, 0.5)).roundToInt().toDouble(),
+            Pids.MAF to maf.arredondar(2),
+            Pids.BORBOLETA to borboleta.arredondar(1),
             "0114" to sonda.arredondar(3),
-            "011F" to segundosMotorLigado.toDouble(),
+            "011F" to segundosMotorLigado.roundToInt().toDouble(),
             "0121" to kmComLuzAcesa.roundToInt().toDouble(),
             "0123" to (4000.0 + carga * 90.0 + random.nextDouble(-150.0, 150.0)).roundToInt().toDouble(),
             "012F" to (nivelCombustivel + random.nextDouble(-0.4, 0.4)).coerceIn(0.0, 100.0).arredondar(1),
             "0131" to kmDesdeLimpeza.roundToInt().toDouble(),
             "0133" to PRESSAO_BAROMETRICA,
             "0142" to (tensao - 0.2).arredondar(2),
-            "0144" to lambda.arredondar(3),
+            Pids.LAMBDA_COMANDADO to lambda.arredondar(3),
             "0145" to (borboleta - BORBOLETA_FECHADA).coerceAtLeast(0.0).arredondar(1),
             "0146" to TEMPERATURA_AMBIENTE,
             "0149" to pedal.arredondar(1),
+            Pids.PERCENTUAL_ETANOL to PERCENTUAL_ETANOL_GASOLINA_C,
             "015C" to temperaturaOleo.roundToInt().toDouble(),
-            "015E" to consumoLh.arredondar(1),
+            Pids.CONSUMO_ECU to consumoLh.arredondar(1),
             Pids.TENSAO_BATERIA to tensao.arredondar(1),
         )
+        if (estendidosAtivos.isNotEmpty()) leitura += leituraEstendida(map).filterKeys { it in estendidosAtivos }
+        return leitura
     }
+
+    /** Valores dos PIDs de montadora simulados (ATF segue o óleo; injetores com desvios fixos). */
+    private fun leituraEstendida(map: Double): Map<String, Double> = mapOf(
+        "TOYOTA_ATF" to (temperaturaOleo - 4.0 + random.nextDouble(-0.5, 0.5)).roundToInt().toDouble(),
+        "TOYOTA_INJ1" to (0.42 + random.nextDouble(-0.05, 0.05)).arredondar(2),
+        "TOYOTA_INJ2" to (-0.31 + random.nextDouble(-0.05, 0.05)).arredondar(2),
+        "TOYOTA_INJ3" to (1.85 + random.nextDouble(-0.05, 0.05)).arredondar(2), // injetor 3 desgastado
+        "TOYOTA_INJ4" to (-0.12 + random.nextDouble(-0.05, 0.05)).arredondar(2),
+        "VW_TEMP_OLEO" to temperaturaOleo.roundToInt().toDouble(),
+        "VW_TURBO_REAL" to map.roundToInt().toDouble(),
+        "VW_TURBO_ALVO" to (map + random.nextDouble(0.0, 3.0)).roundToInt().toDouble(),
+    )
 
     private fun Double.arredondar(casas: Int): Double {
         var fator = 1.0
@@ -212,13 +318,27 @@ class ObdClientFake(
         val COMANDOS_SIMULADOS: Set<String> = setOf(
             "0104", "0105", "0106", "0107", "010A", "010B", "010C", "010D", "010E", "010F",
             "0110", "0111", "0114", "011F", "0121", "0123", "012F", "0131", "0133", "0142",
-            "0144", "0145", "0146", "0149", "015C", "015E", "ATRV",
+            "0144", "0145", "0146", "0149", "0152", "015C", "015E", "ATRV",
         )
 
+        /**
+         * PIDs de montadora que a ECU simulada responde. `VW_TEMP_DSG` fica de fora de propósito:
+         * demonstra que só entram no painel os PIDs a que a ECU responde (um Gol não tem DSG).
+         */
+        val SIMULADOS_ESTENDIDOS: Set<String> = setOf(
+            "TOYOTA_ATF", "TOYOTA_INJ1", "TOYOTA_INJ2", "TOYOTA_INJ3", "TOYOTA_INJ4",
+            "VW_TEMP_OLEO", "VW_TURBO_REAL", "VW_TURBO_ALVO",
+        )
+
+        const val VELOCIDADE_FIM_ARRANCADA = 115.0
+        private const val SEGUNDOS_PARADO_ARRANCADA = 2.0
+        private const val PASSO_POLLING_SIMPLES_S = 1.0
+        private const val CHANCE_NOVO_ALVO_POR_S = 0.12
         private const val BORBOLETA_FECHADA = 8.0 // % de abertura da borboleta em marcha lenta
         private const val PRESSAO_BAROMETRICA = 95.0 // kPa (~600 m de altitude)
         private const val PRESSAO_LINHA_COMBUSTIVEL = 380.0 // kPa, injeção indireta
         private const val TEMPERATURA_AMBIENTE = 24.0
+        private const val PERCENTUAL_ETANOL_GASOLINA_C = 27.0 // gasolina comum brasileira (E27)
         private const val RELACAO_ESTEQUIOMETRICA = 14.7
         private const val DENSIDADE_GASOLINA_G_L = 745.0
         private const val TANQUE_LITROS = 50.0

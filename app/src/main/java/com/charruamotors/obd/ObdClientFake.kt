@@ -1,6 +1,8 @@
 package com.charruamotors.obd
 
 import com.charruamotors.domain.model.EstadoConexaoObd
+import com.charruamotors.obd.log.EntradaRegistro
+import com.charruamotors.obd.log.RegistroComunicacao
 import com.charruamotors.obd.pid.CatalogoEstendido
 import com.charruamotors.obd.pid.Pids
 import kotlinx.coroutines.delay
@@ -43,6 +45,11 @@ class ObdClientFake(
     private val _pidsSuportados = MutableStateFlow<Set<String>>(emptySet())
     override val pidsSuportados: StateFlow<Set<String>> = _pidsSuportados.asStateFlow()
 
+    /** Registro ilustrativo (o que um ELM327 v1.5 em CAN responderia), para demonstrar o log de campo. */
+    private val registro = RegistroComunicacao()
+
+    override fun registroComunicacao(): List<EntradaRegistro> = registro.entradas()
+
     private var codigos: List<String> = codigosIniciais
     private var codigosPendentes: List<String> = codigosPendentesIniciais
 
@@ -83,7 +90,11 @@ class ObdClientFake(
     override suspend fun conectar(dispositivo: DispositivoObd): Result<Unit> {
         _estado.value = EstadoConexaoObd.Conectando
         delay(latenciaMs)
+        registro.limpar()
+        registro.evento("Modo simulado: respostas ilustrativas de um ELM327 v1.5 em CAN 11/500")
+        registro.comando("ATZ", "\r\rELM327 v1.5\r\r", 820)
         if (simularFalhaNaConexao) {
+            registro.comando("0100", "SEARCHING...\rUNABLE TO CONNECT\r\r", 6_400)
             val msg = "Não foi possível conectar a ${dispositivo.nome} (falha simulada)"
             _estado.value = EstadoConexaoObd.Erro(msg)
             return Result.failure(ObdException(msg))
@@ -95,6 +106,10 @@ class ObdClientFake(
         segundosMotorLigado = 0.0
         faseArrancada = FaseArrancada.NENHUMA
         estendidosAtivos = emptySet()
+        for (at in listOf("ATE0", "ATL0", "ATS0", "ATH0", "ATSP0")) registro.comando(at, "OK\r\r", 25)
+        registro.comando("0100", "SEARCHING...\r4100BE3FB813\r\r", 1_350)
+        registro.comando("ATDP", "AUTO, ISO 15765-4 (CAN 11/500)\r\r", 30)
+        registro.comando("ATRV", "14.2V\r\r", 40)
         _pidsSuportados.value = COMANDOS_SIMULADOS
         _estado.value = EstadoConexaoObd.Conectado
         return Result.success(Unit)

@@ -316,30 +316,82 @@ object ObdParser {
     private fun classificarErro(linhas: List<String>, bruto: String): RespostaObd<Nothing> {
         val texto = linhas.joinToString("\n")
         return when {
-            "UNABLE TO CONNECT" in texto || "CAN ERROR" in texto || "BUS ERROR" in texto ||
-                regexBusInitErro.containsMatchIn(texto) -> RespostaObd.SemConexao
+            ERROS_SEM_CONEXAO.any { it in texto } || regexBusInitErro.containsMatchIn(texto) ||
+                linhas.any { regexErroInterno.matches(compactar(it)) } -> RespostaObd.SemConexao
             "NO DATA" in texto || "NODATA" in compactar(texto) -> RespostaObd.SemDados
             linhas.any { l -> compactar(l).let { it.isNotEmpty() && it.all { c -> c == '?' } } } ->
                 RespostaObd.ComandoInvalido
+            // STOPPED, BUFFER FULL, BUS BUSY, DATA ERROR, lixo: falha passageira, sem valor confiável.
             else -> RespostaObd.Invalido(bruto)
         }
     }
 
+    // ---------------------------------------------------------------- mensagens do próprio ELM327
+
     /**
-     * Quebra a resposta em linhas "limpas": maiúsculas, sem caracteres de controle, sem o prompt `>`,
-     * sem o eco do [comando], sem `SEARCHING...`. Respostas multi-frame CAN (`0:`, `1:`) são unidas.
+     * O ELM327 abortou o comando porque recebeu um caractere enquanto ainda processava o anterior
+     * (`STOPPED`): o comando não foi executado e pode ser repetido.
+     */
+    fun interrompido(bruto: String): Boolean = linhasLimpas(bruto, null).any { it == "STOPPED" }
+
+    /**
+     * O adaptador reiniciou sozinho (`LV RESET` por queda de tensão na partida do motor, ou o
+     * banner `ELM327 v...` no meio da sessão): perdeu `ATE0`/`ATL0`/`ATS0`/`ATH0` e o cabeçalho.
+     */
+    fun adaptadorReiniciou(bruto: String): Boolean =
+        linhasLimpas(bruto, null).any { it.startsWith("LV RESET") || it.startsWith("ELM327") }
+
+    /**
+     * Primeira mensagem de erro do ELM327 na resposta (`NO DATA`, `CAN ERROR`, `BUS INIT: ...ERROR`,
+     * `?`, `STOPPED`...), para mensagens ao usuário e o registro de comunicação; null se não houver.
+     */
+    fun erroElm(bruto: String): String? {
+        val linhas = bruto.replace('>', '\n').split('\r', '\n').map { l -> l.filter { it in ' '..'~' }.uppercase().trim() }
+        return linhas.firstNotNullOfOrNull { linha ->
+            when {
+                linha.isEmpty() -> null
+                linha.all { it == '?' } -> "?"
+                regexBusInitErro.containsMatchIn(linha) -> "BUS INIT: ERROR"
+                regexErroInterno.matches(compactar(linha)) -> compactar(linha)
+                else -> MENSAGENS_ELM.firstOrNull { it in linha }
+            }
+        }
+    }
+
+    /** Erros que indicam que o adaptador não fala com a ECU (barramento, protocolo, ignição desligada). */
+    private val ERROS_SEM_CONEXAO = listOf(
+        "UNABLE TO CONNECT", "CAN ERROR", "BUS ERROR", "FB ERROR", "LV RESET", "ACT ALERT", "LP ALERT",
+    )
+
+    /** Todas as mensagens de erro/estado documentadas do ELM327 (datasheet v2.x). */
+    private val MENSAGENS_ELM = ERROS_SEM_CONEXAO + listOf(
+        "NO DATA", "STOPPED", "BUFFER FULL", "BUS BUSY", "<DATA ERROR", "DATA ERROR", "<RX ERROR", "RX ERROR",
+    )
+
+    /** `ERR94` e afins: erro interno do ELM327 (o 94 é um erro fatal de CAN que reinicia o chip). */
+    private val regexErroInterno = Regex("^ERR\\d{2}$")
+
+    /** `SEARCHING...` e `BUS INIT: ...OK` são só progresso da busca de protocolo (linha K faz 5 baud). */
+    private val regexProgresso = Regex("^(SEARCHING\\.*|BUS ?INIT:[ .]*OK)\\s*")
+
+    /**
+     * Quebra a resposta em linhas "limpas": maiúsculas, só ASCII imprimível, sem o prompt `>`, sem o
+     * eco do [comando], sem `SEARCHING...`/`BUS INIT: ...OK`. Respostas multi-frame CAN (`0:`, `1:`)
+     * são unidas. Um quadro marcado com `<DATA ERROR`/`<RX ERROR` (checksum ou recepção ruim) vira só
+     * a marca: os bytes dele não são confiáveis.
      */
     internal fun linhasLimpas(bruto: String, comando: String?): List<String> {
         val eco = comando?.let(::compactar)?.uppercase()
         var linhas = bruto
             .replace('>', '\n')
             .split('\r', '\n')
-            .map { l -> l.filter { it >= ' ' && it != '\u007F' }.uppercase().trim() }
+            .map { l -> regexProgresso.replace(l.filter { it in ' '..'~' }.uppercase().trim(), "") }
+            .map { l -> if ('<' in l) l.substringAfter('<').trim() else l }
             .filter { it.isNotEmpty() }
             .filter { eco == null || compactar(it) != eco }
-            .filter { !it.startsWith("SEARCHING") && !it.startsWith("BUS INIT: OK") }
 
         if (linhas.any { regexLinhaMultiFrame.containsMatchIn(compactar(it)) }) {
+            if (linhas.any { erroElm(it) != null }) return linhas.filter { erroElm(it) != null }
             val dados = linhas
                 .filter { !regexTamanhoCan.matches(compactar(it)) }
                 .map { regexLinhaMultiFrame.replace(compactar(it), "") }

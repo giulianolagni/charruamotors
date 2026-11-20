@@ -2,12 +2,19 @@ package com.charruamotors.ui.diagnostico.obd
 
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.ArrayAdapter
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.recyclerview.widget.GridLayoutManager
@@ -18,6 +25,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.R
+import com.charruamotors.databinding.DialogRegistroComunicacaoBinding
 import com.charruamotors.databinding.FragmentObdBinding
 import com.charruamotors.domain.calculo.EstadoCronometro
 import com.charruamotors.domain.calculo.MetodoConsumo
@@ -36,6 +44,7 @@ import com.charruamotors.ui.util.PermissoesBluetooth
 import com.charruamotors.ui.util.comoDecimal
 import com.charruamotors.ui.util.comoMilhar
 import com.charruamotors.ui.util.comoNumero
+import com.charruamotors.ui.util.definirTexto
 import com.charruamotors.ui.util.rotulo
 import com.charruamotors.ui.componentes.PontoTelemetria
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -61,14 +70,19 @@ class ObdFragment : Fragment() {
     /** Ação que aguarda a concessão das permissões / ligar o Bluetooth. */
     private var acaoPendente: (() -> Unit)? = null
 
+    /** A aba está em primeiro plano (entre onResume e onPause)? */
+    private var emPrimeiroPlano = false
+
     private val pedirPermissoes =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { resultado ->
             if (PermissoesBluetooth.concedidas(requireContext())) {
                 garantirBluetooth(acaoPendente)
-            } else {
-                acaoPendente = null
-                mostrarMensagem(getString(R.string.obd_permissao_negada))
+                return@registerForActivityResult
             }
+            acaoPendente = null
+            // Negada duas vezes (ou "não perguntar de novo"): o Android nem mostra mais o pedido.
+            val bloqueada = resultado.filterValues { !it }.keys.any { !shouldShowRequestPermissionRationale(it) }
+            if (bloqueada) oferecerConfiguracoes() else mostrarMensagem(getString(R.string.obd_permissao_negada))
         }
 
     private val pedirLigarBluetooth =
@@ -124,6 +138,7 @@ class ObdFragment : Fragment() {
         botaoZerarViagem.setOnClickListener { viewModel.zerarViagem() }
         botaoLerCodigos.setOnClickListener { viewModel.lerCodigos() }
         botaoLimparCodigos.setOnClickListener { confirmarLimpezaCodigos() }
+        botaoRegistroComunicacao.setOnClickListener { mostrarRegistroComunicacao() }
     }
 
     /**
@@ -146,9 +161,76 @@ class ObdFragment : Fragment() {
             }
             !PermissoesBluetooth.ligado(contexto) -> {
                 acaoPendente = acao
-                pedirLigarBluetooth.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                try {
+                    pedirLigarBluetooth.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                } catch (e: ActivityNotFoundException) {
+                    acaoPendente = null
+                    mostrarMensagem(getString(R.string.obd_bluetooth_desligado))
+                } catch (e: SecurityException) {
+                    acaoPendente = null
+                    mostrarMensagem(getString(R.string.obd_permissao_negada))
+                }
             }
             else -> acao()
+        }
+    }
+
+    /** Permissão bloqueada: só dá para liberar pela tela de configurações do app. */
+    private fun oferecerConfiguracoes() {
+        Snackbar.make(requireView(), getString(R.string.obd_permissao_bloqueada), Snackbar.LENGTH_LONG)
+            .setAction(R.string.obd_permissao_configuracoes) {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    .setData(Uri.fromParts("package", requireContext().packageName, null))
+                runCatching { startActivity(intent) }
+            }
+            .show()
+    }
+
+    /**
+     * Log de campo: as últimas trocas com o ELM327 (inicialização, `ATDP`, `ATRV`, `0100`, perfil
+     * de montadora e erros do polling), com opção de copiar ou compartilhar.
+     */
+    private fun mostrarRegistroComunicacao() {
+        val texto = viewModel.textoRegistroComunicacao()
+        if (texto == null) {
+            mostrarMensagem(getString(R.string.obd_registro_vazio))
+            return
+        }
+        val conteudo = DialogRegistroComunicacaoBinding.inflate(layoutInflater)
+        conteudo.textoRegistro.text = texto
+        // Abre no fim: o que interessa costuma ser a última falha.
+        conteudo.root.post { conteudo.root.fullScroll(View.FOCUS_DOWN) }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.obd_registro_titulo)
+            .setView(conteudo.root)
+            .setNegativeButton(R.string.obd_registro_compartilhar) { _, _ ->
+                val envio = Intent(Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(Intent.EXTRA_SUBJECT, getString(R.string.obd_registro_rotulo))
+                    .putExtra(Intent.EXTRA_TEXT, texto)
+                runCatching { startActivity(Intent.createChooser(envio, getString(R.string.obd_registro_rotulo))) }
+            }
+            .setPositiveButton(R.string.obd_registro_copiar) { _, _ ->
+                val area = requireContext().getSystemService(ClipboardManager::class.java)
+                area?.setPrimaryClip(ClipData.newPlainText(getString(R.string.obd_registro_rotulo), texto))
+                // Android 13+ já mostra a confirmação do sistema ao copiar.
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) mostrarMensagem(getString(R.string.obd_registro_copiado))
+            }
+            .setNeutralButton(R.string.botao_fechar, null)
+            .show()
+    }
+
+    /**
+     * Mantém a tela acesa enquanto o scanner está conectado (ou gravando o log), só com esta aba
+     * em primeiro plano. A flag é da janela: sai em [onPause] (troca de aba, app em segundo plano)
+     * e ao desconectar, então a tela volta a apagar normalmente.
+     */
+    private fun aplicarTelaAcesa() {
+        val janela = activity?.window ?: return
+        if (emPrimeiroPlano && viewModel.manterTelaAcesa.value) {
+            janela.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            janela.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 
@@ -178,6 +260,7 @@ class ObdFragment : Fragment() {
                 launch { viewModel.cronometro.collect { mostrarCronometro(it) } }
                 launch { viewModel.grafico.collect { mostrarGrafico(it) } }
                 launch { viewModel.ocupado.collect { atualizarBotoes() } }
+                launch { viewModel.manterTelaAcesa.collect { aplicarTelaAcesa() } }
                 launch { viewModel.historicoLeituras.collect { mostrarHistorico(it) } }
                 launch {
                     viewModel.simularFalha.collect { ativa ->
@@ -210,12 +293,12 @@ class ObdFragment : Fragment() {
 
     private fun mostrarEstado(estado: EstadoConexaoObd) {
         mostrarInfoEcu(viewModel.infoEcu.value)
-        binding.textoEstado.text = when (estado) {
+        binding.textoEstado.definirTexto(when (estado) {
             EstadoConexaoObd.Desconectado -> getString(R.string.obd_estado_desconectado)
             EstadoConexaoObd.Conectando -> getString(R.string.obd_estado_conectando)
             EstadoConexaoObd.Conectado -> getString(R.string.obd_estado_conectado)
             is EstadoConexaoObd.Erro -> getString(R.string.obd_estado_erro, estado.mensagem)
-        }
+        })
         atualizarBotoes()
     }
 
@@ -226,7 +309,10 @@ class ObdFragment : Fragment() {
         val ocupado = viewModel.ocupado.value
 
         botaoConectar.isEnabled = livre
-        botaoDesconectar.isEnabled = conectado
+        // Conectando: o mesmo botão cancela (a conexão RFCOMM com um scanner fora de alcance leva ~10 s).
+        val conectando = estado is EstadoConexaoObd.Conectando
+        botaoDesconectar.isEnabled = conectado || conectando
+        botaoDesconectar.definirTexto(getString(if (conectando) R.string.obd_cancelar_conexao else R.string.obd_desconectar))
         // Modo, dispositivo e atualização da lista só mudam com o scanner desconectado.
         botaoModoSimulado.isEnabled = livre
         botaoModoBluetooth.isEnabled = livre
@@ -270,29 +356,33 @@ class ObdFragment : Fragment() {
     }
 
     private fun mostrarSensores(sensores: List<LeituraSensor>) = with(binding) {
+        // A cada ciclo só os valores mudam: com tamanho fixo, a grade rebinda as células sem pedir
+        // um novo layout ao ScrollView (que remediria a aba inteira 4 vezes por segundo). Quando
+        // entram ou saem PIDs (conexão, perfil de montadora), a grade precisa crescer de verdade.
+        listaSensores.setHasFixedSize(sensores.size == adapterSensores.itemCount)
         adapterSensores.submitList(sensores)
         textoSensoresVazio.isVisible = sensores.isEmpty()
-        tituloSensores.text = if (sensores.isEmpty()) {
+        tituloSensores.definirTexto(if (sensores.isEmpty()) {
             getString(R.string.obd_sensores_titulo)
         } else {
             getString(R.string.obd_sensores_titulo_qtd, sensores.size)
-        }
+        })
     }
 
     private fun mostrarInfoEcu(info: InfoEcu) = with(binding) {
         val conectado = viewModel.estado.value is EstadoConexaoObd.Conectado
-        textoVin.text = when {
+        textoVin.definirTexto(when {
             !conectado -> getString(R.string.obd_ecu_desconectado)
             !info.vinLido -> getString(R.string.obd_ecu_vin_lendo)
             else -> info.vin ?: getString(R.string.obd_ecu_vin_indisponivel)
-        }
-        textoPidsSuportados.text = if (conectado) {
+        })
+        textoPidsSuportados.definirTexto(if (conectado) {
             getString(R.string.obd_ecu_pids_qtd, info.quantidadePids, viewModel.totalPidsCatalogo)
         } else {
             getString(R.string.valor_indisponivel)
-        }
+        })
         val perfil = info.perfil
-        textoPerfilFabricante.text = when {
+        textoPerfilFabricante.definirTexto(when {
             !conectado -> getString(R.string.valor_indisponivel)
             perfil == null -> getString(R.string.obd_perfil_verificando)
             perfil is ResultadoPerfil.SemPerfil -> getString(R.string.obd_perfil_sem)
@@ -300,7 +390,7 @@ class ObdFragment : Fragment() {
             perfil is ResultadoPerfil.Ativo ->
                 resources.getQuantityString(R.plurals.obd_perfil_ativo, perfil.pids.size, perfil.fabricante, perfil.pids.size)
             else -> ""
-        }
+        })
         val observacao = (perfil as? ResultadoPerfil.Ativo)?.observacao?.takeIf { conectado && it.isNotBlank() }
         textoPerfilObservacao.isVisible = observacao != null
         textoPerfilObservacao.text = observacao
@@ -310,59 +400,59 @@ class ObdFragment : Fragment() {
     private fun mostrarComputador(ui: ComputadorBordoUi) = with(binding) {
         val vazio = getString(R.string.valor_indisponivel)
         val consumo = ui.consumo
-        textoConsumoKmL.text = when {
+        textoConsumoKmL.definirTexto(when {
             consumo == null -> vazio
             consumo.kmPorLitro == null -> getString(R.string.obd_bordo_parado)
             else -> getString(R.string.obd_bordo_km_l, consumo.kmPorLitro.coerceAtMost(MAX_KM_L_EXIBIDO).comoNumero(1))
-        }
-        textoConsumoLH.text = consumo?.let { getString(R.string.obd_bordo_l_h, it.litrosPorHora.comoNumero(1)) } ?: vazio
+        })
+        textoConsumoLH.definirTexto(consumo?.let { getString(R.string.obd_bordo_l_h, it.litrosPorHora.comoNumero(1)) } ?: vazio)
         textoMetodoConsumo.isVisible = consumo != null
-        textoMetodoConsumo.text = when (consumo?.metodo) {
+        textoMetodoConsumo.definirTexto(when (consumo?.metodo) {
             MetodoConsumo.MAF -> getString(R.string.obd_bordo_metodo_maf)
             MetodoConsumo.SPEED_DENSITY -> getString(R.string.obd_bordo_metodo_sd)
             MetodoConsumo.SENSOR_ECU -> getString(R.string.obd_bordo_metodo_ecu)
             null -> ""
-        }
-        textoMediaViagem.text = ui.viagem.mediaKmPorLitro?.let { getString(R.string.obd_bordo_km_l, it.comoNumero(1)) } ?: vazio
-        textoTotaisViagem.text = getString(
+        })
+        textoMediaViagem.definirTexto(ui.viagem.mediaKmPorLitro?.let { getString(R.string.obd_bordo_km_l, it.comoNumero(1)) } ?: vazio)
+        textoTotaisViagem.definirTexto(getString(
             R.string.obd_bordo_totais, ui.viagem.distanciaKm.comoNumero(1), ui.viagem.litros.comoNumero(2),
-        )
+        ))
 
         val conectado = viewModel.estado.value is EstadoConexaoObd.Conectado
         val etanol = viewModel.dados.value?.get(Pids.PERCENTUAL_ETANOL)
         val combustivel = ui.motor.tipoCombustivel.rotulo(requireContext())
         val cilindrada = ui.motor.cilindradaLitros.comoNumero(1)
-        textoParametrosMotor.text = when {
+        textoParametrosMotor.definirTexto(when {
             conectado && consumo == null && ui.motor.tipoCombustivel == TipoCombustivel.DIESEL ->
                 getString(R.string.obd_bordo_diesel_sem_ecu)
             conectado && consumo == null -> getString(R.string.obd_bordo_sem_dados)
             ui.motor.tipoCombustivel == TipoCombustivel.FLEX && etanol != null ->
                 getString(R.string.obd_bordo_motor_etanol, cilindrada, combustivel, etanol.comoNumero(0))
             else -> getString(R.string.obd_bordo_motor, cilindrada, combustivel)
-        }
+        })
         botaoZerarViagem.isEnabled = ui.viagem.segundos > 0
     }
 
     /** Cronômetro 0–100: tempo (ao vivo ou final), instrução do estado e melhor tempo. */
     private fun mostrarCronometro(ui: CronometroUi) = with(binding) {
         val estado = ui.estado
-        textoCronometroTempo.text = getString(
+        textoCronometroTempo.definirTexto(getString(
             R.string.obd_cronometro_tempo,
             when (estado) {
                 is EstadoCronometro.Medindo -> segundos(estado.decorridoMs, 1)
                 is EstadoCronometro.Concluido -> segundos(estado.tempoMs, 2)
                 else -> segundos(0, 2)
             },
-        )
-        textoCronometroStatus.text = when (estado) {
+        ))
+        textoCronometroStatus.definirTexto(when (estado) {
             EstadoCronometro.Desarmado -> getString(R.string.obd_cronometro_desarmado)
             EstadoCronometro.AguardandoParada -> getString(R.string.obd_cronometro_aguardando)
             EstadoCronometro.Pronto -> getString(R.string.obd_cronometro_pronto)
             is EstadoCronometro.Medindo -> getString(R.string.obd_cronometro_medindo, estado.velocidade.toInt())
             is EstadoCronometro.Concluido -> getString(R.string.obd_cronometro_concluido)
-        }
+        })
         textoCronometroMelhor.isVisible = ui.melhorTempoMs != null
-        textoCronometroMelhor.text = ui.melhorTempoMs?.let { getString(R.string.obd_cronometro_melhor, segundos(it, 2)) }
+        textoCronometroMelhor.definirTexto(ui.melhorTempoMs?.let { getString(R.string.obd_cronometro_melhor, segundos(it, 2)) })
         botaoArmarCronometro.setText(
             when {
                 estado.armado -> R.string.obd_cronometro_cancelar
@@ -381,11 +471,11 @@ class ObdFragment : Fragment() {
 
     private fun mostrarEstadoLog(log: EstadoLog) = with(binding) {
         botaoGravarLog.isChecked = log.gravando
-        botaoGravarLog.text = if (log.gravando) {
+        botaoGravarLog.definirTexto(if (log.gravando) {
             getString(R.string.obd_log_gravando, log.amostras)
         } else {
             getString(R.string.obd_log_gravar)
-        }
+        })
         atualizarBotoes()
     }
 
@@ -454,10 +544,14 @@ class ObdFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        emPrimeiroPlano = true
+        aplicarTelaAcesa()
         viewModel.retomarPolling()
     }
 
     override fun onPause() {
+        emPrimeiroPlano = false
+        aplicarTelaAcesa()
         viewModel.pausarPolling()
         super.onPause()
     }

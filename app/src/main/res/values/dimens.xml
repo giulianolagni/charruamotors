@@ -8,5 +8,6 @@
     <dimen name="raio_card">12dp</dimen>
     <dimen name="tamanho_logo">96dp</dimen>
     <dimen name="altura_item_sensor">96dp</dimen>
+    <dimen name="altura_valor_sensor">36dp</dimen>
     <dimen name="altura_grafico">200dp</dimen>
 </resources>

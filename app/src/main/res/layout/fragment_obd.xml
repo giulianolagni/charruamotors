@@ -315,14 +315,14 @@
 
                         <TextView
                             android:id="@+id/texto_consumo_km_l"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:textAppearance="?attr/textAppearanceHeadlineSmall"
                             tools:text="12,4 km/L" />
 
                         <TextView
                             android:id="@+id/texto_consumo_l_h"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:textAppearance="?attr/textAppearanceBodyMedium"
                             tools:text="4,8 L/h" />
@@ -343,14 +343,14 @@
 
                         <TextView
                             android:id="@+id/texto_media_viagem"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:textAppearance="?attr/textAppearanceHeadlineSmall"
                             tools:text="11,8 km/L" />
 
                         <TextView
                             android:id="@+id/texto_totais_viagem"
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:textAppearance="?attr/textAppearanceBodyMedium"
                             tools:text="3,2 km · 0,27 L" />
@@ -399,9 +399,9 @@
 
                 <TextView
                     android:id="@+id/texto_cronometro_tempo"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="center_horizontal"
+                    android:gravity="center_horizontal"
                     android:layout_marginTop="@dimen/espaco_pequeno"
                     android:fontFeatureSettings="tnum"
                     android:textAppearance="?attr/textAppearanceDisplaySmall"
@@ -584,6 +584,16 @@
                     android:visibility="gone"
                     tools:text="DIDs de referência; confirme com ODIS/VCDS."
                     tools:visibility="visible" />
+
+                <!-- Diagnóstico de campo: respostas brutas do ELM327 (ATZ, ATDP, ATRV, 0100, erros) -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_registro_comunicacao"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:text="@string/obd_registro_botao" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

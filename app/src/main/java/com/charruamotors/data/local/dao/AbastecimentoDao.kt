@@ -26,6 +26,10 @@ interface AbastecimentoDao {
     @Query("SELECT * FROM abastecimentos WHERE veiculoId = :veiculoId ORDER BY km")
     suspend fun listarPorVeiculo(veiculoId: Long): List<Abastecimento>
 
+    /** Maior km já registrada em abastecimentos do veículo; null se não houver nenhum. */
+    @Query("SELECT MAX(km) FROM abastecimentos WHERE veiculoId = :veiculoId")
+    suspend fun maiorKm(veiculoId: Long): Int?
+
     @Query("SELECT * FROM abastecimentos WHERE id = :id")
     suspend fun buscarPorId(id: Long): Abastecimento?
 }

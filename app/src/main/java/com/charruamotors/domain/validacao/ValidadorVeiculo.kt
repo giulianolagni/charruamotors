@@ -29,8 +29,15 @@ object ValidadorVeiculo {
     /**
      * Retorna os erros encontrados por campo; um mapa vazio significa formulário válido.
      * A unicidade da placa depende do banco e é verificada no ViewModel.
+     *
+     * @param kmMinimo maior km já registrada em manutenções/abastecimentos do veículo; a km do
+     * veículo não pode ser reduzida abaixo do histórico existente (0 = sem histórico).
      */
-    fun validar(formulario: FormularioVeiculo, anoAtual: Int): Map<CampoVeiculo, ErroValidacao> {
+    fun validar(
+        formulario: FormularioVeiculo,
+        anoAtual: Int,
+        kmMinimo: Int = 0,
+    ): Map<CampoVeiculo, ErroValidacao> {
         val erros = mutableMapOf<CampoVeiculo, ErroValidacao>()
 
         if (formulario.marca.isBlank()) erros[CampoVeiculo.MARCA] = ErroValidacao.OBRIGATORIO
@@ -51,6 +58,7 @@ object ValidadorVeiculo {
         when {
             formulario.km.isBlank() -> erros[CampoVeiculo.KM] = ErroValidacao.OBRIGATORIO
             km == null || km < 0 -> erros[CampoVeiculo.KM] = ErroValidacao.NUMERO_INVALIDO
+            km < kmMinimo -> erros[CampoVeiculo.KM] = ErroValidacao.KM_MENOR_QUE_ULTIMO
         }
 
         // Capacidade do tanque é opcional, mas, se informada, deve ser maior que zero.

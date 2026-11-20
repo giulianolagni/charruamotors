@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.charruamotors.CharruaMotorsApp
+import com.charruamotors.data.repository.AbastecimentoRepository
+import com.charruamotors.data.repository.ManutencaoRepository
 import com.charruamotors.data.repository.VeiculoRepository
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.Veiculo
@@ -36,6 +38,8 @@ sealed interface EventoFormVeiculo {
  */
 class VeiculoFormViewModel(
     private val repository: VeiculoRepository,
+    private val manutencaoRepository: ManutencaoRepository,
+    private val abastecimentoRepository: AbastecimentoRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -68,7 +72,9 @@ class VeiculoFormViewModel(
         viewModelScope.launch {
             _salvando.value = true
             try {
-                val erros = ValidadorVeiculo.validar(formulario, Year.now().value).toMutableMap()
+                // Editando: a km não pode ficar abaixo do que o histórico do veículo já registrou.
+                val kmMinimo = veiculoId?.let { kmMinimoDoHistorico(it) } ?: 0
+                val erros = ValidadorVeiculo.validar(formulario, Year.now().value, kmMinimo).toMutableMap()
                 val placa = ValidadorVeiculo.normalizarPlaca(formulario.placa)
                 if (CampoVeiculo.PLACA !in erros && repository.placaEmUso(placa, veiculoId ?: 0)) {
                     erros[CampoVeiculo.PLACA] = ErroValidacao.PLACA_DUPLICADA
@@ -95,6 +101,9 @@ class VeiculoFormViewModel(
         }
     }
 
+    private suspend fun kmMinimoDoHistorico(id: Long): Int =
+        maxOf(manutencaoRepository.maiorKmRegistrada(id), abastecimentoRepository.maiorKmRegistrada(id))
+
     /** Delete */
     fun excluir() {
         viewModelScope.launch {
@@ -112,7 +121,12 @@ class VeiculoFormViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as CharruaMotorsApp
-                VeiculoFormViewModel(app.veiculoRepository, createSavedStateHandle())
+                VeiculoFormViewModel(
+                    app.veiculoRepository,
+                    app.manutencaoRepository,
+                    app.abastecimentoRepository,
+                    createSavedStateHandle(),
+                )
             }
         }
     }

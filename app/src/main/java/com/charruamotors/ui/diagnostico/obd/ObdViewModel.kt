@@ -19,13 +19,20 @@ import com.charruamotors.obd.DtcLido
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
 import com.charruamotors.obd.ObdClientFake
+import com.charruamotors.obd.dtc.CatalogoDtc
+import com.charruamotors.obd.dtc.TipoDtc
+import com.charruamotors.obd.log.DataLogger
+import com.charruamotors.obd.log.GeradorCsv
+import com.charruamotors.obd.log.SessaoLog
+import com.charruamotors.obd.pid.CatalogoPids
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
+import com.charruamotors.ui.util.ArquivoExportado
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,25 +40,34 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.IOException
+import java.io.Writer
 
 /** Eventos de uso único para a UI (mensagens em Snackbar). */
 sealed interface EventoObd {
     data class Mensagem(@param:StringRes val resId: Int) : EventoObd
     data class Texto(val texto: String) : EventoObd
+
+    /** Log CSV salvo: a UI oferece a opção de compartilhar. */
+    data class LogSalvo(val arquivo: ArquivoExportado) : EventoObd
 }
 
 /**
  * ViewModel da aba OBD2. Preserva a conexão e as leituras em mudanças de configuração
- * (o `ObdClient` vive no Application; o ViewModel só o usa) e controla o polling de PIDs.
+ * (o `ObdClient` vive no Application; o ViewModel só o usa) e controla o polling de PIDs,
+ * o Data Logger e a leitura completa de falhas (modos 03, 07, 0A e 02).
  *
  * @param clientePorModo devolve o [ObdClient] do modo pedido (simulado ou Bluetooth real)
  * @param aoSelecionarModo avisa o Application qual modo está ativo
+ * @param marcaVeiculo marca do veículo, para escolher a tabela de DTCs do fabricante
+ * @param salvarCsv grava um arquivo (nome + escrita em streaming) e devolve onde ficou
  */
 @OptIn(ExperimentalCoroutinesApi::class) // flatMapLatest
 class ObdViewModel(
@@ -60,6 +76,11 @@ class ObdViewModel(
     private val aoSelecionarModo: (ModoObd) -> Unit,
     modoInicial: ModoObd,
     private val repository: DiagnosticoRepository,
+    private val catalogoPids: CatalogoPids,
+    private val catalogoDtc: CatalogoDtc,
+    private val marcaVeiculo: suspend () -> String?,
+    private val salvarCsv: suspend (String, (Writer) -> Unit) -> ArquivoExportado,
+    private val relogio: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
 
     private val _modo = MutableStateFlow(modoInicial)
@@ -71,6 +92,11 @@ class ObdViewModel(
     val estado: StateFlow<EstadoConexaoObd> = _modo
         .flatMapLatest { clientePorModo(it).estado }
         .stateIn(viewModelScope, SharingStarted.Eagerly, clientePorModo(modoInicial).estado.value)
+
+    /** Comandos do catálogo que a ECU conectada suporta (bitmasks 0100/0120/0140). */
+    val pidsSuportados: StateFlow<Set<String>> = _modo
+        .flatMapLatest { clientePorModo(it).pidsSuportados }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, clientePorModo(modoInicial).pidsSuportados.value)
 
     /** Últimas leituras salvas no histórico do veículo (a lista completa pode ser grande). */
     val historicoLeituras: StateFlow<List<LeituraObd>> = repository.observarLeituras(veiculoId)
@@ -96,19 +122,43 @@ class ObdViewModel(
     private val _dados = MutableStateFlow<DadosObd?>(null)
     val dados: StateFlow<DadosObd?> = _dados.asStateFlow()
 
-    /** Códigos de falha lidos da ECU; null = ainda não lidos nesta sessão. */
-    private val _codigos = MutableStateFlow<List<DtcLido>?>(null)
-    val codigos: StateFlow<List<DtcLido>?> = _codigos.asStateFlow()
+    /** Todos os PIDs suportados com o valor do último ciclo, na ordem do catálogo (grade ao vivo). */
+    val sensores: StateFlow<List<LeituraSensor>> = combine(pidsSuportados, _dados) { suportados, dados ->
+        catalogoPids.pids.filter { it.comando in suportados }.map { LeituraSensor(it, dados?.get(it.comando)) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Tamanho do catálogo, para "N de M PIDs suportados". */
+    val totalPidsCatalogo: Int get() = catalogoPids.pids.size
+
+    private val _vin = MutableStateFlow<String?>(null)
+    private val _vinLido = MutableStateFlow(false)
+
+    /** VIN (modo 09) e quantidade de PIDs detectados. */
+    val infoEcu: StateFlow<InfoEcu> = combine(_vin, _vinLido, pidsSuportados) { vin, lido, pids ->
+        InfoEcu(vin, lido, pids.size)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InfoEcu())
+
+    /** Falhas lidas por categoria + Freeze Frame; null = ainda não lidas nesta conexão. */
+    private val _diagnostico = MutableStateFlow<ResultadoDiagnostico?>(null)
+    val diagnostico: StateFlow<ResultadoDiagnostico?> = _diagnostico.asStateFlow()
 
     private val _ocupado = MutableStateFlow(false)
     /** true enquanto lê/limpa DTCs (desabilita os botões). */
     val ocupado: StateFlow<Boolean> = _ocupado.asStateFlow()
+
+    private val logger = DataLogger()
+    private val _estadoLog = MutableStateFlow(EstadoLog())
+    val estadoLog: StateFlow<EstadoLog> = _estadoLog.asStateFlow()
 
     private val _eventos = Channel<EventoObd>(Channel.BUFFERED)
     val eventos: Flow<EventoObd> = _eventos.receiveAsFlow()
 
     private var pollingJob: Job? = null
     private var conexaoJob: Job? = null
+    private var vinJob: Job? = null
+
+    /** Marca do veículo (carregada uma vez) para a tabela de DTCs do fabricante. */
+    private var marca: String? = null
 
     /** A tela está visível (entre onStart/onResume e onPause/onStop do Fragment)? */
     private var telaVisivel = false
@@ -118,14 +168,24 @@ class ObdViewModel(
         viewModelScope.launch {
             // drop(1): ignora o valor inicial, para não repetir um erro antigo ao reabrir a tela.
             estado.drop(1).collect { novo ->
-                if (novo !is EstadoConexaoObd.Conectado) {
+                if (novo is EstadoConexaoObd.Conectado) {
+                    lerVin()
+                } else {
                     _dados.value = null
-                    _codigos.value = null
+                    _diagnostico.value = null
+                    vinJob?.cancel()
+                    _vin.value = null
+                    _vinLido.value = false
+                    // Conexão caiu durante a gravação: salva o que já foi coletado.
+                    if (logger.gravando) pararLog()
                 }
                 if (novo is EstadoConexaoObd.Erro) _eventos.send(EventoObd.Texto(novo.mensagem))
                 atualizarPolling()
             }
         }
+        // Já conectado (ex.: rotação de tela / reabertura com o cliente vivo no Application).
+        if (estado.value is EstadoConexaoObd.Conectado) lerVin()
+        viewModelScope.launch { marca = runCatching { marcaVeiculo() }.getOrNull() }
         carregarDispositivos()
     }
 
@@ -187,6 +247,16 @@ class ObdViewModel(
         }
     }
 
+    /** VIN uma vez por conexão (modo 09); veículos antigos podem não suportar. */
+    private fun lerVin() {
+        if (vinJob?.isActive == true) return
+        _vinLido.value = false
+        vinJob = viewModelScope.launch {
+            _vin.value = cliente.lerVin().getOrNull()
+            _vinLido.value = true
+        }
+    }
+
     // ------------------------------------------------------------------ polling (ciclo de vida)
 
     /** Chamado pelo Fragment quando a tela fica visível (onStart/onResume). */
@@ -210,11 +280,68 @@ class ObdViewModel(
         }
         if (pollingJob?.isActive == true) return
         pollingJob = viewModelScope.launch {
-            cliente.lerDadosEmTempoReal()
+            // comandos = null: todos os PIDs suportados (grade completa e Data Logger).
+            cliente.lerDadosEmTempoReal(comandos = null)
                 .catch { _eventos.send(EventoObd.Texto(it.message ?: "")) }
-                .collect { _dados.value = it }
+                .collect { dados ->
+                    _dados.value = dados
+                    registrarNoLog(dados)
+                }
         }
     }
+
+    // ------------------------------------------------------------------ Data Logger CSV
+
+    /** Botão "Gravar Log CSV": inicia a gravação ou para e salva o arquivo. */
+    fun alternarLog() {
+        if (logger.gravando) pararLog() else iniciarLog()
+    }
+
+    private fun iniciarLog() {
+        if (estado.value !is EstadoConexaoObd.Conectado) {
+            _eventos.trySend(EventoObd.Mensagem(R.string.obd_log_sem_conexao))
+            return
+        }
+        val suportados = pidsSuportados.value
+        val colunas = catalogoPids.pids.filter { it.comando in suportados }
+        if (colunas.isEmpty()) {
+            _eventos.trySend(EventoObd.Mensagem(R.string.obd_log_sem_pids))
+            return
+        }
+        logger.iniciar(colunas, relogio())
+        _estadoLog.value = EstadoLog(gravando = true, amostras = 0)
+        _eventos.trySend(EventoObd.Mensagem(R.string.obd_log_iniciado))
+    }
+
+    private fun registrarNoLog(dados: DadosObd) {
+        if (!logger.gravando) return
+        if (logger.registrar(dados, relogio())) {
+            _estadoLog.value = EstadoLog(gravando = true, amostras = logger.quantidade)
+        }
+        if (logger.cheio) {
+            _eventos.trySend(EventoObd.Mensagem(R.string.obd_log_limite))
+            pararLog()
+        }
+    }
+
+    private fun pararLog() {
+        val sessao = logger.parar() ?: return
+        _estadoLog.value = EstadoLog()
+        if (sessao.vazia) {
+            _eventos.trySend(EventoObd.Mensagem(R.string.obd_log_vazio))
+            return
+        }
+        viewModelScope.launch {
+            try {
+                _eventos.send(EventoObd.LogSalvo(exportar(sessao)))
+            } catch (e: IOException) {
+                _eventos.send(EventoObd.Texto(e.message ?: "Falha ao salvar o log"))
+            }
+        }
+    }
+
+    private suspend fun exportar(sessao: SessaoLog): ArquivoExportado =
+        salvarCsv(GeradorCsv.nomeArquivo(sessao.inicioMs)) { saida -> GeradorCsv.escrever(sessao, saida) }
 
     // ------------------------------------------------------------------ histórico e DTCs
 
@@ -232,33 +359,57 @@ class ObdViewModel(
     }
 
     /**
-     * Lê os códigos de falha (modo 03). O resultado vira o conjunto de códigos ativos do veículo:
-     * os ativos anteriores são marcados como limpos e os lidos agora são gravados no histórico.
+     * Diagnóstico completo: confirmados (03), pendentes (07), permanentes (0A) e Freeze Frame (02).
+     * Os confirmados viram o conjunto de códigos ativos do veículo no histórico (os anteriores são
+     * marcados como limpos). Só a falha do modo 03 aborta; os demais modos são opcionais na ECU.
      */
     fun lerCodigos() {
         if (_ocupado.value) return
         viewModelScope.launch {
             _ocupado.value = true
             try {
-                cliente.lerCodigosFalha()
-                    .onSuccess { lidos ->
-                        _codigos.value = lidos
-                        repository.marcarCodigosComoLimpos(veiculoId)
-                        lidos.forEach { repository.salvarCodigo(it.paraCodigoFalha(veiculoId)) }
-                        _eventos.send(
-                            EventoObd.Mensagem(
-                                if (lidos.isEmpty()) R.string.obd_sem_codigos else R.string.obd_codigos_lidos,
-                            ),
-                        )
-                    }
-                    .onFailure { _eventos.send(EventoObd.Texto(it.message ?: "")) }
+                lerDiagnostico(anunciar = true)
             } finally {
                 _ocupado.value = false
             }
         }
     }
 
-    /** Limpa os códigos na ECU (modo 04). A UI deve pedir confirmação antes de chamar. */
+    private suspend fun lerDiagnostico(anunciar: Boolean) {
+        val confirmados = cliente.lerCodigosFalha().getOrElse {
+            _eventos.send(EventoObd.Texto(it.message ?: ""))
+            return
+        }
+        val pendentes = cliente.lerCodigosPendentes().getOrNull()
+        val permanentes = cliente.lerCodigosPermanentes().getOrNull()
+        val freezeFrame = cliente.lerFreezeFrame().getOrNull()
+
+        val exibicaoConfirmados = confirmados.map { exibir(TipoDtc.CONFIRMADO, it) }
+        repository.marcarCodigosComoLimpos(veiculoId)
+        exibicaoConfirmados.forEach { dtc ->
+            repository.salvarCodigo(DtcLido(dtc.codigo, dtc.info.titulo).paraCodigoFalha(veiculoId))
+        }
+        val resultado = ResultadoDiagnostico(
+            confirmados = exibicaoConfirmados,
+            pendentes = pendentes?.map { exibir(TipoDtc.PENDENTE, it) },
+            permanentes = permanentes?.map { exibir(TipoDtc.PERMANENTE, it) },
+            freezeFrame = freezeFrame,
+            infoFreezeFrame = freezeFrame?.dtc?.let { catalogoDtc.descrever(it, marca) },
+        )
+        _diagnostico.value = resultado
+        if (anunciar) {
+            _eventos.send(
+                EventoObd.Mensagem(if (resultado.total == 0) R.string.obd_sem_codigos else R.string.obd_codigos_lidos),
+            )
+        }
+    }
+
+    private fun exibir(tipo: TipoDtc, dtc: DtcLido) = DtcExibicao(tipo, catalogoDtc.descrever(dtc.codigo, marca))
+
+    /**
+     * Limpa os códigos na ECU (modo 04) e relê tudo: pendentes e Freeze Frame somem, mas os
+     * permanentes continuam até a própria ECU validar o reparo. A UI deve pedir confirmação antes.
+     */
     fun limparCodigos() {
         if (_ocupado.value) return
         viewModelScope.launch {
@@ -266,9 +417,9 @@ class ObdViewModel(
             try {
                 cliente.limparCodigosFalha()
                     .onSuccess {
-                        _codigos.value = emptyList()
                         repository.marcarCodigosComoLimpos(veiculoId)
                         _eventos.send(EventoObd.Mensagem(R.string.obd_codigos_limpos))
+                        lerDiagnostico(anunciar = false)
                     }
                     .onFailure { _eventos.send(EventoObd.Texto(it.message ?: "")) }
             } finally {
@@ -280,12 +431,17 @@ class ObdViewModel(
     // ------------------------------------------------------------------ ciclo de vida do ViewModel
 
     /**
-     * ViewModel destruído de vez (a Activity terminou, não foi só uma rotação): fecha o socket
-     * Bluetooth. O `viewModelScope` já está cancelado aqui, então usa um escopo próprio.
+     * ViewModel destruído de vez (a Activity terminou, não foi só uma rotação): salva um log em
+     * andamento e fecha o socket Bluetooth. O `viewModelScope` já está cancelado aqui, então usa
+     * um escopo próprio.
      */
     override fun onCleared() {
         val clienteAtual = cliente
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { clienteAtual.desconectar() }
+        val sessao = logger.parar()?.takeUnless { it.vazia }
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            sessao?.let { runCatching { exportar(it) } }
+            clienteAtual.desconectar()
+        }
         super.onCleared()
     }
 
@@ -296,12 +452,17 @@ class ObdViewModel(
             initializer {
                 val app = this[APPLICATION_KEY] as CharruaMotorsApp
                 val handle: SavedStateHandle = createSavedStateHandle()
+                val veiculoId = handle.get<Long>(DiagnosticoActivity.EXTRA_VEICULO_ID) ?: 0L
                 ObdViewModel(
-                    veiculoId = handle.get<Long>(DiagnosticoActivity.EXTRA_VEICULO_ID) ?: 0L,
+                    veiculoId = veiculoId,
                     clientePorModo = app::obdClientDe,
                     aoSelecionarModo = app::selecionarModoObd,
                     modoInicial = app.modoObd,
                     repository = app.diagnosticoRepository,
+                    catalogoPids = app.catalogoPids,
+                    catalogoDtc = app.catalogoDtc,
+                    marcaVeiculo = { app.veiculoRepository.buscarPorId(veiculoId)?.marca },
+                    salvarCsv = { nome, escrever -> app.exportadorCsv.salvar(nome, escrever) },
                 )
             }
         }

@@ -113,13 +113,62 @@
     <string name="obd_codigos_falha">Códigos de falha</string>
     <string name="obd_ler_codigos">Ler códigos</string>
     <string name="obd_limpar_codigos">Limpar códigos</string>
-    <string name="obd_codigos_nao_lidos">Conecte o scanner e toque em “Ler códigos”.</string>
+    <string name="obd_codigos_nao_lidos">Conecte o scanner e toque em “Ler códigos” para ler as falhas confirmadas, pendentes, permanentes e o quadro congelado.</string>
     <string name="obd_sem_codigos">Nenhum código de falha armazenado.</string>
     <string name="obd_codigos_lidos">Códigos de falha lidos e salvos no histórico</string>
     <string name="obd_codigos_limpos">Códigos de falha limpos</string>
     <string name="obd_limpar_titulo">Limpar códigos de falha?</string>
     <string name="obd_limpar_mensagem">Os códigos serão apagados da memória da ECU e a luz de injeção pode voltar a acender se o problema persistir. Anote-os antes de continuar.</string>
     <string name="obd_limpar_confirmar">Limpar</string>
+
+    <!-- Painel de telemetria -->
+    <string name="obd_map">Pressão do coletor / turbo</string>
+    <string name="unidade_rpm">rpm</string>
+    <string name="unidade_kmh">km/h</string>
+    <string name="unidade_kpa">kPa</string>
+    <string name="unidade_celsius">°C</string>
+    <string name="obd_sensores_titulo">Sensores suportados pela ECU</string>
+    <string name="obd_sensores_titulo_qtd">Sensores suportados pela ECU (%1$d)</string>
+    <string name="obd_sensores_vazio">Conecte o scanner para detectar os sensores suportados.</string>
+    <string name="obd_valor_unidade">%1$s %2$s</string>
+
+    <!-- Data Logger CSV -->
+    <string name="obd_log_gravar">Gravar Log CSV</string>
+    <string name="obd_log_gravando">Parar e salvar log (%1$d leituras)</string>
+    <string name="obd_log_iniciado">Gravando log: todas as leituras serão salvas em CSV</string>
+    <string name="obd_log_sem_conexao">Conecte o scanner para gravar o log</string>
+    <string name="obd_log_sem_pids">A ECU não informou sensores suportados</string>
+    <string name="obd_log_vazio">Log encerrado sem leituras; nenhum arquivo salvo</string>
+    <string name="obd_log_limite">Limite de leituras do log atingido; salvando o arquivo</string>
+    <string name="obd_log_salvo">Log salvo em %1$s</string>
+    <string name="obd_log_compartilhar">Compartilhar</string>
+    <string name="obd_log_compartilhar_titulo">Compartilhar log OBD2</string>
+
+    <!-- Diagnóstico avançado -->
+    <string name="obd_diagnostico_titulo">Diagnóstico</string>
+    <string name="obd_ecu_titulo">Informações da ECU</string>
+    <string name="obd_ecu_vin">Número do chassi (VIN)</string>
+    <string name="obd_ecu_pids">PIDs suportados detectados</string>
+    <string name="obd_ecu_vin_lendo">Lendo…</string>
+    <string name="obd_ecu_vin_indisponivel">Não informado pela ECU</string>
+    <string name="obd_ecu_desconectado">Conecte o scanner</string>
+    <string name="obd_ecu_pids_qtd">%1$d de %2$d do catálogo</string>
+    <string name="dtc_tipo_confirmado">Confirmadas (Modo 03)</string>
+    <string name="dtc_tipo_pendente">Pendentes (Modo 07)</string>
+    <string name="dtc_tipo_permanente">Permanentes (Modo 0A)</string>
+    <string name="dtc_badge_confirmado">Confirmada · 03</string>
+    <string name="dtc_badge_pendente">Pendente · 07</string>
+    <string name="dtc_badge_permanente">Permanente · 0A</string>
+    <string name="dtc_categoria_qtd">%1$s · %2$d</string>
+    <string name="dtc_categoria_vazia">Nenhuma falha nesta categoria.</string>
+    <string name="dtc_categoria_nao_suportada">Não suportado por esta ECU.</string>
+    <string name="dtc_fabricante">Código específico: %1$s</string>
+    <string name="dtc_sem_descricao">Código fora do catálogo offline.</string>
+    <string name="obd_ff_titulo">Quadro congelado (Freeze Frame)</string>
+    <string name="obd_ff_subtitulo">Condições do motor no instante em que a falha foi registrada (Modo 02)</string>
+    <string name="obd_ff_vazio">Nenhum quadro congelado armazenado.</string>
+    <string name="obd_ff_nao_suportado">A ECU não informou o quadro congelado.</string>
+    <string name="obd_ff_sem_dtc">Código causador não informado</string>
 
     <!-- Aba Manutenções -->
     <string name="manutencoes_lista_vazia">Nenhuma manutenção registrada.

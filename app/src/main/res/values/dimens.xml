@@ -7,4 +7,5 @@
     <dimen name="espaco_grande">24dp</dimen>
     <dimen name="raio_card">12dp</dimen>
     <dimen name="tamanho_logo">96dp</dimen>
+    <dimen name="altura_item_sensor">96dp</dimen>
 </resources>

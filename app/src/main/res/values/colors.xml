@@ -9,4 +9,9 @@
     <color name="texto_secundario">#5F6368</color>
     <color name="erro">#B3261E</color>
     <color name="branco">#FFFFFF</color>
+
+    <!-- Categorias de DTC (badges da aba OBD2) -->
+    <color name="dtc_confirmado">#B3261E</color>
+    <color name="dtc_pendente">#B26A00</color>
+    <color name="dtc_permanente">#6A1B9A</color>
 </resources>

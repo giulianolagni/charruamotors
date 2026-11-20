@@ -8,7 +8,8 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.charruamotors"
+        // ID próprio: instala lado a lado com o app original (com.charruamotors).
+        applicationId = "com.charruamotors.pro"
         minSdk = 26
         targetSdk = 37
         versionCode = 1

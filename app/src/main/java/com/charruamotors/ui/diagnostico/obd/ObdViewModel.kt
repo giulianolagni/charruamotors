@@ -22,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -160,7 +161,10 @@ class ObdViewModel(
 
     fun desconectar() {
         viewModelScope.launch {
-            pollingJob?.cancel()
+            // Espera o polling terminar de fato antes de fechar o socket: senão uma leitura em
+            // andamento falharia com IOException e o estado viraria Erro depois de Desconectado.
+            pollingJob?.cancelAndJoin()
+            pollingJob = null
             cliente.desconectar()
         }
     }

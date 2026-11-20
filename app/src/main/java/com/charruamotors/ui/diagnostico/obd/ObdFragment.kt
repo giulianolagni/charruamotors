@@ -19,6 +19,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.R
 import com.charruamotors.databinding.FragmentObdBinding
 import com.charruamotors.domain.model.EstadoConexaoObd
+import com.charruamotors.domain.model.LeituraObd
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.DispositivoObd
 import com.charruamotors.obd.ModoObd
@@ -39,6 +40,7 @@ class ObdFragment : Fragment() {
 
     private val viewModel: ObdViewModel by viewModels { ObdViewModel.Factory }
     private val adapterCodigos = CodigoFalhaAdapter()
+    private val adapterHistorico = LeituraObdAdapter()
 
     /** Ação que aguarda a concessão das permissões / ligar o Bluetooth. */
     private var acaoPendente: (() -> Unit)? = null
@@ -73,6 +75,7 @@ class ObdFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         binding.listaCodigos.adapter = adapterCodigos
+        binding.listaHistoricoLeituras.adapter = adapterHistorico
         configurarAcoes()
         observarViewModel()
     }
@@ -86,6 +89,7 @@ class ObdFragment : Fragment() {
                 if (modo == ModoObd.BLUETOOTH) garantirBluetooth { viewModel.carregarDispositivos() }
             }
         }
+        switchSimularFalha.setOnCheckedChangeListener { _, marcado -> viewModel.definirSimularFalha(marcado) }
         campoDispositivo.setOnItemClickListener { _, _, posicao, _ ->
             viewModel.dispositivos.value.getOrNull(posicao)?.let(viewModel::selecionarDispositivo)
         }
@@ -145,6 +149,12 @@ class ObdFragment : Fragment() {
                 launch { viewModel.dados.collect { mostrarDados(it) } }
                 launch { viewModel.codigos.collect { mostrarCodigos() } }
                 launch { viewModel.ocupado.collect { atualizarBotoes() } }
+                launch { viewModel.historicoLeituras.collect { mostrarHistorico(it) } }
+                launch {
+                    viewModel.simularFalha.collect { ativa ->
+                        if (binding.switchSimularFalha.isChecked != ativa) binding.switchSimularFalha.isChecked = ativa
+                    }
+                }
                 launch {
                     viewModel.eventos.collect { evento ->
                         mostrarMensagem(
@@ -163,6 +173,8 @@ class ObdFragment : Fragment() {
 
     private fun mostrarModo(modo: ModoObd) = with(binding) {
         grupoModo.check(if (modo == ModoObd.BLUETOOTH) R.id.botao_modo_bluetooth else R.id.botao_modo_simulado)
+        // A opção de simular falha só faz sentido (e só aparece) no modo simulado.
+        switchSimularFalha.isVisible = modo == ModoObd.SIMULADO
         layoutDispositivo.hint = getString(
             if (modo == ModoObd.BLUETOOTH) R.string.obd_dispositivo_pareado else R.string.obd_dispositivo,
         )
@@ -190,6 +202,7 @@ class ObdFragment : Fragment() {
         botaoModoSimulado.isEnabled = livre
         botaoModoBluetooth.isEnabled = livre
         layoutDispositivo.isEnabled = livre
+        switchSimularFalha.isEnabled = livre
         botaoAtualizarDispositivos.isEnabled = livre
         botaoSalvarLeitura.isEnabled = conectado && viewModel.dados.value != null
         botaoLerCodigos.isEnabled = conectado && !ocupado
@@ -222,6 +235,11 @@ class ObdFragment : Fragment() {
         valorCarga.text = dados?.cargaMotor?.let { getString(R.string.obd_valor_carga, it.comoDecimal(1)) } ?: vazio
         valorBateria.text = dados?.tensaoBateria?.let { getString(R.string.obd_valor_bateria, it.comoDecimal(1)) } ?: vazio
         atualizarBotoes()
+    }
+
+    private fun mostrarHistorico(leituras: List<LeituraObd>) {
+        adapterHistorico.submitList(leituras)
+        binding.textoHistoricoVazio.isVisible = leituras.isEmpty()
     }
 
     private fun mostrarCodigos() = with(binding) {

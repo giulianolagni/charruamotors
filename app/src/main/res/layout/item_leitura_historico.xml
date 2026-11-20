@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingVertical="@dimen/espaco_pequeno">
+
+    <TextView
+        android:id="@+id/texto_data_hora"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?attr/textAppearanceLabelLarge"
+        tools:text="19/11/2026 14:30" />
+
+    <TextView
+        android:id="@+id/texto_valores"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/espaco_minimo"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        android:textColor="@color/texto_secundario"
+        tools:text="2.150 rpm • 60 km/h • 90 °C" />
+</LinearLayout>

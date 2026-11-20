@@ -105,6 +105,10 @@
     <string name="obd_valor_temperatura">%1$d °C</string>
     <string name="obd_valor_carga">%1$s %%</string>
     <string name="obd_valor_bateria">%1$s V</string>
+    <string name="obd_simular_falha">Simular falha de conexão (demonstração)</string>
+    <string name="obd_historico_titulo">Leituras salvas</string>
+    <string name="obd_historico_vazio">Nenhuma leitura salva ainda.</string>
+    <string name="obd_historico_valores">%1$s • %2$s • %3$s</string>
     <string name="obd_salvar_leitura">Salvar leitura no histórico</string>
     <string name="obd_codigos_falha">Códigos de falha</string>
     <string name="obd_ler_codigos">Ler códigos</string>

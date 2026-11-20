@@ -120,6 +120,16 @@
                         android:text="@string/obd_desconectar" />
                 </LinearLayout>
 
+                <!-- Diagnóstico de campo: respostas brutas do ELM327 (ATZ, ATDP, ATRV, 0100, ATSH, 21xx).
+                     Junto do estado da conexão e sempre habilitado: é o que se precisa quando ela falha. -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_registro_comunicacao"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:text="@string/obd_registro_botao" />
+
                 <!-- Data Logger: liga/desliga a gravação de todas as leituras em CSV -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/botao_gravar_log"
@@ -585,15 +595,21 @@
                     tools:text="DIDs de referência; confirme com ODIS/VCDS."
                     tools:visibility="visible" />
 
-                <!-- Diagnóstico de campo: respostas brutas do ELM327 (ATZ, ATDP, ATRV, 0100, erros) -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/botao_registro_comunicacao"
-                    style="@style/Widget.Material3.Button.TextButton"
+                <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="end"
                     android:layout_marginTop="@dimen/espaco_pequeno"
-                    android:text="@string/obd_registro_botao" />
+                    android:text="@string/obd_ecu_protocolo"
+                    android:textAppearance="?attr/textAppearanceLabelMedium"
+                    android:textColor="@color/texto_secundario" />
+
+                <TextView
+                    android:id="@+id/texto_protocolo_ecu"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textIsSelectable="true"
+                    tools:text="AUTO, ISO 15765-4 (CAN 11/500)\nToyota M-OBD (modo 21, ATSH 7E0)" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

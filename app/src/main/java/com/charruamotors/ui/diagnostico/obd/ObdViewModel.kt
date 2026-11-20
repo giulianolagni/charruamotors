@@ -21,6 +21,7 @@ import com.charruamotors.domain.model.Veiculo
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.DispositivoObd
 import com.charruamotors.obd.DtcLido
+import com.charruamotors.obd.InfoConexao
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
 import com.charruamotors.obd.ObdClientFake
@@ -68,6 +69,9 @@ sealed interface EventoObd {
 
     /** Log CSV salvo: a UI oferece a opção de compartilhar. */
     data class LogSalvo(val arquivo: ArquivoExportado) : EventoObd
+
+    /** Falha/queda da conexão: a mensagem vem com o atalho para o Log de comunicação. */
+    data class ErroConexao(val texto: String) : EventoObd
 }
 
 /**
@@ -110,6 +114,11 @@ class ObdViewModel(
     val pidsSuportados: StateFlow<Set<String>> = _modo
         .flatMapLatest { clientePorModo(it).pidsSuportados }
         .stateIn(viewModelScope, SharingStarted.Eagerly, clientePorModo(modoInicial).pidsSuportados.value)
+
+    /** Protocolo (ATDP) e modo de comunicação (OBD2 padrão / Toyota M-OBD) da conexão. */
+    private val infoConexao: StateFlow<InfoConexao> = _modo
+        .flatMapLatest { clientePorModo(it).infoConexao }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, clientePorModo(modoInicial).infoConexao.value)
 
     /** Últimas leituras salvas no histórico do veículo (a lista completa pode ser grande). */
     val historicoLeituras: StateFlow<List<LeituraObd>> = repository.observarLeituras(veiculoId)
@@ -173,10 +182,11 @@ class ObdViewModel(
     private val _vin = MutableStateFlow<String?>(null)
     private val _vinLido = MutableStateFlow(false)
 
-    /** VIN (modo 09), quantidade de PIDs padrão detectados e perfil de montadora. */
-    val infoEcu: StateFlow<InfoEcu> = combine(_vin, _vinLido, pidsSuportados, _perfil) { vin, lido, pids, perfil ->
-        InfoEcu(vin, lido, pids.count { it in catalogoPids }, perfil)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InfoEcu())
+    /** VIN (modo 09), quantidade de PIDs padrão detectados, perfil de montadora, protocolo e modo. */
+    val infoEcu: StateFlow<InfoEcu> =
+        combine(_vin, _vinLido, pidsSuportados, _perfil, infoConexao) { vin, lido, pids, perfil, conexao ->
+            InfoEcu(vin, lido, pids.count { it in catalogoPids }, perfil, conexao)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InfoEcu())
 
     /** Falhas lidas por categoria + Freeze Frame; null = ainda não lidas nesta conexão. */
     private val _diagnostico = MutableStateFlow<ResultadoDiagnostico?>(null)
@@ -237,7 +247,7 @@ class ObdViewModel(
                     // Conexão caiu durante a gravação: salva o que já foi coletado.
                     if (logger.gravando) pararLog()
                 }
-                if (novo is EstadoConexaoObd.Erro) _eventos.send(EventoObd.Texto(novo.mensagem))
+                if (novo is EstadoConexaoObd.Erro) _eventos.send(EventoObd.ErroConexao(novo.mensagem))
                 atualizarPolling()
             }
         }
@@ -303,7 +313,8 @@ class ObdViewModel(
                 return@launch
             }
             // Falhas já chegam como EstadoConexaoObd.Erro (tratado no init); aqui só o sucesso.
-            cliente.conectar(dispositivo).onSuccess {
+            // A marca decide o modo alternativo quando a ECU recusa o OBD2 padrão (Toyota M-OBD).
+            cliente.conectar(dispositivo, dadosVeiculo.await()?.marca).onSuccess {
                 _eventos.send(EventoObd.Mensagem(R.string.obd_conectado))
             }
         }

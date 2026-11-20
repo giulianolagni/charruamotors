@@ -34,6 +34,7 @@ import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.model.LeituraObd
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.DispositivoObd
+import com.charruamotors.obd.ModoComunicacaoEcu
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ResultadoPerfil
 import com.charruamotors.obd.pid.Pids
@@ -273,6 +274,7 @@ class ObdFragment : Fragment() {
                             is EventoObd.Mensagem -> mostrarMensagem(getString(evento.resId))
                             is EventoObd.Texto -> mostrarMensagem(evento.texto)
                             is EventoObd.LogSalvo -> oferecerCompartilhamento(evento.arquivo)
+                            is EventoObd.ErroConexao -> mostrarErroConexao(evento.texto)
                         }
                     }
                 }
@@ -390,6 +392,14 @@ class ObdFragment : Fragment() {
             perfil is ResultadoPerfil.Ativo ->
                 resources.getQuantityString(R.plurals.obd_perfil_ativo, perfil.pids.size, perfil.fabricante, perfil.pids.size)
             else -> ""
+        })
+        val conexao = info.conexao
+        val protocolo = conexao.protocolo ?: getString(R.string.obd_ecu_protocolo_desconhecido)
+        textoProtocoloEcu.definirTexto(when {
+            !conectado -> getString(R.string.valor_indisponivel)
+            conexao.modo == ModoComunicacaoEcu.TOYOTA_MOBD ->
+                getString(R.string.obd_ecu_modo_toyota, protocolo, conexao.comandosModo21.joinToString())
+            else -> getString(R.string.obd_ecu_modo_padrao, protocolo)
         })
         val observacao = (perfil as? ResultadoPerfil.Ativo)?.observacao?.takeIf { conectado && it.isNotBlank() }
         textoPerfilObservacao.isVisible = observacao != null
@@ -528,6 +538,15 @@ class ObdFragment : Fragment() {
     private fun colunasDaGrade(): Int =
         (resources.configuration.screenWidthDp / LARGURA_MINIMA_CELULA_DP).coerceIn(2, 5)
 
+    /** Falha de conexão: mensagem longa (o motivo costuma ser detalhado) com atalho para o log bruto. */
+    private fun mostrarErroConexao(texto: String) {
+        if (texto.isBlank()) return
+        Snackbar.make(requireView(), texto, Snackbar.LENGTH_INDEFINITE)
+            .setTextMaxLines(MAX_LINHAS_ERRO)
+            .setAction(R.string.obd_registro_ver) { mostrarRegistroComunicacao() }
+            .show()
+    }
+
     private fun mostrarMensagem(texto: String) {
         if (texto.isNotBlank()) Snackbar.make(requireView(), texto, Snackbar.LENGTH_LONG).show()
     }
@@ -571,6 +590,7 @@ class ObdFragment : Fragment() {
     companion object {
         private const val TAG = "ObdFragment"
         private const val LARGURA_MINIMA_CELULA_DP = 170
+        private const val MAX_LINHAS_ERRO = 6
         /** Em descidas com corte de combustível o km/L instantâneo dispara; acima disso mostra o teto. */
         private const val MAX_KM_L_EXIBIDO = 99.9
 

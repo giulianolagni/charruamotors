@@ -1,6 +1,16 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.ksp)
+}
+
+/**
+ * Assinatura do release lida de `keystore.properties` na raiz (local, fora do Git).
+ * Sem o arquivo, o release é gerado sem assinatura (não instala) e o debug segue normal.
+ */
+val propriedadesAssinatura = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { arquivo ->
+    Properties().apply { arquivo.inputStream().use { load(it) } }
 }
 
 android {
@@ -18,8 +28,20 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (propriedadesAssinatura != null) {
+            create("release") {
+                storeFile = rootProject.file(propriedadesAssinatura.getProperty("storeFile"))
+                storePassword = propriedadesAssinatura.getProperty("storePassword")
+                keyAlias = propriedadesAssinatura.getProperty("keyAlias")
+                keyPassword = propriedadesAssinatura.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

@@ -1,6 +1,7 @@
 package com.charruamotors.obd
 
 import com.charruamotors.domain.model.EstadoConexaoObd
+import com.charruamotors.obd.log.EntradaRegistro
 import com.charruamotors.obd.pid.Pids
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -78,8 +79,17 @@ interface ObdClient {
     /** Limpa os códigos de falha (modo 04). A UI deve sempre pedir confirmação antes. */
     suspend fun limparCodigosFalha(): Result<Unit>
 
-    /** Fecha a conexão e libera recursos. Seguro chamar mais de uma vez. */
+    /**
+     * Fecha a conexão e libera recursos. Seguro chamar mais de uma vez, durante a conexão
+     * (cancela) ou com um comando em andamento (o socket é fechado na hora).
+     */
     suspend fun desconectar()
+
+    /**
+     * Últimas trocas com o adaptador (comandos, respostas brutas, timeouts e eventos), para o
+     * diagnóstico de campo quando algo não lê no carro. Cópia; a mais antiga primeiro.
+     */
+    fun registroComunicacao(): List<EntradaRegistro> = emptyList()
 
     companion object {
         const val INTERVALO_PADRAO_MS = 1000L

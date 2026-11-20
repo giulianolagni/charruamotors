@@ -17,9 +17,7 @@ import com.charruamotors.databinding.FragmentManutencoesBinding
 import com.charruamotors.domain.calculo.ProximaManutencao
 import com.charruamotors.domain.model.ManutencaoComPecas
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
-import com.charruamotors.ui.util.comoMilhar
 import com.charruamotors.ui.util.comoTexto
-import com.charruamotors.ui.util.rotulo
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
@@ -65,15 +63,7 @@ class ManutencoesFragment : Fragment() {
     /** Uma linha por tipo com previsão (a mais urgente primeiro); null quando não há previsão. */
     private fun textoProximas(proximas: List<ProximaManutencao>): String? {
         if (proximas.isEmpty()) return null
-        val contexto = requireContext()
-        return proximas.take(MAX_PREVISOES).joinToString("\n") { p ->
-            val alvo = listOfNotNull(
-                p.kmPrevisto?.let { contexto.getString(R.string.manutencao_previsao_km, it.comoMilhar()) },
-                p.dataPrevista?.let { contexto.getString(R.string.manutencao_previsao_data, it.comoTexto()) },
-            ).joinToString(" ")
-            val linha = contexto.getString(R.string.manutencao_previsao_linha, p.tipo.rotulo(contexto), alvo)
-            if (p.vencida) contexto.getString(R.string.manutencao_previsao_vencida, linha) else linha
-        }
+        return proximas.take(MAX_PREVISOES).joinToString("\n") { it.comoTexto(requireContext()) }
     }
 
     private fun abrirFormulario(id: Long) {

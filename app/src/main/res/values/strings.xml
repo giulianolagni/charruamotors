@@ -16,7 +16,15 @@
     <string name="botao_conectar_scanner">Conectar scanner OBD2</string>
     <string name="botao_novo_veiculo">Novo veículo</string>
     <string name="acao_sair">Sair</string>
-    <string name="item_veiculo_detalhes">%1$d km • %2$s</string>
+    <string name="item_veiculo_detalhes">%1$s km • %2$s</string>
+    <string name="item_veiculo_consumo">Consumo médio: %1$s km/l</string>
+    <string name="item_veiculo_sem_consumo">Sem dados de consumo</string>
+    <string name="item_veiculo_proxima_manutencao">Próxima manutenção: %1$s</string>
+    <string name="item_veiculo_sem_previsao">Sem manutenção prevista</string>
+    <plurals name="item_veiculo_falhas_ativas">
+        <item quantity="one">%d código de falha ativo</item>
+        <item quantity="other">%d códigos de falha ativos</item>
+    </plurals>
     <plurals name="dashboard_total_veiculos">
         <item quantity="one">%d veículo cadastrado</item>
         <item quantity="other">%d veículos cadastrados</item>

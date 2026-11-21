@@ -100,9 +100,13 @@ ObdViewModel ──> ObdClient (interface)
 ### Scanner real: `Elm327BluetoothClient`
 
 - **Bluetooth Clássico (SPP):** socket RFCOMM com o UUID `00001101-0000-1000-8000-00805F9B34FB`, escolhendo entre os dispositivos já pareados.
-- **Inicialização:** `ATZ`, `ATE0`, `ATL0`, `ATSP0` e um `0100` para confirmar que a ECU responde.
-- **PIDs do modo 01:** `010C` (RPM), `010D` (velocidade), `0105` (temperatura), `0104` (carga), além de `ATRV` (tensão da bateria).
-- **DTCs:** modo `03` para leitura e `04` para limpeza, decodificados no padrão SAE J2012 (ex.: `P0300`).
+- **Cascata de conexão em 3 camadas**, dirigida por `assets/cascata_conexao.json`:
+  1. **OBD2 padrão:** `ATZ`, `ATE0`, `ATL0`, `ATS0`, `ATH0`, `ATSP0` e os bitmasks `0100`/`0120`/`0140`.
+  2. **Fallback de protocolo físico:** se o `0100` do `ATSP0` der `UNABLE TO CONNECT`/`NO DATA`, o app força `ATSP6` (CAN 11 bits), `ATSP7` (CAN 29 bits), `ATSP5` (KWP Fast Init) e `ATSP3` (ISO 9141). Isso contorna clones ELM327 v2.1 que falham no modo automático.
+  3. **Fallback de serviço:** se a ECU recusar o modo 01 (`7F 01 11`), o app envia `ATSH 7E0` uma única vez e testa o **modo 21** (Toyota M-OBD, Mitsubishi, Suzuki, KWP: `210C`, `2105`...). Se ele não responder, testa o **modo 22 UDS** (VW/Audi, Fiat/Jeep, Ford, GM: `22F40C`...). A marca cadastrada decide qual dos dois vai primeiro.
+- **Mapeamento semântico:** cada PID de `pids_padrao.json` tem uma `chave` (`RPM`, `VELOCIDADE`, `MAP`, `TEMP_MOTOR`...). Os PIDs dos modos 21/22 publicam o valor na mesma chave, então mostradores, gráfico, computador de bordo, 0–100, log CSV e filas de polling funcionam igual, venha o dado de `01xx`, `21xx` ou `22F4xx`. O card da ECU mostra a camada ativa e quantos sensores responderam.
+- **DTCs:** `03`/`07`/`0A`/`04` no OBD2 padrão; `13` (com fallback `18 00 FF 00`) e `14`/`14 FF 00` no modo 21; `19 02 FF` e `14 FF FF FF` no modo 22. Todos são decodificados no padrão SAE J2012 (ex.: `P0300`).
+- **Estabilidade no v2.1:** o `ATSH` só é enviado quando o cabeçalho muda (o ciclo de polling é agrupado por cabeçalho), e há um intervalo mínimo de 30 ms entre comandos.
 - **Robustez:**
   - toda a I/O roda em `Dispatchers.IO`;
   - um `Mutex` serializa os comandos;

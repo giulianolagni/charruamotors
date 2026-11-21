@@ -173,13 +173,18 @@ object ObdParser {
     )
 
     /**
-     * A ECU respondeu positivamente ao [comando] (`serviço + 0x40`)? No serviço 21 o identificador
-     * também precisa bater (`2101` → `61 01 ...`).
+     * A ECU respondeu positivamente ao [comando] (`serviço + 0x40`)? Nos serviços 21 e 22 o
+     * identificador também precisa bater (`2101` → `61 01 ...`, `22F40C` → `62 F4 0C ...`).
      */
     fun respostaPositiva(bruto: String, comando: String): Boolean {
         val c = compactar(comando).uppercase()
         val servico = c.take(2).toIntOrNull(16) ?: return false
-        val prefixo = "%02X".format(servico + 0x40) + if (c.startsWith("21")) c.drop(2).take(2) else ""
+        val identificador = when (c.take(2)) {
+            "21" -> c.drop(2).take(2)
+            "22" -> c.drop(2).take(4)
+            else -> ""
+        }
+        val prefixo = "%02X".format(servico + 0x40) + identificador
         return linhasLimpas(bruto, comando).any { compactar(it).startsWith(prefixo) }
     }
 
@@ -345,10 +350,77 @@ object ObdParser {
         return classificarErro(linhas, bruto)
     }
 
-    /** `04`: confirmação da limpeza dos códigos. Resposta positiva = `44`. */
-    fun parseLimpezaDtcs(bruto: String, comando: String? = "04"): RespostaObd<Unit> {
+    /**
+     * `13` (KWP2000 *readDiagnosticTroubleCodes*, modo 21 / Toyota M-OBD): resposta
+     * `53 <quantidade> [DTC_alto DTC_baixo]...`, no formato SAE do modo 03. Ex.: `5300` = nenhuma
+     * falha; `53 02 01 02 03 04` = `P0102`, `P0304`. Negativa `7F 13 xx` = [RespostaObd.SemDados].
+     */
+    fun parseDtcsKwp13(bruto: String, comando: String? = "13"): RespostaObd<List<String>> {
         val linhas = linhasLimpas(bruto, comando)
-        if (linhas.any { compactar(it).startsWith("44") }) return RespostaObd.Ok(Unit)
+        val codigos = linkedSetOf<String>()
+        var achouResposta = false
+        for (linha in linhas) {
+            val compacta = compactar(linha)
+            if (!compacta.startsWith("53")) continue
+            achouResposta = true
+            val bytes = hexParaBytes(compacta.substring(2))
+            val quantidade = bytes.firstOrNull() ?: 0
+            bytes.drop(1).chunked(2).filter { it.size == 2 }.take(quantidade).forEach { (b1, b2) ->
+                if (b1 != 0 || b2 != 0) codigos += decodificarDtc(b1, b2)
+            }
+        }
+        if (achouResposta) return RespostaObd.Ok(codigos.toList())
+        if (respostaNegativa(bruto, "13", comando) != null) return RespostaObd.SemDados
+        return classificarErro(linhas, bruto)
+    }
+
+    /**
+     * `19 02 FF` (UDS *reportDTCByStatusMask*, modo 22): resposta `59 02 <máscara disponível>`
+     * seguida de registros de 4 bytes — DTC de 3 bytes (os 2 primeiros no formato SAE, o 3º é o
+     * *failure type byte*) + status. O código exibido é o SAE de 5 caracteres (o FTB fica de fora,
+     * para casar com o catálogo de descrições). Negativa `7F 19 xx` = [RespostaObd.SemDados].
+     */
+    fun parseDtcsUds(bruto: String, comando: String? = "1902FF"): RespostaObd<List<String>> {
+        val linhas = linhasLimpas(bruto, comando)
+        val codigos = linkedSetOf<String>()
+        var achouResposta = false
+        for (linha in linhas) {
+            val compacta = compactar(linha)
+            if (!compacta.startsWith("5902")) continue
+            achouResposta = true
+            hexParaBytes(compacta.substring(4)).drop(1).chunked(4).filter { it.size == 4 }.forEach { (b1, b2, b3, _) ->
+                if (b1 != 0 || b2 != 0 || b3 != 0) codigos += decodificarDtc(b1, b2)
+            }
+        }
+        if (achouResposta) return RespostaObd.Ok(codigos.toList())
+        if (respostaNegativa(bruto, "19", comando) != null) return RespostaObd.SemDados
+        return classificarErro(linhas, bruto)
+    }
+
+    /**
+     * Falhas pelo serviço do [comando]: `03` (OBD2), `13` (KWP), `18` (KWP por status) ou `19`
+     * (UDS). É o que os modos de serviço do `cascata_conexao.json` usam.
+     */
+    fun parseDtcsServico(bruto: String, comando: String): RespostaObd<List<String>> =
+        when (compactar(comando).uppercase().take(2)) {
+            "03" -> parseDtcs(bruto, comando)
+            "13" -> parseDtcsKwp13(bruto, comando)
+            "18" -> parseDtcsKwp(bruto, comando)
+            "19" -> parseDtcsUds(bruto, comando)
+            else -> throw IllegalArgumentException("Serviço de leitura de falhas não suportado: $comando")
+        }
+
+    /**
+     * Confirmação da limpeza dos códigos: `04` (OBD2) → `44`; `14`, `14 FF 00`, `14 FF FF FF`
+     * (KWP/UDS *clearDiagnosticInformation*) → `54`. Resposta negativa (`7F 14 22`...) =
+     * [RespostaObd.ComandoInvalido] — o NRC sai por [respostaNegativa].
+     */
+    fun parseLimpezaDtcs(bruto: String, comando: String? = "04"): RespostaObd<Unit> {
+        val servico = comando?.let(::compactar)?.uppercase()?.take(2)?.takeIf { it.length == 2 } ?: "04"
+        val positiva = "%02X".format((servico.toIntOrNull(16) ?: 0x04) + 0x40)
+        val linhas = linhasLimpas(bruto, comando)
+        if (linhas.any { compactar(it).startsWith(positiva) }) return RespostaObd.Ok(Unit)
+        if (respostaNegativa(bruto, servico, comando) != null) return RespostaObd.ComandoInvalido
         return classificarErro(linhas, bruto)
     }
 

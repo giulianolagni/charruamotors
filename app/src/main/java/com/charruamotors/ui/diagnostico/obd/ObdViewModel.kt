@@ -115,7 +115,7 @@ class ObdViewModel(
         .flatMapLatest { clientePorModo(it).pidsSuportados }
         .stateIn(viewModelScope, SharingStarted.Eagerly, clientePorModo(modoInicial).pidsSuportados.value)
 
-    /** Protocolo (ATDP) e modo de comunicação (OBD2 padrão / Toyota M-OBD) da conexão. */
+    /** Protocolo (ATDP) e camada da cascata (OBD2 padrão / modo 21 / modo 22) da conexão. */
     private val infoConexao: StateFlow<InfoConexao> = _modo
         .flatMapLatest { clientePorModo(it).infoConexao }
         .stateIn(viewModelScope, SharingStarted.Eagerly, clientePorModo(modoInicial).infoConexao.value)
@@ -151,14 +151,21 @@ class ObdViewModel(
     private val pidsDaMontadora: List<DefinicaoPid>
         get() = (_perfil.value as? ResultadoPerfil.Ativo)?.pids.orEmpty()
 
-    /** Definições de todos os sensores suportados agora, na ordem do catálogo + montadora. */
-    private fun definicoesSuportadas(suportados: Set<String>): List<DefinicaoPid> =
-        (catalogoPids.pids + pidsDaMontadora).filter { it.comando in suportados }
+    /**
+     * Definições de todos os sensores suportados agora, na ordem do catálogo + montadora. Nos
+     * modos 21/22 o PID padrão dá lugar ao espelho da mesma chave semântica (mesmo comando
+     * canônico, rótulo real `7E0 · 210C`), então a grade e o log CSV mostram de onde veio o dado.
+     */
+    private fun definicoesSuportadas(suportados: Set<String>, conexao: InfoConexao = infoConexao.value): List<DefinicaoPid> {
+        val espelhos = conexao.espelhos.associateBy { it.comando }
+        return (catalogoPids.pids.map { espelhos[it.comando] ?: it } + pidsDaMontadora).filter { it.comando in suportados }
+    }
 
     /** Todos os PIDs suportados com o último valor conhecido (grade ao vivo; a fila lenta a atualiza aos poucos). */
-    val sensores: StateFlow<List<LeituraSensor>> = combine(pidsSuportados, _dados, _perfil) { suportados, dados, _ ->
-        definicoesSuportadas(suportados).map { LeituraSensor(it, dados?.get(it.comando)) }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val sensores: StateFlow<List<LeituraSensor>> =
+        combine(pidsSuportados, _dados, _perfil, infoConexao) { suportados, dados, _, conexao ->
+            definicoesSuportadas(suportados, conexao).map { LeituraSensor(it, dados?.get(it.comando)) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // ------------------------------------------------------------------ telemetria derivada
 
@@ -313,7 +320,7 @@ class ObdViewModel(
                 return@launch
             }
             // Falhas já chegam como EstadoConexaoObd.Erro (tratado no init); aqui só o sucesso.
-            // A marca decide o modo alternativo quando a ECU recusa o OBD2 padrão (Toyota M-OBD).
+            // A marca decide a ordem dos modos alternativos quando a ECU recusa o OBD2 padrão (21 / 22).
             cliente.conectar(dispositivo, dadosVeiculo.await()?.marca).onSuccess {
                 _eventos.send(EventoObd.Mensagem(R.string.obd_conectado))
             }

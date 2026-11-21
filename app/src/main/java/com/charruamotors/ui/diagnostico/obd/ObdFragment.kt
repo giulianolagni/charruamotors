@@ -34,6 +34,7 @@ import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.model.LeituraObd
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.DispositivoObd
+import com.charruamotors.obd.InfoConexao
 import com.charruamotors.obd.ModoComunicacaoEcu
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ResultadoPerfil
@@ -393,17 +394,30 @@ class ObdFragment : Fragment() {
                 resources.getQuantityString(R.plurals.obd_perfil_ativo, perfil.pids.size, perfil.fabricante, perfil.pids.size)
             else -> ""
         })
-        val conexao = info.conexao
-        val protocolo = conexao.protocolo ?: getString(R.string.obd_ecu_protocolo_desconhecido)
-        textoProtocoloEcu.definirTexto(when {
-            !conectado -> getString(R.string.valor_indisponivel)
-            conexao.modo == ModoComunicacaoEcu.TOYOTA_MOBD ->
-                getString(R.string.obd_ecu_modo_toyota, protocolo, conexao.comandosModo21.joinToString())
-            else -> getString(R.string.obd_ecu_modo_padrao, protocolo)
-        })
+        textoProtocoloEcu.definirTexto(if (conectado) descreverConexao(info.conexao) else getString(R.string.valor_indisponivel))
         val observacao = (perfil as? ResultadoPerfil.Ativo)?.observacao?.takeIf { conectado && it.isNotBlank() }
         textoPerfilObservacao.isVisible = observacao != null
         textoPerfilObservacao.text = observacao
+    }
+
+    /**
+     * Protocolo (com o fallback físico da camada 2, se houve) e a camada ativada: `OBD2 Padrão`,
+     * `Modo 21 (M-OBD / KWP)` ou `Modo 22 (UDS)`, com quantos sensores responderam.
+     */
+    private fun descreverConexao(conexao: InfoConexao): String {
+        val protocolo = conexao.protocolo ?: getString(R.string.obd_ecu_protocolo_desconhecido)
+        val comFallback = conexao.protocoloForcado?.let { getString(R.string.obd_ecu_protocolo_forcado, protocolo, it) } ?: protocolo
+        val sensores = resources.getQuantityString(
+            R.plurals.obd_ecu_sensores_responderam,
+            conexao.sensoresResponderam,
+            conexao.sensoresResponderam,
+        )
+        val camada = if (conexao.modo == ModoComunicacaoEcu.OBD2_PADRAO) {
+            getString(R.string.obd_ecu_modo_padrao, conexao.nomeModo, sensores)
+        } else {
+            getString(R.string.obd_ecu_modo_servico, conexao.nomeModo, sensores, conexao.comandosServico.joinToString())
+        }
+        return "$comFallback\n$camada"
     }
 
     /** Computador de bordo: km/L e L/h instantâneos, método usado e média da viagem. */

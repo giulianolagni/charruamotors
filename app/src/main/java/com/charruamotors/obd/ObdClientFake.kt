@@ -113,7 +113,10 @@ class ObdClientFake(
         registro.comando("0100", "SEARCHING...\r4100BE3FB813\r\r", 1_350)
         registro.comando("ATDP", "AUTO, ISO 15765-4 (CAN 11/500)\r\r", 30)
         registro.comando("ATRV", "14.2V\r\r", 40)
-        _infoConexao.value = InfoConexao(protocolo = "AUTO, ISO 15765-4 (CAN 11/500)")
+        _infoConexao.value = InfoConexao(
+            protocolo = "AUTO, ISO 15765-4 (CAN 11/500)",
+            sensoresResponderam = COMANDOS_SIMULADOS.count { !it.startsWith("AT") },
+        )
         _pidsSuportados.value = COMANDOS_SIMULADOS
         _estado.value = EstadoConexaoObd.Conectado
         return Result.success(Unit)

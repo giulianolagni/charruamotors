@@ -23,7 +23,7 @@ data class InfoEcu(
     val quantidadePids: Int = 0,
     /** Perfil de montadora (modos 21/22); null = ainda verificando ou desconectado. */
     val perfil: ResultadoPerfil? = null,
-    /** Protocolo (`ATDP`) e modo de comunicação (OBD2 padrão / Toyota M-OBD). */
+    /** Protocolo (`ATDP`) e camada da cascata (OBD2 padrão / modo 21 / modo 22). */
     val conexao: InfoConexao = InfoConexao(),
 )
 

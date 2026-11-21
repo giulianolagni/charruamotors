@@ -8,6 +8,8 @@ object CatalogoTeste {
 
     val estendido: CatalogoEstendido by lazy { CatalogoEstendido.deJson(asset(CatalogoEstendido.ARQUIVO_PADRAO)) }
 
+    val cascata: CatalogoCascata by lazy { CatalogoCascata.deJson(asset(CatalogoCascata.ARQUIVO_PADRAO), padrao) }
+
     fun pid(comando: String): DefinicaoPid = padrao[comando] ?: error("PID $comando ausente do catálogo")
 
     private fun asset(nome: String): String {

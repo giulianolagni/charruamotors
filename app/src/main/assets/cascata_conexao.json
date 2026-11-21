@@ -1,0 +1,52 @@
+{
+  "versao": 1,
+  "descricao": "Cascata de conexão em 3 camadas. Camada 1: OBD2 padrão (ATSP0 + modo 01). Camada 2: se o 0100 do ATSP0 falhar (UNABLE TO CONNECT / NO DATA / sem resposta), cada 'protocolosFisicos' é forçado na ordem (ATSP<codigo> + 0100), contornando clones ELM327 v2.1 que falham no modo automático. Camada 3: se a ECU recusar o modo 01 (7F 01 xx) ou só der NO DATA, os 'modosServico' são tentados na ordem (os que listam a marca do veículo em 'marcas' vão primeiro): ATSH <cabecalho> e sondagem dos PIDs espelhados do SAE. Cada PID espelho tem a 'chave' semântica de um PID de pids_padrao.json e publica o valor no mesmo lugar dele (mostradores, gráfico, computador de bordo, 0–100, log CSV e filas de polling). Sem 'formula'/'bytes'/'nome'/'unidade'/'min'/'max', o espelho herda os do PID padrão da chave. 'dtc.ler' = comando de leitura de falhas; 'dtc.limpar' = comandos de limpeza tentados em ordem até a ECU confirmar.",
+  "protocolosFisicos": [
+    { "codigo": "6", "nome": "ISO 15765-4 CAN 11 bits / 500 kbps" },
+    { "codigo": "7", "nome": "ISO 15765-4 CAN 29 bits / 500 kbps" },
+    { "codigo": "5", "nome": "ISO 14230-4 KWP2000 Fast Init" },
+    { "codigo": "3", "nome": "ISO 9141-2 (5 baud)" }
+  ],
+  "modosServico": [
+    {
+      "id": "MODO_21",
+      "nome": "Modo 21 (M-OBD / KWP)",
+      "descricao": "KWP2000 readDataByLocalIdentifier endereçado ao motor: Toyota M-OBD (Hilux/SW4 D-4D Denso), Mitsubishi, Suzuki e centrais KWP",
+      "cabecalho": "7E0",
+      "servico": "21",
+      "marcas": ["toyota", "lexus", "mitsubishi", "suzuki"],
+      "dtc": { "ler": ["13", "1800FF00"], "limpar": ["14", "14FF00"] },
+      "pids": [
+        { "identificador": "0C", "chave": "RPM" },
+        { "identificador": "0D", "chave": "VELOCIDADE" },
+        { "identificador": "0B", "chave": "MAP" },
+        { "identificador": "05", "chave": "TEMP_MOTOR" },
+        { "identificador": "04", "chave": "CARGA" },
+        { "identificador": "0F", "chave": "IAT" },
+        { "identificador": "10", "chave": "MAF" },
+        { "identificador": "11", "chave": "BORBOLETA" },
+        { "identificador": "23", "chave": "RAIL" },
+        { "identificador": "5C", "chave": "TEMP_OLEO" }
+      ]
+    },
+    {
+      "id": "MODO_22",
+      "nome": "Modo 22 (UDS)",
+      "descricao": "UDS readDataByIdentifier (ISO 14229) com os DIDs F4xx espelhados do SAE J1979: VW/Audi, Fiat/Jeep, Ford e GM",
+      "cabecalho": "7E0",
+      "servico": "22",
+      "marcas": ["vw", "volkswagen", "audi", "fiat", "jeep", "ram", "ford", "gm", "chevrolet"],
+      "dtc": { "ler": "1902FF", "limpar": ["14FFFFFF"] },
+      "pids": [
+        { "identificador": "F40C", "chave": "RPM" },
+        { "identificador": "F40D", "chave": "VELOCIDADE" },
+        { "identificador": "F40B", "chave": "MAP" },
+        { "identificador": "F405", "chave": "TEMP_MOTOR" },
+        { "identificador": "F404", "chave": "CARGA" },
+        { "identificador": "F40F", "chave": "IAT" },
+        { "identificador": "F410", "chave": "MAF" },
+        { "identificador": "F411", "chave": "BORBOLETA" }
+      ]
+    }
+  ]
+}

@@ -104,10 +104,15 @@
     <string name="obd_registro_compartilhar">Compartilhar</string>
     <string name="obd_registro_rotulo">Log ELM327 — Charrua OBD Pro</string>
     <string name="obd_registro_ver">Ver log</string>
-    <string name="obd_ecu_protocolo">Protocolo e modo de comunicação</string>
+    <string name="obd_ecu_protocolo">Protocolo e camada de comunicação</string>
     <string name="obd_ecu_protocolo_desconhecido">Protocolo não informado pelo ATDP</string>
-    <string name="obd_ecu_modo_padrao">%1$s\nOBD2 padrão (modo 01)</string>
-    <string name="obd_ecu_modo_toyota">%1$s\nToyota M-OBD (modo 21, ATSH 7E0): %2$s responderam</string>
+    <string name="obd_ecu_modo_padrao">%1$s (modo 01) · %2$s</string>
+    <string name="obd_ecu_modo_servico">%1$s · %2$s: %3$s</string>
+    <string name="obd_ecu_protocolo_forcado">%1$s\nFallback de protocolo físico: %2$s</string>
+    <plurals name="obd_ecu_sensores_responderam">
+        <item quantity="one">%d sensor respondeu</item>
+        <item quantity="other">%d sensores responderam</item>
+    </plurals>
     <string name="obd_erro_sem_leitura">Ainda não há leitura para salvar</string>
     <string name="obd_leitura_salva">Leitura salva no histórico</string>
     <string name="obd_tempo_real">Dados em tempo real</string>

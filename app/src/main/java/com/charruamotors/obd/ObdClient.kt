@@ -24,7 +24,7 @@ interface ObdClient {
      */
     val pidsSuportados: StateFlow<Set<String>>
 
-    /** Protocolo (`ATDP`) e modo de comunicação (OBD2 padrão ou Toyota M-OBD) da conexão atual. */
+    /** Protocolo (`ATDP`) e camada da cascata (OBD2 padrão, modo 21 ou modo 22) da conexão atual. */
     val infoConexao: StateFlow<InfoConexao>
 
     /** Scanners disponíveis para escolha (pareados, no caso do Bluetooth real). */
@@ -33,7 +33,7 @@ interface ObdClient {
     /**
      * Abre a conexão e inicializa o adaptador. Atualiza [estado] (Conectando → Conectado/Erro).
      * [marcaVeiculo] decide os fallbacks de montadora quando a ECU não fala o OBD2 padrão
-     * (ex.: Toyota M-OBD, modo 21); null = marca desconhecida.
+     * (a ordem dos modos 21/22 da cascata); null = marca desconhecida.
      */
     suspend fun conectar(dispositivo: DispositivoObd, marcaVeiculo: String? = null): Result<Unit>
 

@@ -14,6 +14,7 @@ import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
 import com.charruamotors.obd.ObdClientFake
 import com.charruamotors.obd.dtc.CatalogoDtc
+import com.charruamotors.obd.pid.CatalogoCascata
 import com.charruamotors.obd.pid.CatalogoEstendido
 import com.charruamotors.obd.pid.CatalogoPids
 import com.charruamotors.ui.util.ExportadorCsv
@@ -67,6 +68,19 @@ class CharruaMotorsApp : Application() {
         }.getOrElse { CatalogoEstendido.VAZIO }
     }
 
+    /**
+     * Camadas 2 e 3 da cascata de conexão (`assets/cascata_conexao.json`): protocolos físicos e
+     * modos 21/22 com os PIDs espelhados. Se faltar ou for inválido, só o OBD2 padrão (camada 1).
+     */
+    val catalogoCascata: CatalogoCascata by lazy {
+        runCatching {
+            CatalogoCascata.deJson(
+                assets.open(CatalogoCascata.ARQUIVO_PADRAO).bufferedReader().use { it.readText() },
+                catalogoPids,
+            )
+        }.getOrElse { CatalogoCascata.VAZIO }
+    }
+
     /** Banco offline de códigos de falha (`assets/dtc_catalogo.json`); se faltar, usa o fallback por sistema. */
     val catalogoDtc: CatalogoDtc by lazy {
         runCatching {
@@ -82,7 +96,12 @@ class CharruaMotorsApp : Application() {
 
     private val obdBluetooth: ObdClient by lazy {
         val adaptador = getSystemService(BluetoothManager::class.java)?.adapter
-        Elm327BluetoothClient(adaptador, catalogoPids, catalogoEstendido = catalogoEstendido)
+        Elm327BluetoothClient(
+            adaptador,
+            catalogoPids,
+            catalogoEstendido = catalogoEstendido,
+            catalogoCascata = catalogoCascata,
+        )
     }
 
     /** Cliente OBD2 do modo atual; ViewModels dependem apenas da interface [ObdClient]. */

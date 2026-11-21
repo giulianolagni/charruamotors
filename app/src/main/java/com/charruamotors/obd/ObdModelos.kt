@@ -78,16 +78,29 @@ sealed interface ResultadoPerfil {
     data class Ativo(val fabricante: String, val pids: List<DefinicaoPid>, val observacao: String = "") : ResultadoPerfil
 }
 
-/** Como o app conversa com a ECU nesta conexão. */
-enum class ModoComunicacaoEcu {
-    /** OBD2 genérico (SAE J1979): modo 01 pelo cabeçalho funcional. */
-    OBD2_PADRAO,
+/**
+ * Como o app conversa com a ECU nesta conexão — a camada da cascata que foi ativada
+ * (ver `Elm327BluetoothClient` e `assets/cascata_conexao.json`).
+ */
+enum class ModoComunicacaoEcu(val servico: String) {
+    /** Camadas 1/2: OBD2 genérico (SAE J1979), modo 01 pelo cabeçalho funcional. */
+    OBD2_PADRAO("01"),
 
     /**
-     * Toyota M-OBD: a ECU recusa o modo 01 (`7F 01 11`) e só responde ao serviço 21 endereçado
-     * fisicamente ao motor (`ATSH 7E0`), caso das centrais Denso da Hilux/SW4 D-4D Mercosul.
+     * Camada 3, tentativa A: KWP2000 *readDataByLocalIdentifier* (serviço 21) endereçado ao motor
+     * (`ATSH 7E0`) — Toyota M-OBD (Hilux/SW4 D-4D Denso, que recusa o modo 01 com `7F 01 11`),
+     * Mitsubishi, Suzuki e centrais KWP.
      */
-    TOYOTA_MOBD,
+    MODO_21("21"),
+
+    /** Camada 3, tentativa B: UDS *readDataByIdentifier* (serviço 22, DIDs `F4xx`) — VW/Audi, Fiat/Jeep, Ford, GM. */
+    MODO_22("22"),
+    ;
+
+    companion object {
+        /** Serviço do catálogo (`"21"`, `"22"`) → modo; null se o app não souber falar esse serviço. */
+        fun doServico(servico: String): ModoComunicacaoEcu? = entries.firstOrNull { it.servico == servico.uppercase() }
+    }
 }
 
 /** Detalhes da conexão atual para o card da ECU. */
@@ -95,9 +108,21 @@ data class InfoConexao(
     /** Protocolo informado pelo `ATDP` (ex.: `AUTO, ISO 15765-4 (CAN 11/500)`); null = não lido. */
     val protocolo: String? = null,
     val modo: ModoComunicacaoEcu = ModoComunicacaoEcu.OBD2_PADRAO,
-    /** Comandos do serviço 21 que responderam positivamente na conexão (`2101`, `2104`...). */
-    val comandosModo21: List<String> = emptyList(),
-)
+    /** Nome da camada para o card (`OBD2 Padrão`, `Modo 21 (M-OBD / KWP)`, `Modo 22 (UDS)`). */
+    val nomeModo: String = NOME_OBD2_PADRAO,
+    /** Protocolo físico forçado pela camada 2 (ex.: `ATSP6 · ISO 15765-4 CAN 11 bits / 500 kbps`); null = o ATSP0 resolveu. */
+    val protocoloForcado: String? = null,
+    /** Quantos sensores do catálogo responderam na conexão (bitmask no padrão, sondagem nos modos 21/22). */
+    val sensoresResponderam: Int = 0,
+    /** Comandos do serviço da montadora que responderam positivamente (`210C`, `2105`...); vazio no padrão. */
+    val comandosServico: List<String> = emptyList(),
+    /** Espelhos ativos nos modos 21/22, já com o comando canônico do sensor (`010C`...) e o rótulo real (`7E0 · 210C`). */
+    val espelhos: List<DefinicaoPid> = emptyList(),
+) {
+    companion object {
+        const val NOME_OBD2_PADRAO = "OBD2 Padrão"
+    }
+}
 
 /** Falha de comunicação com o scanner/ECU (timeout, conexão perdida, resposta inválida...). */
 open class ObdException(mensagem: String, causa: Throwable? = null) : Exception(mensagem, causa)

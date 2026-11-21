@@ -207,7 +207,23 @@ class Elm327TelemetriaTest {
         assertEquals(90.0, leituras.last()["VW_OLEO"]!!, 0.0)
         val i = t.enviados.indexOf("2211BD")
         assertEquals("ATSH7E0", t.enviados[i - 1])
-        assertEquals("ATSH7DF", t.enviados[i + 1]) // o PID padrão seguinte volta ao funcional
+        // Ciclo agrupado por cabeçalho: os PIDs padrão do mesmo ciclo vêm antes do DID, então
+        // em 8 ciclos só há uma ida ao 7DF (o perfil deixou o 7E1) e uma ao 7E0.
+        assertEquals(listOf("ATSH7DF", "ATSH7E0"), t.enviados.filter { it.startsWith("ATSH") })
+    }
+
+    @Test
+    fun `ciclo que comeca no cabecalho fisico le o DID antes de voltar ao funcional`() = runTest {
+        val t = TransporteRoteirizado(ecuVw())
+        val obd = cliente(t, catalogoVw)
+        obd.conectar(dispositivo)
+        obd.ativarPerfilFabricante("VW")
+        t.enviados.clear()
+
+        // Todo ciclo tem o DID. Sem a ordenação seriam 2 ATSH por ciclo (6); com ela, o ciclo 2
+        // começa no 7E0 que o ciclo 1 deixou e o ciclo 3 no 7DF que o ciclo 2 deixou.
+        obd.lerTelemetria(250, lentosPorCiclo = 15).take(3).toList()
+        assertEquals(listOf("ATSH7DF", "ATSH7E0", "ATSH7DF", "ATSH7E0"), t.enviados.filter { it.startsWith("ATSH") })
     }
 
     @Test

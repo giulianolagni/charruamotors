@@ -13,6 +13,11 @@ import org.json.JSONObject
  * @property min limite inferior da faixa teórica; leituras fora de [min]..[max] são descartadas.
  * @property casasDecimais casas decimais sugeridas para exibição.
  * @property estendida requisição específica de montadora (modos 21/22 com cabeçalho CAN); null nos PIDs padrão.
+ * @property chave sensor semântico ([ChaveSemantica]) que o PID representa; null nos que não têm equivalente.
+ *
+ * Um **espelho** é um PID dos modos 21/22 que lê o mesmo sensor de um PID padrão (`210C`,
+ * `22F40C` ↔ `010C`): tem [estendida], [chave] e, como [comando], o do PID canônico — o valor
+ * lido é publicado no mesmo lugar do OBD2 padrão.
  */
 data class DefinicaoPid(
     val comando: String,
@@ -24,12 +29,15 @@ data class DefinicaoPid(
     val max: Double,
     val casasDecimais: Int = 0,
     val estendida: RequisicaoEstendida? = null,
+    val chave: ChaveSemantica? = null,
 ) {
     init {
         if (estendida == null) {
             require(ehComandoAt || REGEX_MODO_01.matches(comando)) { "Comando inválido: $comando" }
         } else {
-            require(REGEX_ID_ESTENDIDO.matches(comando)) { "Identificador de PID estendido inválido: $comando" }
+            require(REGEX_ID_ESTENDIDO.matches(comando) || (chave != null && REGEX_MODO_01.matches(comando))) {
+                "Identificador de PID estendido inválido: $comando"
+            }
         }
         require(bytes in 0..MAX_BYTES) { "$comando: quantidade de bytes inválida ($bytes)" }
         require(formula.bytesNecessarios <= bytes) {
@@ -50,6 +58,9 @@ data class DefinicaoPid(
 
     /** PID padrão SAE J1979 do modo 01. */
     val ehModo01: Boolean get() = !ehComandoAt && !ehEstendido
+
+    /** Espelho de um PID padrão lido pelos modos 21/22 (comando = o do PID canônico, ex.: `010C`). */
+    val ehEspelho: Boolean get() = estendida != null && REGEX_MODO_01.matches(comando)
 
     /** Número do PID no modo 01 (`010C` → `0x0C`); null para comandos AT e PIDs estendidos. */
     val pid: Int? get() = if (ehModo01) comando.substring(2).toInt(16) else null
@@ -83,15 +94,24 @@ class CatalogoPids(val pids: List<DefinicaoPid>) {
 
     private val porComando: Map<String, DefinicaoPid> = pids.associateBy { it.comando }
 
+    private val porChave: Map<ChaveSemantica, DefinicaoPid> =
+        pids.mapNotNull { p -> p.chave?.let { it to p } }.toMap()
+
     init {
         require(porComando.size == pids.size) {
             "Comandos duplicados no catálogo: ${pids.groupBy { it.comando }.filterValues { it.size > 1 }.keys}"
+        }
+        require(porChave.size == pids.count { it.chave != null }) {
+            "Chaves semânticas repetidas no catálogo: ${pids.filter { it.chave != null }.groupBy { it.chave }.filterValues { it.size > 1 }.keys}"
         }
     }
 
     val comandos: Set<String> get() = porComando.keys
 
     operator fun get(comando: String): DefinicaoPid? = porComando[comando.uppercase()]
+
+    /** PID canônico do sensor semântico (`RPM` → `010C`); null se o catálogo não tiver a chave. */
+    operator fun get(chave: ChaveSemantica): DefinicaoPid? = porChave[chave]
 
     operator fun contains(comando: String): Boolean = get(comando) != null
 
@@ -132,6 +152,7 @@ class CatalogoPids(val pids: List<DefinicaoPid>) {
                     max = o.getDouble("max"),
                     casasDecimais = o.optInt("casas", 0),
                     estendida = estendida,
+                    chave = ChaveSemantica.deTexto(o.optString("chave", "")),
                 )
             } catch (e: IllegalArgumentException) {
                 throw IllegalArgumentException("PID $comando: ${e.message}", e)

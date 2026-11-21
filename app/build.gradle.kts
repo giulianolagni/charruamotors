@@ -96,3 +96,35 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
 }
+
+/**
+ * Publicação do APK de release: ao fim do `assembleRelease`, o APK assinado é copiado para
+ * `dist/CharruaOBDPro-<versão>-release.apk` (versionado no Git) e, se a pasta do Google Drive
+ * existir na máquina (`G:\Meu Drive\CharruaOBD` ou `G:\My Drive\CharruaOBD`), também para lá.
+ */
+val nomeApkRelease = "CharruaOBDPro-${android.defaultConfig.versionName}-release.apk"
+val apkRelease = layout.buildDirectory.file("outputs/apk/release/app-release.apk")
+val pastasDrive = listOf("G:/Meu Drive/CharruaOBD", "G:/My Drive/CharruaOBD").map(::File)
+
+val publicarApkDist = tasks.register<Copy>("publicarApkDist") {
+    description = "Copia o APK de release assinado para dist/"
+    from(apkRelease)
+    into(rootProject.layout.projectDirectory.dir("dist"))
+    rename(".*", nomeApkRelease)
+}
+
+val publicarApkDrive = pastasDrive.mapIndexed { i, pasta ->
+    tasks.register<Copy>("publicarApkDrive$i") {
+        description = "Copia o APK de release assinado para $pasta, se a pasta existir"
+        val destino = pasta
+        onlyIf("a pasta do Google Drive existe") { destino.isDirectory }
+        from(apkRelease)
+        into(pasta)
+        rename(".*", nomeApkRelease)
+    }
+}
+
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    finalizedBy(publicarApkDist)
+    publicarApkDrive.forEach { finalizedBy(it) }
+}

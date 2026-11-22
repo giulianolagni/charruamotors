@@ -117,16 +117,16 @@ class Elm327HardwareRealTest {
 
     @Test
     fun `polling so registra as falhas e nao as leituras boas`() = runTest {
-        val e = ecu().apply { put("01111", "NO DATA\r\r") }
+        val e = ecu().apply { put("010D1", "NO DATA\r\r") }
         val obd = cliente(TransporteFalso(e))
         obd.conectar(dispositivo)
         val antes = obd.comandosRegistrados().size
 
         obd.lerTelemetria(250).take(3).toList()
         val novos = obd.comandosRegistrados().drop(antes)
-        // Os rápidos que responderam não aparecem; a borboleta muda aparece em todo ciclo.
-        assertTrue(novos.none { it.comando in setOf("010C1", "010D1", "01101") })
-        assertEquals(3, novos.count { it.comando == "01111" && it.resposta == "NO DATA\r\r" })
+        // Os rápidos que responderam não aparecem; a velocidade muda aparece em todo ciclo.
+        assertTrue(novos.none { it.comando in setOf("010C1", "01101") })
+        assertEquals(3, novos.count { it.comando == "010D1" && it.resposta == "NO DATA\r\r" })
         assertTrue(novos.all { ObdParser.erroElm(it.resposta.orEmpty()) != null })
     }
 
@@ -283,9 +283,37 @@ class Elm327HardwareRealTest {
         }
 
         obd.lerDadosEmTempoReal(comandos = listOf("010C")).first()
-        assertEquals(listOf("010C1", "ATE0", "ATL0", "ATS0", "ATH0"), t.enviados)
+        assertEquals(listOf("010C1", "ATE0", "ATL0", "ATS0", "ATH0", "ATAT2"), t.enviados)
         assertEquals(EstadoConexaoObd.Conectado, obd.estado.value)
         assertTrue(obd.eventos().any { "reiniciou" in it })
+    }
+
+    @Test
+    fun `timeout liga o respiro de 15 ms entre comandos pelo resto da sessao`() = runTest {
+        val t = TransporteFalso(ecu())
+        val obd = cliente(t)
+        obd.conectar(dispositivo)
+        val instantes = mutableListOf<Pair<String, Long>>()
+        var primeira = true
+        t.interceptar = {
+            instantes += it to testScheduler.currentTime
+            if (it == "010D1" && primeira) {
+                primeira = false
+                timeout()
+            }
+            null
+        }
+
+        obd.lerTelemetria(intervaloMinimoMs = 1).take(2).toList()
+
+        val iTimeout = instantes.indexOfFirst { it.first == "010D1" }
+        val antes = instantes.take(iTimeout + 1).zipWithNext { a, b -> b.second - a.second }
+        assertTrue("sem pausa antes do erro: $antes", antes.all { it == 0L })
+        // Do timeout em diante, todo comando espera o respiro (fora a pausa entre ciclos).
+        val depois = instantes.drop(iTimeout).zipWithNext { a, b -> b.second - a.second }
+        assertTrue("respiro depois do erro: $depois", depois.all { it >= Elm327BluetoothClient.INTERVALO_SEGURO_MS - 5 })
+        assertTrue(obd.eventos().any { "Respiro de 15 ms" in it })
+        assertEquals(EstadoConexaoObd.Conectado, obd.estado.value)
     }
 
     @Test

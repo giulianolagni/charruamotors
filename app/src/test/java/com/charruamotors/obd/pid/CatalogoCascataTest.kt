@@ -116,7 +116,7 @@ class CatalogoCascataTest {
         val m22 = cascata.modosServico.first { it.tipo == ModoComunicacaoEcu.MODO_22 }
         val escalonador = EscalonadorPolling()
         escalonador.atualizarSuportados(listOf("ATRV") + m22.pids.map { it.comando })
-        assertEquals(listOf(Pids.RPM, Pids.VELOCIDADE, Pids.PRESSAO_COLETOR, Pids.MAF), escalonador.filaRapida)
+        assertEquals(listOf(Pids.RPM, Pids.PRESSAO_COLETOR, Pids.VELOCIDADE, Pids.MAF), escalonador.filaRapida)
         assertTrue(Pids.TEMPERATURA_MOTOR in escalonador.filaLenta && Pids.BORBOLETA in escalonador.filaLenta)
 
         // MAF 22F410 + velocidade 22F40D no mesmo lugar do 0110/010D: consumo pelo MAF.

@@ -21,7 +21,8 @@ import kotlin.random.Random
  * catálogo padrão): a velocidade oscila com aceleração/frenagem suaves, o RPM acompanha a
  * velocidade (marchas), o motor e o óleo esquentam até a temperatura de trabalho, carga, MAP,
  * MAF, borboleta e consumo seguem a aceleração, e a tensão varia em torno de 14 V (alternador).
- * A simulação avança pelo tempo de cada leitura (1 s no polling simples, 250 ms na telemetria).
+ * A simulação avança pelo tempo de cada leitura (1 s no polling simples; na telemetria, o
+ * intervalo pedido, com piso de [INTERVALO_MINIMO_SIMULADO_MS] — o ritmo de um ELM327 rápido).
  *
  * Também simula uma arrancada 0–100 km/h ([simularArrancada]), PIDs de montadora de
  * [SIMULADOS_ESTENDIDOS] (os demais do perfil "não respondem", como numa ECU real), códigos de
@@ -132,14 +133,20 @@ class ObdClientFake(
     }
 
     /** Mesmo escalonamento do cliente real: a grade se atualiza aos poucos, os mostradores sempre. */
-    override fun lerTelemetria(intervaloMinimoMs: Long, lentosPorCiclo: Int): Flow<DadosObd> = flow {
-        val escalonador = EscalonadorPolling(lentosPorCiclo)
+    override fun lerTelemetria(
+        intervaloMinimoMs: Long,
+        consumoPorMaf: Boolean,
+        lentosPorVez: Int,
+        ciclosPorLento: Int,
+    ): Flow<DadosObd> = flow {
+        val escalonador = EscalonadorPolling(lentosPorVez, ciclosPorLento, Pids.candidatosFilaRapida(consumoPorMaf))
+        val passoMs = intervaloMinimoMs.coerceAtLeast(INTERVALO_MINIMO_SIMULADO_MS)
         while (_estado.value == EstadoConexaoObd.Conectado) {
             escalonador.atualizarSuportados(_pidsSuportados.value)
             val chaves = escalonador.proximoCiclo()
-            val leitura = proximaLeitura(intervaloMinimoMs / 1000.0)
+            val leitura = proximaLeitura(passoMs / 1000.0)
             emit(DadosObd(escalonador.consolidar(chaves, leitura.filterKeys { it in chaves })))
-            delay(intervaloMinimoMs)
+            delay(passoMs)
         }
     }
 
@@ -356,6 +363,9 @@ class ObdClientFake(
         const val VELOCIDADE_FIM_ARRANCADA = 115.0
         private const val SEGUNDOS_PARADO_ARRANCADA = 2.0
         private const val PASSO_POLLING_SIMPLES_S = 1.0
+
+        /** Piso do ciclo da telemetria simulada (~10 atualizações/s, como um ELM327 rápido). */
+        const val INTERVALO_MINIMO_SIMULADO_MS = 100L
         private const val CHANCE_NOVO_ALVO_POR_S = 0.12
         private const val BORBOLETA_FECHADA = 8.0 // % de abertura da borboleta em marcha lenta
         private const val PRESSAO_BAROMETRICA = 95.0 // kPa (~600 m de altitude)

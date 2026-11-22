@@ -233,7 +233,7 @@ class Elm327CascataTest {
         obd.conectar(dispositivo, "Toyota")
         t.enviados.clear()
 
-        val leituras = obd.lerTelemetria(intervaloMinimoMs = 250, lentosPorCiclo = 2).take(3).toList()
+        val leituras = obd.lerTelemetria(intervaloMinimoMs = 250, lentosPorVez = 1, ciclosPorLento = 1).take(3).toList()
         val dados = leituras.last()
 
         // Mesmas fórmulas do 010C / 0105 / 0104 / 010B.
@@ -296,7 +296,8 @@ class Elm327CascataTest {
         t.enviados.clear()
 
         assertEquals(listOf("P0102", "P0304"), comFalhas.lerCodigosFalha().getOrThrow().map { it.codigo })
-        assertEquals("13 positivo: nem 03 nem 18 00 FF 00", listOf("13"), t.enviados)
+        // DTC é comando de prazo longo: volta ao ATST padrão antes (responsePending 7F xx 78).
+        assertEquals("13 positivo: nem 03 nem 18 00 FF 00", listOf("ATST32", "13"), t.enviados)
     }
 
     @Test
@@ -317,7 +318,7 @@ class Elm327CascataTest {
         a.conectar(dispositivo, "Toyota")
         direto.enviados.clear()
         assertTrue(a.limparCodigosFalha().isSuccess)
-        assertEquals(listOf("14"), direto.enviados)
+        assertEquals(listOf("ATST32", "14"), direto.enviados)
 
         val comFallback = EcuSimulada(sw4().apply {
             put("7E0:14", "7F1412\r\r")
@@ -327,7 +328,7 @@ class Elm327CascataTest {
         b.conectar(dispositivo, "Toyota")
         comFallback.enviados.clear()
         assertTrue(b.limparCodigosFalha().isSuccess)
-        assertEquals(listOf("14", "14FF00"), comFallback.enviados)
+        assertEquals(listOf("ATST32", "14", "14FF00"), comFallback.enviados)
     }
 
     @Test
@@ -402,7 +403,7 @@ class Elm327CascataTest {
         assertEquals(listOf("22F40C", "22F40D", "22F405", "22F410"), info.comandosServico)
         assertEquals(4, info.sensoresResponderam)
 
-        val dados = obd.lerTelemetria(intervaloMinimoMs = 250, lentosPorCiclo = 10).first()
+        val dados = obd.lerTelemetria(intervaloMinimoMs = 250, lentosPorVez = 10, ciclosPorLento = 1).first()
         assertEquals(1726.0, dados[Pids.RPM]!!, 1e-9)
         assertEquals(60.0, dados[Pids.VELOCIDADE]!!, 1e-9)
         assertEquals(83.0, dados[Pids.TEMPERATURA_MOTOR]!!, 1e-9)
@@ -466,16 +467,136 @@ class Elm327CascataTest {
         assertTrue(obd.pidsSuportados.value.isEmpty())
     }
 
-    // ---------------------------------------------------------------- estabilidade do v2.1
+    // ---------------------------------------------------------------- baixa latência
+
+    /** A SW4 de um ELM327 que aceita o sufixo de resposta única também no modo 21. */
+    private fun sw4ComSufixo() = sw4().apply {
+        put("7E0:210C1", "610C0C3B\r\r")
+        put("7E0:210B1", "610B4A\r\r")
+        put("7E0:21051", "61055F\r\r")
+        put("7E0:21041", "61042D\r\r")
+    }
 
     @Test
-    fun `comandos saem com respiro minimo entre si`() = runTest {
-        val t = EcuSimulada(sw4(), relogio = { testScheduler.currentTime })
+    fun `SW4 aceita o sufixo 1 no modo 21 e o polling inteiro usa 210C1`() = runTest {
+        val t = EcuSimulada(sw4ComSufixo())
+        val obd = cliente(t)
+
+        assertTrue(obd.conectar(dispositivo, "Toyota").isSuccess)
+
+        assertTrue(obd.usaSufixoRespostaUnica)
+        assertTrue(obd.usaTimingAdaptativoAgressivo)
+        assertTrue(obd.usaTimeoutCurto)
+        assertEquals("ATAT2 logo depois do ATSP0", "ATAT2", t.enviados[t.enviados.indexOf("ATSP0") + 1])
+        // Sufixo testado no primeiro PID que respondeu; ATST0C validado com a mesma leitura.
+        val iSt = t.enviados.indexOf("ATST0C")
+        assertEquals(listOf("210C1", "ATST0C", "210C1"), t.enviados.subList(iSt - 1, iSt + 2))
+        assertTrue(obd.eventos().any { "sufixo de resposta única: sim; ATAT2: sim; ATST 0C: sim" in it })
+
+        t.enviados.clear()
+        val dados = obd.lerTelemetria(lentosPorVez = 10, ciclosPorLento = 1).first()
+        assertEquals(listOf("210C1", "210B1", "ATRV", "21051", "21041"), t.enviados)
+        assertEquals(782.75, dados[Pids.RPM]!!, 1e-9)
+        assertEquals(74.0, dados[Pids.PRESSAO_COLETOR]!!, 1e-9)
+        assertEquals(55.0, dados[Pids.TEMPERATURA_MOTOR]!!, 1e-9)
+    }
+
+    @Test
+    fun `DTC volta ao ATST padrao e o polling seguinte reaplica o curto`() = runTest {
+        val t = EcuSimulada(sw4ComSufixo())
         val obd = cliente(t)
         obd.conectar(dispositivo, "Toyota")
-        obd.lerTelemetria(intervaloMinimoMs = 250).take(2).toList()
+        t.enviados.clear()
 
+        assertTrue(obd.lerCodigosFalha().isSuccess)
+        obd.lerCodigosFalha()
+        assertEquals("ATST32 só quando muda", listOf("ATST32", "13", "13"), t.enviados)
+
+        t.enviados.clear()
+        obd.lerTelemetria().first()
+        assertEquals(listOf("ATST0C", "210C1", "210B1", "ATRV"), t.enviados)
+    }
+
+    @Test
+    fun `SW4 que recusa o sufixo no modo 21 segue sem ele`() = runTest {
+        val t = EcuSimulada(sw4().apply { put("7E0:210C1", "?\r\r") })
+        val obd = cliente(t)
+
+        assertTrue(obd.conectar(dispositivo, "Toyota").isSuccess)
+
+        assertFalse(obd.usaSufixoRespostaUnica)
+        assertTrue("o ATST0C não depende do sufixo", obd.usaTimeoutCurto)
+        val iSt = t.enviados.indexOf("ATST0C")
+        assertEquals("validado sem o sufixo", "210C", t.enviados[iSt + 1])
+        assertTrue(obd.eventos().any { "210C1 sem resposta válida" in it })
+
+        t.enviados.clear()
+        val dados = obd.lerTelemetria(lentosPorVez = 10, ciclosPorLento = 1).first()
+        assertEquals(listOf("210C", "210B", "ATRV", "2105", "2104"), t.enviados)
+        assertEquals(782.75, dados[Pids.RPM]!!, 1e-9)
+    }
+
+    @Test
+    fun `clone que recusa ATAT2 e ATST com interrogacao conecta em silencio no timing padrao`() = runTest {
+        val t = EcuSimulada(sw4ComSufixo().apply {
+            put("ATAT2", "?\r\r")
+            put("ATST0C", "?\r\r")
+        })
+        val obd = cliente(t)
+
+        assertTrue(obd.conectar(dispositivo, "Toyota").isSuccess)
+
+        assertFalse(obd.usaTimingAdaptativoAgressivo)
+        assertFalse(obd.usaTimeoutCurto)
+        assertTrue("o sufixo independe do timing", obd.usaSufixoRespostaUnica)
+        assertEquals("ATST0C tentado uma vez só", 1, t.enviados.count { it == "ATST0C" })
+        assertTrue(obd.eventos().any { "ATAT2 recusado" in it })
+        assertTrue(obd.eventos().any { "ATST 0C recusado" in it })
+
+        t.enviados.clear()
+        assertTrue(obd.lerCodigosFalha().isSuccess)
+        val dados = obd.lerTelemetria().first()
+        assertFalse("sem timeout curto, nada de trocar o ATST", t.enviados.any { it.startsWith("ATST") })
+        assertEquals(782.75, dados[Pids.RPM]!!, 1e-9)
+    }
+
+    @Test
+    fun `ECU que nao responde no ATST0C volta ao ATST32`() = runTest {
+        val ecu = EcuSimulada(sw4ComSufixo())
+        var curto = false
+        val t = object : ObdTransport by ecu {
+            override suspend fun enviarComando(comando: String, timeoutMs: Long): String {
+                if (comando.startsWith("ATST")) curto = comando == "ATST0C"
+                val resposta = ecu.enviarComando(comando, timeoutMs)
+                return if (curto && !comando.startsWith("AT")) "NO DATA\r\r" else resposta
+            }
+        }
+        val obd = Elm327BluetoothClient(
+            adaptador = null,
+            catalogo = CatalogoTeste.padrao,
+            criarTransporte = { t },
+            dispatcher = StandardTestDispatcher(testScheduler),
+            catalogoCascata = CatalogoTeste.cascata,
+        )
+
+        assertTrue(obd.conectar(dispositivo, "Toyota").isSuccess)
+
+        assertFalse(obd.usaTimeoutCurto)
+        val iSt = ecu.enviados.indexOf("ATST0C")
+        assertEquals(listOf("ATST0C", "210C1", "ATST32"), ecu.enviados.subList(iSt, iSt + 3))
+        assertTrue(obd.eventos().any { "voltando ao ATST 32" in it })
+        assertEquals(782.75, obd.lerTelemetria().first()[Pids.RPM]!!, 1e-9)
+    }
+
+    @Test
+    fun `sem pausa fixa entre comandos quando nada falha`() = runTest {
+        val t = EcuSimulada(sw4ComSufixo(), relogio = { testScheduler.currentTime })
+        val obd = cliente(t)
+        obd.conectar(dispositivo, "Toyota")
+        obd.lerTelemetria().first()
+
+        assertEquals(0L, Elm327BluetoothClient.INTERVALO_ENTRE_COMANDOS_MS)
         val intervalos = t.instantes.zipWithNext { a, b -> b - a }
-        assertTrue(intervalos.toString(), intervalos.all { it >= Elm327BluetoothClient.INTERVALO_ENTRE_COMANDOS_MS })
+        assertTrue(intervalos.toString(), intervalos.all { it == 0L })
     }
 }

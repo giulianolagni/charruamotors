@@ -17,6 +17,7 @@ import com.charruamotors.domain.calculo.ParametrosMotor
 import com.charruamotors.domain.calculo.TelemetriaCalculada
 import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.model.LeituraObd
+import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.Veiculo
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.DispositivoObd
@@ -403,8 +404,9 @@ class ObdViewModel(
         }
         if (pollingJob?.isActive == true) return
         pollingJob = viewModelScope.launch {
-            // Duas filas: mostradores em todo ciclo, o resto da grade (e do log) em rodízio.
-            cliente.lerTelemetria()
+            // Duas filas: mostradores em todo ciclo, o resto da grade (e do log) em rodízio. O MAF
+            // só disputa a fila rápida quando o consumo instantâneo é calculado por ele (não no diesel).
+            cliente.lerTelemetria(consumoPorMaf = parametrosMotor.tipoCombustivel != TipoCombustivel.DIESEL)
                 .catch { _eventos.send(EventoObd.Texto(it.message ?: "")) }
                 .collect { dados ->
                     _dados.value = dados

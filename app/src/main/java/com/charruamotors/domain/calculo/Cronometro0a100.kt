@@ -27,7 +27,7 @@ sealed interface EstadoCronometro {
  * - **Armar** com o carro parado → [EstadoCronometro.Pronto]; em movimento → aguarda parar.
  * - A contagem começa na primeira leitura com velocidade acima de 0, depois de uma leitura parada.
  * - Termina ao atingir o alvo: o instante exato é interpolado entre as duas últimas leituras
- *   (o PID é lido ~4×/s; sem interpolar, o erro seria de até 250 ms).
+ *   (o PID é lido a cada ~100–250 ms; sem interpolar, o erro seria do tamanho do ciclo).
  * - Parar antes do alvo reinicia a tentativa (volta a [EstadoCronometro.Pronto]); passar de
  *   [tempoMaximoMs] sem atingir o alvo também a descarta (aguarda o carro parar de novo).
  *

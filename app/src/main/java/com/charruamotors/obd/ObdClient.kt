@@ -49,15 +49,18 @@ interface ObdClient {
     ): Flow<DadosObd>
 
     /**
-     * Telemetria ao vivo em duas filas ([EscalonadorPolling]): RPM, velocidade, MAP e MAF/borboleta
-     * em todo ciclo e os demais PIDs suportados (inclusive os de montadora ativados) em rodízio,
-     * [lentosPorCiclo] por ciclo. Cada emissão é o instantâneo completo com o último valor
-     * conhecido de cada PID. Um ciclo começa a cada [intervaloMinimoMs] no mínimo (se a leitura
-     * demorar mais, o próximo começa logo em seguida). Termina se a conexão for perdida.
+     * Telemetria ao vivo em duas filas ([EscalonadorPolling]): RPM, MAP/turbo e velocidade (mais o
+     * MAF, se [consumoPorMaf]) em todo ciclo e os demais PIDs suportados (inclusive os de
+     * montadora ativados) em rodízio, [lentosPorVez] a cada [ciclosPorLento] ciclos. Cada emissão
+     * é o instantâneo completo com o último valor conhecido de cada PID. Um ciclo começa a cada
+     * [intervaloMinimoMs] no mínimo; no ELM327 real quem dita o ritmo é a velocidade do
+     * Bluetooth/ECU. Termina se a conexão for perdida.
      */
     fun lerTelemetria(
         intervaloMinimoMs: Long = INTERVALO_TELEMETRIA_MS,
-        lentosPorCiclo: Int = EscalonadorPolling.LENTOS_POR_CICLO,
+        consumoPorMaf: Boolean = true,
+        lentosPorVez: Int = EscalonadorPolling.LENTOS_POR_VEZ,
+        ciclosPorLento: Int = EscalonadorPolling.CICLOS_POR_LENTO,
     ): Flow<DadosObd>
 
     /**
@@ -101,7 +104,10 @@ interface ObdClient {
     companion object {
         const val INTERVALO_PADRAO_MS = 1000L
 
-        /** Período mínimo do ciclo da telemetria em duas filas (~4 atualizações/s dos mostradores). */
-        const val INTERVALO_TELEMETRIA_MS = 250L
+        /**
+         * Período mínimo do ciclo da telemetria em duas filas: só um piso; no ELM327 real o ciclo
+         * dura o que os comandos da fila rápida levam no Bluetooth/ECU.
+         */
+        const val INTERVALO_TELEMETRIA_MS = 50L
     }
 }

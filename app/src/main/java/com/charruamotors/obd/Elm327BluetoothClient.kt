@@ -52,16 +52,29 @@ import java.io.IOException
  *    mostradores, gráfico, computador de bordo, 0–100, log CSV e filas funcionam igual. Nada de
  *    `0120`/`0140`/`0902`/`7E1` nesse modo: a conexão fica rápida e o v2.1 não engasga.
  *
+ * Baixa latência (cada milissegundo por comando vira fluidez nos ponteiros):
+ * - **Sufixo de resposta única** (`010C1`, `210C1`, `22F40C1`): o ELM327 devolve a resposta assim
+ *   que a primeira ECU responde, sem esperar o timeout de outras. No modo 01 é testado com o
+ *   `01001`; nos modos 21/22, no primeiro PID espelhado que respondeu. Recusado (`?`, erro, sem
+ *   prompt) = desligado na sessão. Uma requisição de montadora que volte incompleta com o sufixo
+ *   (resposta multi-frame cortada no 1º quadro) é conferida sem ele uma vez e, se for o caso,
+ *   segue sem sufixo só ela.
+ * - **Timing agressivo**: `ATAT2` logo depois do `ATSP0` e, com a ECU achada, `ATST0C` (espera de
+ *   ~49 ms em vez dos 200 ms padrão quando nada responde), validado relendo o primeiro PID que
+ *   respondeu — se a ECU emudecer com ele, volta ao `ATST32`. Comandos de prazo longo (DTCs, VIN,
+ *   limpeza) trocam para o `ATST32` antes e o polling volta ao `ATST0C` depois (como o `ATSH`, só
+ *   quando muda). Clone que responde `?` a qualquer um deles segue no padrão, em silêncio.
+ * - **Sem pausa fixa entre comandos**: o prompt `>` já confirma que o adaptador terminou. Só
+ *   depois de um timeout ou `STOPPED`/`BUFFER FULL` a sessão passa a dar [intervaloSeguroMs] de
+ *   respiro, para clones v2.1 de buffer pequeno.
+ *
  * Demais garantias:
- * - PIDs do modo 01 vão com o sufixo de resposta única (`010C1`): o ELM327 devolve a resposta
- *   assim que a primeira ECU responde, sem esperar o timeout de outras. Ele só é desligado se o
- *   adaptador recusar o sufixo e aceitar o mesmo comando sem ele.
  * - Um [Mutex] serializa os comandos (o ELM327 atende um comando por vez), permitindo
  *   que o polling de PIDs e a leitura de DTCs coexistam sem misturar respostas.
  * - Estabilidade do v2.1: `ATSH` só quando o cabeçalho realmente muda (o ciclo de polling é
- *   ordenado por cabeçalho) e [intervaloEntreComandosMs] de respiro entre comandos, para não
- *   saturar o buffer do adaptador.
- * - Telemetria em duas filas ([EscalonadorPolling]): mostradores em todo ciclo, demais PIDs em rodízio.
+ *   ordenado por cabeçalho).
+ * - Telemetria em duas filas ([EscalonadorPolling]): RPM, MAP/turbo e velocidade em todo ciclo,
+ *   1 PID lento a cada 3 ciclos.
  * - Perfis de montadora (`pids_estendidos.json`) com cabeçalho CAN físico, ativados só em CAN de
  *   11 bits e se a ECU responder; no modo 21/22, só os do mesmo módulo e serviço da camada ativa.
  * - Falhas: `03`/`07`/`0A`/`04` no padrão; no modo 21 `13` (cai para `18 00 FF 00`) e `14`
@@ -83,7 +96,8 @@ import java.io.IOException
  * @param catalogoEstendido perfis de PIDs de montadora (`pids_estendidos.json`).
  * @param registro últimas trocas com o adaptador, para diagnóstico em campo.
  * @param catalogoCascata camadas 2 e 3 da cascata (`cascata_conexao.json`); vazio = só OBD2 padrão.
- * @param intervaloEntreComandosMs respiro mínimo entre o fim de uma resposta e o próximo comando.
+ * @param intervaloEntreComandosMs respiro entre o fim de uma resposta e o próximo comando (0 = nenhum).
+ * @param intervaloSeguroMs respiro adotado pelo resto da sessão depois de um timeout/`STOPPED`.
  */
 @SuppressLint("MissingPermission") // SecurityException é tratada e convertida em EstadoConexaoObd.Erro
 class Elm327BluetoothClient(
@@ -96,6 +110,7 @@ class Elm327BluetoothClient(
     private val registro: RegistroComunicacao = RegistroComunicacao(),
     private val catalogoCascata: CatalogoCascata = CatalogoCascata.VAZIO,
     private val intervaloEntreComandosMs: Long = INTERVALO_ENTRE_COMANDOS_MS,
+    private val intervaloSeguroMs: Long = INTERVALO_SEGURO_MS,
 ) : ObdClient {
 
     private val _estado = MutableStateFlow<EstadoConexaoObd>(EstadoConexaoObd.Desconectado)
@@ -139,9 +154,32 @@ class Elm327BluetoothClient(
     /** Fim da última troca com o adaptador (`System.nanoTime`); 0 = nenhuma nesta sessão. */
     @Volatile private var fimUltimoComandoNs = 0L
 
-    /** O adaptador aceita o sufixo de resposta única (`010C1`)? Detectado na inicialização. */
+    /**
+     * O adaptador aceita o sufixo de resposta única (`010C1`, `210C1`)? Detectado na
+     * inicialização; vale para os PIDs do modo 01 e para as requisições de montadora.
+     */
     @Volatile var usaSufixoRespostaUnica: Boolean = false
         private set
+
+    /** Requisições de montadora que voltaram incompletas com o sufixo e são lidas sem ele. */
+    @Volatile private var requisicoesSemSufixo: Set<RequisicaoEstendida> = emptySet()
+
+    /** Requisições já conferidas sem o sufixo (a conferência acontece uma vez por requisição). */
+    @Volatile private var requisicoesConferidas: Set<RequisicaoEstendida> = emptySet()
+
+    /** O adaptador aceitou o `ATAT2` (reaplicado se ele reiniciar sozinho). */
+    @Volatile var usaTimingAdaptativoAgressivo: Boolean = false
+        private set
+
+    /** Sessão com o `ATST0C` validado: comandos à ECU de prazo normal saem com ele. */
+    @Volatile var usaTimeoutCurto: Boolean = false
+        private set
+
+    /** Valor do `ATST` configurado no adaptador; null = o padrão (`32`, 200 ms). */
+    @Volatile private var timeoutAdaptadorAtivo: String? = null
+
+    /** Respiro atual entre comandos: [intervaloEntreComandosMs], ou [intervaloSeguroMs] depois de um erro. */
+    @Volatile private var respiroMs: Long = intervaloEntreComandosMs
 
     override fun registroComunicacao(): List<EntradaRegistro> = registro.entradas()
 
@@ -217,9 +255,14 @@ class Elm327BluetoothClient(
         }
     }.flowOn(dispatcher)
 
-    override fun lerTelemetria(intervaloMinimoMs: Long, lentosPorCiclo: Int): Flow<DadosObd> = flow {
+    override fun lerTelemetria(
+        intervaloMinimoMs: Long,
+        consumoPorMaf: Boolean,
+        lentosPorVez: Int,
+        ciclosPorLento: Int,
+    ): Flow<DadosObd> = flow {
         val sessao = transporte ?: return@flow
-        val escalonador = EscalonadorPolling(lentosPorCiclo)
+        val escalonador = EscalonadorPolling(lentosPorVez, ciclosPorLento, Pids.candidatosFilaRapida(consumoPorMaf))
         var ciclosSemEcu = 0
         while (_estado.value == EstadoConexaoObd.Conectado && transporte === sessao) {
             val inicioNs = System.nanoTime()
@@ -427,6 +470,7 @@ class Elm327BluetoothClient(
 
         // Camada 1: OBD2 padrão com o protocolo automático.
         enviar("ATSP0")
+        configurarTimingAdaptativo()
         // Daqui em diante o adaptador já está provado (identificado + AT com OK): nenhuma resposta
         // da ECU vira "não é um ELM327".
         val automatica = buscarProtocolo()
@@ -536,6 +580,10 @@ class Elm327BluetoothClient(
     private suspend fun iniciarObd2Padrao(primeiraFaixa: Set<Int>, protocolo: String?, forcado: String?) {
         val suportados = detectarFaixasSeguintes(primeiraFaixa)
         usaSufixoRespostaUnica = testarSufixoRespostaUnica()
+        ativarTimeoutCurto {
+            val comando = COMANDO_BUSCA + if (usaSufixoRespostaUnica) SUFIXO_RESPOSTA_UNICA else ""
+            ObdParser.parsePidsSuportados(enviar(comando), 0x00, comando) is RespostaObd.Ok
+        }
         // Só o que o app sabe interpretar: PIDs do catálogo presentes no bitmask + comandos AT do adaptador.
         val doCatalogo = catalogo.pids.filter { it.ehComandoAt || it.pid in suportados }
         _pidsSuportados.value = doCatalogo.mapTo(linkedSetOf()) { it.comando }
@@ -546,8 +594,7 @@ class Elm327BluetoothClient(
         )
         registro.evento(
             "Conectado em ${InfoConexao.NOME_OBD2_PADRAO}${forcado?.let { " via $it" }.orEmpty()}: " +
-                "${_pidsSuportados.value.size} sensores do catálogo suportados; sufixo de resposta única: " +
-                if (usaSufixoRespostaUnica) "sim" else "não",
+                "${_pidsSuportados.value.size} sensores do catálogo suportados; ${descreverOtimizacoes()}",
         )
     }
 
@@ -623,6 +670,7 @@ class Elm327BluetoothClient(
             if (cabecalho != null) fixarCabecalho(cabecalho, adaptador)
             val (ativos, responderam) = sondarModo(modo, cabecalho)
             if (ativos.isNotEmpty()) {
+                otimizarModoServico(ativos.first(), cabecalho)
                 ativarModoServico(modo, cabecalho, ativos, responderam, protocolo, forcado)
                 return
             }
@@ -728,8 +776,31 @@ class Elm327BluetoothClient(
         registro.evento(
             "Conectado em ${modo.nome} (${protocolo ?: "protocolo não informado"}" +
                 "${cabecalho?.let { ", ATSH $it" }.orEmpty()}): ${ativos.size} sensores responderam — " +
-                ativos.joinToString { "${it.estendida!!.comando} → ${it.chave}" },
+                ativos.joinToString { "${it.estendida!!.comando} → ${it.chave}" } + "; ${descreverOtimizacoes()}",
         )
+    }
+
+    /**
+     * Modo 21/22: sufixo de resposta única testado no [primeiro] PID que respondeu (`210C1`) e o
+     * `ATST0C` validado com a mesma leitura (já com o sufixo, se aceito).
+     */
+    private suspend fun otimizarModoServico(primeiro: DefinicaoPid, cabecalho: String?) {
+        val requisicao = primeiro.estendida!!
+        val comSufixo = requisicao.comando + SUFIXO_RESPOSTA_UNICA
+        usaSufixoRespostaUnica = sondar(comSufixo, cabecalho)
+            ?.let { ObdParser.parsePid(it, primeiro, comSufixo) is RespostaObd.Ok } == true
+        if (!usaSufixoRespostaUnica) registro.evento("$comSufixo sem resposta válida: sufixo de resposta única desligado")
+        ativarTimeoutCurto {
+            val comando = if (usaSufixoRespostaUnica) comSufixo else requisicao.comando
+            sondar(comando, cabecalho)?.let { ObdParser.parsePid(it, primeiro, comando) is RespostaObd.Ok } == true
+        }
+    }
+
+    /** "sufixo de resposta única: sim; ATAT2: sim; ATST 0C: não", para o registro de campo. */
+    private fun descreverOtimizacoes(): String {
+        fun simNao(b: Boolean) = if (b) "sim" else "não"
+        return "sufixo de resposta única: ${simNao(usaSufixoRespostaUnica)}; " +
+            "ATAT2: ${simNao(usaTimingAdaptativoAgressivo)}; ATST 0C: ${simNao(usaTimeoutCurto)}"
     }
 
     // ---------------------------------------------------------------- protocolo ELM327
@@ -816,6 +887,38 @@ class Elm327BluetoothClient(
             null
         }
 
+    /** `ATAT2` (timing adaptativo agressivo); o clone que recusar segue no `ATAT1` padrão, em silêncio. */
+    private suspend fun configurarTimingAdaptativo() {
+        usaTimingAdaptativoAgressivo = aceitaComandoAt(TIMING_ADAPTATIVO_AGRESSIVO)
+        if (!usaTimingAdaptativoAgressivo) {
+            registro.evento("$TIMING_ADAPTATIVO_AGRESSIVO recusado pelo adaptador; mantendo o timing adaptativo padrão")
+        }
+    }
+
+    private suspend fun aceitaComandoAt(comando: String): Boolean = try {
+        "OK" in ObdParser.limparResposta(enviar(comando))
+    } catch (e: ObdTimeoutException) {
+        false
+    }
+
+    /**
+     * Liga o `ATST0C` (o primeiro comando à ECU já sai com ele, por [ajustarTimeoutAdaptador]) e
+     * confere com [validar] que a ECU continua respondendo no prazo curto; se não, volta ao
+     * `ATST32` padrão. `?` ao `ATST0C` desliga sem mais nada.
+     */
+    private suspend fun ativarTimeoutCurto(validar: suspend () -> Boolean) {
+        usaTimeoutCurto = true
+        val respondeu = try {
+            validar()
+        } catch (e: ObdTimeoutException) {
+            false
+        }
+        if (!usaTimeoutCurto || respondeu) return
+        usaTimeoutCurto = false
+        registro.evento("Com ATST $TIMEOUT_ADAPTADOR_CURTO a ECU não respondeu no prazo; voltando ao ATST $TIMEOUT_ADAPTADOR_PADRAO")
+        if (aceitaComandoAt("ATST$TIMEOUT_ADAPTADOR_PADRAO")) timeoutAdaptadorAtivo = null
+    }
+
     /** O ELM327 v1.3+ aceita `01001`; clones antigos respondem `?` (ou nem respondem). */
     private suspend fun testarSufixoRespostaUnica(): Boolean = try {
         ObdParser.parsePidsSuportados(enviar("01001"), 0x00, "01001") is RespostaObd.Ok
@@ -826,6 +929,14 @@ class Elm327BluetoothClient(
     /** Comando efetivamente enviado: PIDs do modo 01 ganham o sufixo `1` quando suportado. */
     private fun comandoDe(definicao: DefinicaoPid): String =
         if (usaSufixoRespostaUnica && definicao.ehModo01) definicao.comando + SUFIXO_RESPOSTA_UNICA else definicao.comando
+
+    /** Requisição de montadora com o sufixo `1` (`210C1`), salvo as que voltaram incompletas com ele. */
+    private fun comandoDe(requisicao: RequisicaoEstendida): String =
+        if (usaSufixoRespostaUnica && requisicao !in requisicoesSemSufixo) {
+            requisicao.comando + SUFIXO_RESPOSTA_UNICA
+        } else {
+            requisicao.comando
+        }
 
     /** Cabeçalho de uma requisição de montadora: no modo 21/22, sempre o da sessão (null fora do CAN 11 bits). */
     private fun cabecalhoDe(requisicao: RequisicaoEstendida): String? =
@@ -878,17 +989,17 @@ class Elm327BluetoothClient(
         suspend fun lerEstendido(requisicao: RequisicaoEstendida, grupo: List<DefinicaoPid>) {
             consultados += grupo.map { it.comando }
             pedidosEcu++
-            val bruto = try {
-                enviar(requisicao.comando, timeoutComandoMs, cabecalhoDe(requisicao), registrar = false)
+            val (bruto, resultados) = try {
+                lerRequisicao(requisicao, grupo)
             } catch (e: ObdTimeoutException) {
                 ultimoErro = "TIMEOUT"
                 verificarTimeouts()
                 return
             }
             var algum = false
-            for (d in grupo) {
-                (ObdParser.parsePid(bruto, d) as? RespostaObd.Ok)?.let {
-                    lidos[d.comando] = it.valor
+            for ((d, r) in resultados) {
+                if (r is RespostaObd.Ok) {
+                    lidos[d.comando] = r.valor
                     algum = true
                 }
             }
@@ -896,6 +1007,37 @@ class Elm327BluetoothClient(
         }
 
         fun ciclo() = Ciclo(consultados, lidos, pedidosEcu > 0 && respostasEcu == 0, ultimoErro)
+    }
+
+    /**
+     * Uma requisição de montadora, decodificada para cada PID do [grupo]. Com o sufixo `1`, uma
+     * resposta incompleta ou recusada (sem erro do ELM327 no meio: `NO DATA` não conta) é
+     * conferida sem o sufixo uma única vez; se assim vierem mais PIDs, a requisição segue sem ele.
+     * Devolve a resposta bruta usada e o resultado de cada PID.
+     */
+    private suspend fun lerRequisicao(
+        requisicao: RequisicaoEstendida,
+        grupo: List<DefinicaoPid>,
+    ): Pair<String, Map<DefinicaoPid, RespostaObd<Double>>> {
+        val comando = comandoDe(requisicao)
+        val cabecalho = cabecalhoDe(requisicao)
+        val bruto = enviar(comando, timeoutComandoMs, cabecalho, registrar = false)
+        val resultados = grupo.associateWith { ObdParser.parsePid(bruto, it, comando) }
+        if (comando == requisicao.comando || requisicao in requisicoesConferidas) return bruto to resultados
+        val erro = ObdParser.erroElm(bruto)
+        val suspeita = (erro == null || erro == "?") &&
+            resultados.values.any { it is RespostaObd.Invalido || it == RespostaObd.ComandoInvalido }
+        if (!suspeita) return bruto to resultados
+
+        requisicoesConferidas = requisicoesConferidas + requisicao
+        val puro = enviar(requisicao.comando, timeoutComandoMs, cabecalho, registrar = false)
+        val semSufixo = grupo.associateWith { ObdParser.parsePid(puro, it, requisicao.comando) }
+        if (semSufixo.values.count { it is RespostaObd.Ok } <= resultados.values.count { it is RespostaObd.Ok }) {
+            return bruto to resultados
+        }
+        requisicoesSemSufixo = requisicoesSemSufixo + requisicao
+        registro.evento("$comando voltou incompleto com o sufixo de resposta única; ${requisicao.comando} segue sem ele")
+        return puro to semSufixo
     }
 
     /** Lê uma vez os [comandos] suportados (`null` = todos), do jeito do polling legado. */
@@ -1043,6 +1185,7 @@ class Elm327BluetoothClient(
     ): String = mutexComandos.withLock {
         val canal = transporte ?: throw ObdException("Scanner não conectado")
         try {
+            if (!comando.startsWith("AT")) ajustarTimeoutAdaptador(canal, folgado = timeoutMs > timeoutComandoMs, registrar)
             if (!comando.startsWith("AT") && cabecalho != cabecalhoAtivo) {
                 val atsh = "ATSH" + (cabecalho ?: RequisicaoEstendida.CABECALHO_FUNCIONAL)
                 val resposta = trocar(canal, atsh, timeoutComandoMs, registrar)
@@ -1057,13 +1200,34 @@ class Elm327BluetoothClient(
             if (!comando.startsWith("ATZ") && !comando.startsWith("ATI") && ObdParser.adaptadorReiniciou(resposta)) {
                 registro.evento("O adaptador reiniciou sozinho (queda de tensão na partida?); reaplicando a configuração")
                 cabecalhoAtivo = null // o reset volta ao cabeçalho funcional
-                for (c in CONFIGURACAO) runCatching { trocar(canal, c, timeoutComandoMs, true) }
+                timeoutAdaptadorAtivo = null // e ao ATST padrão (o próximo comando à ECU reaplica o curto)
+                val reconfiguracao = if (usaTimingAdaptativoAgressivo) CONFIGURACAO + TIMING_ADAPTATIVO_AGRESSIVO else CONFIGURACAO
+                for (c in reconfiguracao) runCatching { trocar(canal, c, timeoutComandoMs, true) }
             }
             resposta
         } catch (e: IOException) {
             if (transporte !== canal) throw ObdException("Scanner desconectado", e)
             perderConexao(canal, "Conexão Bluetooth com o scanner perdida")
             throw ObdException("Conexão com o scanner perdida", e)
+        }
+    }
+
+    /**
+     * Com o [usaTimeoutCurto], deixa o `ATST` do adaptador como o comando pede: `ATST0C` no
+     * polling e nas sondagens, o padrão `ATST32` nos de prazo longo ([folgado]: DTCs, VIN,
+     * limpeza), que podem ter `7F xx 78` (responsePending) antes da resposta. Só envia quando
+     * muda; `?` desliga o timeout curto na sessão (fallback silencioso).
+     */
+    private suspend fun ajustarTimeoutAdaptador(canal: ObdTransport, folgado: Boolean, registrar: Boolean) {
+        if (!usaTimeoutCurto) return
+        val alvo = if (folgado) TIMEOUT_ADAPTADOR_PADRAO else TIMEOUT_ADAPTADOR_CURTO
+        if ((timeoutAdaptadorAtivo ?: TIMEOUT_ADAPTADOR_PADRAO) == alvo) return
+        val resposta = trocar(canal, "ATST$alvo", timeoutComandoMs, registrar)
+        if ("OK" in resposta.uppercase()) {
+            timeoutAdaptadorAtivo = alvo
+        } else {
+            usaTimeoutCurto = false
+            registro.evento("ATST $alvo recusado pelo adaptador; mantendo o timeout padrão")
         }
     }
 
@@ -1077,6 +1241,7 @@ class Elm327BluetoothClient(
         } catch (e: ObdTimeoutException) {
             timeoutsSeguidos++
             registro.comando(comando, null, duracao(), "TIMEOUT: ${e.message}")
+            ativarRespiroSeguro("timeout no $comando")
             throw e
         } catch (e: IOException) {
             registro.comando(comando, null, duracao(), "LINK PERDIDO: ${e.message}")
@@ -1085,19 +1250,33 @@ class Elm327BluetoothClient(
             fimUltimoComandoNs = System.nanoTime()
         }
         timeoutsSeguidos = 0
-        if (registrar || ObdParser.erroElm(resposta) != null) registro.comando(comando, resposta, duracao())
+        val erro = ObdParser.erroElm(resposta)
+        if (registrar || erro != null) registro.comando(comando, resposta, duracao())
+        if (erro == "STOPPED" || erro == "BUFFER FULL") ativarRespiroSeguro("$erro no $comando")
         return resposta
     }
 
     /**
-     * O ELM327 v2.1 (clone) tem buffer pequeno: um comando colado no prompt do anterior às vezes
-     * é descartado ou vira `STOPPED`/timeout. Garante [intervaloEntreComandosMs] desde a última resposta.
+     * Garante [respiroMs] desde a última resposta. Normalmente zero (o prompt `>` já confirma que o
+     * adaptador terminou); depois de um erro, [intervaloSeguroMs] — ver [ativarRespiroSeguro].
      */
     private suspend fun aguardarEspacamento() {
         val fim = fimUltimoComandoNs
-        if (intervaloEntreComandosMs <= 0 || fim == 0L) return
+        val respiro = respiroMs
+        if (respiro <= 0 || fim == 0L) return
         val decorridoMs = (System.nanoTime() - fim) / 1_000_000
-        if (decorridoMs < intervaloEntreComandosMs) delay(intervaloEntreComandosMs - decorridoMs)
+        if (decorridoMs < respiro) delay(respiro - decorridoMs)
+    }
+
+    /**
+     * O ELM327 v2.1 (clone) tem buffer pequeno: um comando colado no prompt do anterior às vezes
+     * é descartado ou vira `STOPPED`/timeout. No primeiro sinal disso, a sessão passa a dar
+     * [intervaloSeguroMs] de respiro entre comandos.
+     */
+    private fun ativarRespiroSeguro(motivo: String) {
+        if (respiroMs >= intervaloSeguroMs) return
+        respiroMs = intervaloSeguroMs
+        registro.evento("Respiro de $intervaloSeguroMs ms entre comandos ativado ($motivo)")
     }
 
     // ---------------------------------------------------------------- auxiliares
@@ -1159,6 +1338,12 @@ class Elm327BluetoothClient(
         modoServico = null
         cabecalhoServico = null
         usaSufixoRespostaUnica = false
+        requisicoesSemSufixo = emptySet()
+        requisicoesConferidas = emptySet()
+        usaTimingAdaptativoAgressivo = false
+        usaTimeoutCurto = false
+        timeoutAdaptadorAtivo = null
+        respiroMs = intervaloEntreComandosMs
         timeoutsSeguidos = 0
         fimUltimoComandoNs = 0L
     }
@@ -1199,8 +1384,20 @@ class Elm327BluetoothClient(
         /** Respiro mínimo entre ciclos, para comandos de DTC/VIN conseguirem o mutex. */
         private const val INTERVALO_MINIMO_ENTRE_CICLOS_MS = 10L
 
-        /** Respiro entre comandos para o buffer do ELM327 v2.1 (clones travam com comandos colados). */
-        const val INTERVALO_ENTRE_COMANDOS_MS = 30L
+        /** Sem pausa fixa entre comandos: o prompt `>` já confirma que o adaptador terminou. */
+        const val INTERVALO_ENTRE_COMANDOS_MS = 0L
+
+        /** Respiro depois de um timeout/`STOPPED`, para o buffer pequeno do ELM327 v2.1 (clone). */
+        const val INTERVALO_SEGURO_MS = 15L
+
+        /** Timing adaptativo agressivo do ELM327 (o padrão é `ATAT1`). */
+        const val TIMING_ADAPTATIVO_AGRESSIVO = "ATAT2"
+
+        /** `ATST0C`: 12 × 4,096 ms ≈ 49 ms de espera pela ECU. */
+        const val TIMEOUT_ADAPTADOR_CURTO = "0C"
+
+        /** `ATST32`: o padrão do ELM327, 50 × 4,096 ms ≈ 200 ms. */
+        const val TIMEOUT_ADAPTADOR_PADRAO = "32"
         private const val TIMEOUT_RESET_MS = 5_000L
 
         /**

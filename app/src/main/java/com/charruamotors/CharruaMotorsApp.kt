@@ -9,6 +9,7 @@ import com.charruamotors.data.repository.ManutencaoRepository
 import com.charruamotors.data.repository.UsuarioRepository
 import com.charruamotors.data.repository.VeiculoRepository
 import com.charruamotors.data.session.SessaoManager
+import com.charruamotors.direcao.hud.TelemetriaCompartilhada
 import com.charruamotors.obd.Elm327BluetoothClient
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
@@ -87,6 +88,12 @@ class CharruaMotorsApp : Application() {
             CatalogoDtc.deJson(assets.open(CatalogoDtc.ARQUIVO_PADRAO).bufferedReader().use { it.readText() })
         }.getOrElse { CatalogoDtc.VAZIO }
     }
+
+    /**
+     * Ponte da telemetria ao vivo entre a aba OBD2 e o HUD flutuante sobre o Waze (e o sinal de
+     * HUD ativo, que mantém o polling com o app minimizado).
+     */
+    val telemetriaCompartilhada = TelemetriaCompartilhada()
 
     /** Salva os logs CSV do Data Logger em Downloads. */
     val exportadorCsv: ExportadorCsv by lazy { ExportadorCsv(this) }

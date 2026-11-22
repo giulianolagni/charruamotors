@@ -311,4 +311,42 @@ Toque em “Novo abastecimento” para começar.</string>
     <string name="erro_km_menor_que_ultimo">A km não pode ser menor que a do último registro</string>
     <string name="erro_maior_que_zero">O valor deve ser maior que zero</string>
     <string name="erro_litros_acima_do_tanque">Os litros excedem a capacidade do tanque</string>
+
+    <!-- Card de direção: mini-player (Spotify / YouTube Music) e atalhos do Waze -->
+    <string name="direcao_titulo">Direção</string>
+    <string name="midia_servico_nome">Controle de música do Charrua OBD Pro</string>
+    <string name="midia_ativar">Ativar controle de música</string>
+    <string name="midia_ativar_dica">Libere o Charrua OBD Pro em “Acesso a notificações”. Se o Android bloquear (configuração restrita), abra Informações do app › ⋮ › Permitir configurações restritas.</string>
+    <string name="midia_sem_player">Nenhuma música tocando. Abra o Spotify ou o YouTube Music.</string>
+    <string name="midia_capa">Capa do álbum — toque para abrir o player</string>
+    <string name="midia_anterior">Faixa anterior</string>
+    <string name="midia_tocar">Tocar</string>
+    <string name="midia_pausar">Pausar</string>
+    <string name="midia_proxima">Próxima faixa</string>
+    <string name="midia_erro_abrir">Não foi possível abrir o player</string>
+    <string name="waze_abrir">Waze</string>
+    <string name="waze_posto">Posto</string>
+    <string name="waze_oficina">Oficina</string>
+    <string name="waze_erro">Não foi possível abrir o Waze nem a Play Store</string>
+
+    <!-- Modo HUD flutuante sobre o Waze -->
+    <string name="hud_ativar">Modo HUD (sobre Waze)</string>
+    <string name="hud_desativar">Fechar HUD</string>
+    <string name="hud_permissao_overlay">Permita “Aparecer sobre outros apps” para o HUD flutuar sobre o Waze</string>
+    <string name="hud_permissao_bluetooth">O HUD precisa da permissão de Bluetooth (dispositivos próximos) para rodar em segundo plano</string>
+    <string name="hud_canal_nome">HUD flutuante</string>
+    <string name="hud_canal_descricao">Mantém o scanner OBD2 lendo enquanto o HUD está sobre o Waze</string>
+    <string name="hud_notificacao_titulo">HUD OBD2 ativo</string>
+    <string name="hud_notificacao_texto">Telemetria ao vivo sobre o Waze. Toque para voltar ao app.</string>
+    <string name="hud_fechar">Fechar HUD</string>
+    <string name="hud_abrir_waze">Abrir o Waze</string>
+    <string name="hud_voltar_app">Fechar o HUD e voltar ao Charrua OBD Pro</string>
+    <string name="hud_status_ao_vivo">● OBD AO VIVO</string>
+    <string name="hud_status_desconectado">○ SEM CONEXÃO OBD</string>
+    <string name="hud_status_alerta">▲ MOTOR QUENTE</string>
+    <string name="hud_rotulo_rpm">RPM</string>
+    <string name="hud_rotulo_map">TURBO/MAP kPa</string>
+    <string name="hud_rotulo_temperatura">MOTOR °C</string>
+    <string name="hud_rotulo_rail">RAIL bar</string>
+    <string name="hud_rotulo_tensao">BATERIA V</string>
 </resources>

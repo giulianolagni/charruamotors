@@ -14,4 +14,11 @@
     <color name="dtc_confirmado">#B3261E</color>
     <color name="dtc_pendente">#B26A00</color>
     <color name="dtc_permanente">#6A1B9A</color>
+
+    <!-- HUD flutuante sobre o Waze: alto contraste para leitura rápida dirigindo -->
+    <color name="hud_fundo">#D90B0F14</color>
+    <color name="hud_borda">#33FFFFFF</color>
+    <color name="hud_alerta">#F2C62828</color>
+    <color name="hud_valor">#FFFFFF</color>
+    <color name="hud_rotulo">#B0BEC5</color>
 </resources>

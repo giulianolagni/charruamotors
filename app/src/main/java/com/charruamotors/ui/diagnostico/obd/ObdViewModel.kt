@@ -19,6 +19,7 @@ import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.model.LeituraObd
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.Veiculo
+import com.charruamotors.direcao.hud.TelemetriaCompartilhada
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.DispositivoObd
 import com.charruamotors.obd.DtcLido
@@ -86,6 +87,8 @@ sealed interface EventoObd {
  * @param veiculo veículo do diagnóstico: marca (tabela de DTCs e perfil de PIDs da montadora),
  *   modelo (cilindrada) e combustível (computador de bordo)
  * @param salvarCsv grava um arquivo (nome + escrita em streaming) e devolve onde ficou
+ * @param telemetriaCompartilhada recebe a telemetria ao vivo para o HUD flutuante; enquanto o HUD
+ *   estiver ativo, o polling continua com a tela em segundo plano (app minimizado sob o Waze)
  */
 @OptIn(ExperimentalCoroutinesApi::class) // flatMapLatest
 class ObdViewModel(
@@ -99,6 +102,7 @@ class ObdViewModel(
     private val veiculo: suspend () -> Veiculo?,
     private val salvarCsv: suspend (String, (Writer) -> Unit) -> ArquivoExportado,
     private val relogio: () -> Long = System::currentTimeMillis,
+    private val telemetriaCompartilhada: TelemetriaCompartilhada = TelemetriaCompartilhada(),
 ) : ViewModel() {
 
     private val _modo = MutableStateFlow(modoInicial)
@@ -236,6 +240,9 @@ class ObdViewModel(
     /** A tela está visível (entre onStart/onResume e onPause/onStop do Fragment)? */
     private var telaVisivel = false
 
+    /** HUD flutuante na tela: a telemetria segue mesmo com o app minimizado. */
+    private var hudAtivo = telemetriaCompartilhada.hudAtivo.value
+
     init {
         // Reage às mudanças de estado: inicia o polling ao conectar e o encerra ao perder a conexão.
         viewModelScope.launch {
@@ -266,6 +273,17 @@ class ObdViewModel(
             marca = v?.marca
             parametrosMotor = ParametrosMotor.deVeiculo(v?.modelo, v?.tipoCombustivel)
             _computador.value = _computador.value.copy(motor = parametrosMotor)
+        }
+        // HUD flutuante: recebe cada instantâneo e, enquanto estiver aberto, mantém o polling vivo.
+        viewModelScope.launch {
+            combine(estado, _dados) { e, d -> (e is EstadoConexaoObd.Conectado) to d }
+                .collect { (conectado, d) -> telemetriaCompartilhada.publicar(d, conectado) }
+        }
+        viewModelScope.launch {
+            telemetriaCompartilhada.hudAtivo.collect {
+                hudAtivo = it
+                atualizarPolling()
+            }
         }
         carregarDispositivos()
     }
@@ -396,7 +414,7 @@ class ObdViewModel(
     }
 
     private fun atualizarPolling() {
-        val deveRodar = telaVisivel && estado.value is EstadoConexaoObd.Conectado
+        val deveRodar = devePollar(telaVisivel, hudAtivo, estado.value is EstadoConexaoObd.Conectado)
         if (!deveRodar) {
             pollingJob?.cancel()
             pollingJob = null
@@ -607,6 +625,7 @@ class ObdViewModel(
     override fun onCleared() {
         val clienteAtual = cliente
         val sessao = logger.parar()?.takeUnless { it.vazia }
+        telemetriaCompartilhada.publicar(null, conectado = false)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             sessao?.let { runCatching { exportar(it) } }
             clienteAtual.desconectar()
@@ -622,6 +641,13 @@ class ObdViewModel(
             "obd|elm|v-?link|vgate|icar|konnwei|veepeak|obdlink|carista|viecar|scan",
             RegexOption.IGNORE_CASE,
         )
+
+        /**
+         * O polling roda conectado e com a aba visível — ou com o HUD flutuante aberto, quando a
+         * Activity fica em segundo plano sob o Waze (o serviço em primeiro plano segura o processo).
+         */
+        fun devePollar(telaVisivel: Boolean, hudAtivo: Boolean, conectado: Boolean): Boolean =
+            conectado && (telaVisivel || hudAtivo)
 
         fun pareceScannerObd(dispositivo: DispositivoObd): Boolean = regexNomeScanner.containsMatchIn(dispositivo.nome)
 
@@ -649,6 +675,7 @@ class ObdViewModel(
                     catalogoDtc = app.catalogoDtc,
                     veiculo = { app.veiculoRepository.buscarPorId(veiculoId) },
                     salvarCsv = { nome, escrever -> app.exportadorCsv.salvar(nome, escrever) },
+                    telemetriaCompartilhada = app.telemetriaCompartilhada,
                 )
             }
         }

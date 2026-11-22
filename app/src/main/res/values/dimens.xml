@@ -10,4 +10,10 @@
     <dimen name="altura_item_sensor">96dp</dimen>
     <dimen name="altura_valor_sensor">36dp</dimen>
     <dimen name="altura_grafico">200dp</dimen>
+
+    <!-- Card de direção (mini-player) e HUD flutuante -->
+    <dimen name="tamanho_capa_midia">48dp</dimen>
+    <dimen name="botao_midia">44dp</dimen>
+    <dimen name="largura_hud">232dp</dimen>
+    <dimen name="botao_hud">40dp</dimen>
 </resources>

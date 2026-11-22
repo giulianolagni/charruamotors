@@ -1,11 +1,13 @@
 package com.charruamotors.ui.diagnostico.obd
 
+import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -16,7 +18,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ArrayAdapter
+import android.widget.ImageView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -24,9 +28,16 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.databinding.DialogRegistroComunicacaoBinding
 import com.charruamotors.databinding.FragmentObdBinding
+import com.charruamotors.direcao.hud.HudFlutuanteService
+import com.charruamotors.direcao.hud.TelemetriaCompartilhada
+import com.charruamotors.direcao.midia.ControladorMidia
+import com.charruamotors.direcao.midia.EstadoMidia
+import com.charruamotors.direcao.waze.AbridorWaze
+import com.charruamotors.direcao.waze.AcaoWaze
 import com.charruamotors.domain.calculo.EstadoCronometro
 import com.charruamotors.domain.calculo.MetodoConsumo
 import com.charruamotors.domain.model.TipoCombustivel
@@ -54,7 +65,8 @@ import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 
 /**
- * Aba 1 — Scanner OBD2: conexão, painel de telemetria (mostradores, gráfico ao vivo, computador
+ * Aba 1 — Scanner OBD2: card de direção (mini-player do Spotify/YouTube Music, atalhos do Waze e
+ * Modo HUD flutuante), conexão, painel de telemetria (mostradores, gráfico ao vivo, computador
  * de bordo, cronômetro 0–100 km/h e grade de todos os PIDs suportados, inclusive os da
  * montadora), Data Logger CSV e diagnóstico completo (VIN, falhas por categoria, Freeze Frame).
  */
@@ -74,6 +86,30 @@ class ObdFragment : Fragment() {
 
     /** A aba está em primeiro plano (entre onResume e onPause)? */
     private var emPrimeiroPlano = false
+
+    /** Mini-player (sessões de mídia do Android); criado com a view, ligado entre onStart e onStop. */
+    private var controladorMidia: ControladorMidia? = null
+
+    private val telemetriaHud: TelemetriaCompartilhada
+        get() = (requireActivity().application as CharruaMotorsApp).telemetriaCompartilhada
+
+    /** A permissão de notificação (opcional, só para ver o "Fechar HUD" na gaveta) já foi pedida? */
+    private var notificacaoPerguntada = false
+
+    // Modo HUD: "Aparecer sobre outros apps" → Bluetooth (pré-requisito do serviço connectedDevice
+    // no Android 14+) → notificação (opcional). Cada retorno continua a sequência em ativarHud().
+    private val pedirSobreposicao =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            if (Settings.canDrawOverlays(requireContext())) ativarHud() else mostrarMensagem(getString(R.string.hud_permissao_overlay))
+        }
+
+    private val pedirBluetoothHud =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            if (PermissoesBluetooth.concedidas(requireContext())) ativarHud() else mostrarMensagem(getString(R.string.hud_permissao_bluetooth))
+        }
+
+    private val pedirNotificacao =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { ativarHud() }
 
     private val pedirPermissoes =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { resultado ->
@@ -112,7 +148,9 @@ class ObdFragment : Fragment() {
         // A grade muda a cada ciclo de polling: sem animação de "change" para não piscar.
         binding.listaSensores.itemAnimator = null
         binding.listaHistoricoLeituras.adapter = adapterHistorico
+        controladorMidia = ControladorMidia(requireContext())
         configurarAcoes()
+        configurarDirecao()
         observarViewModel()
     }
 
@@ -141,6 +179,89 @@ class ObdFragment : Fragment() {
         botaoLerCodigos.setOnClickListener { viewModel.lerCodigos() }
         botaoLimparCodigos.setOnClickListener { confirmarLimpezaCodigos() }
         botaoRegistroComunicacao.setOnClickListener { mostrarRegistroComunicacao() }
+    }
+
+    // ------------------------------------------------------------------ direção: música, Waze e HUD
+
+    private fun configurarDirecao() = with(binding) {
+        botaoMidiaAnterior.setOnClickListener { controladorMidia?.anterior() }
+        botaoMidiaTocar.setOnClickListener { controladorMidia?.tocarPausar() }
+        botaoMidiaProxima.setOnClickListener { controladorMidia?.proxima() }
+        areaAbrirPlayer.setOnClickListener {
+            if (controladorMidia?.abrirPlayer() != true) mostrarMensagem(getString(R.string.midia_erro_abrir))
+        }
+        botaoAtivarMidia.setOnClickListener { abrirAcessoNotificacoes() }
+        botaoWazeAbrir.setOnClickListener { abrirWaze(AcaoWaze.ABRIR) }
+        botaoWazePosto.setOnClickListener { abrirWaze(AcaoWaze.POSTO) }
+        botaoWazeOficina.setOnClickListener { abrirWaze(AcaoWaze.OFICINA) }
+        botaoHud.setOnClickListener {
+            if (telemetriaHud.hudAtivo.value) HudFlutuanteService.parar(requireContext()) else ativarHud()
+        }
+    }
+
+    private fun abrirWaze(acao: AcaoWaze) {
+        if (!AbridorWaze.abrir(requireContext(), acao)) mostrarMensagem(getString(R.string.waze_erro))
+    }
+
+    /** Tela do "Acesso a notificações"; se o aparelho não a tiver, as informações do app. */
+    private fun abrirAcessoNotificacoes() {
+        val abriu = runCatching { startActivity(ControladorMidia.intentPermissao()) }.isSuccess
+        if (!abriu) {
+            val detalhes = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.fromParts("package", requireContext().packageName, null))
+            runCatching { startActivity(detalhes) }
+        }
+    }
+
+    /**
+     * "Modo HUD (sobre Waze)": garante as permissões, sobe o painel flutuante e vai para o Waze.
+     * O app fica minimizado com a conexão OBD2 e o polling rodando (ver [ObdViewModel.devePollar]).
+     */
+    private fun ativarHud() {
+        val contexto = requireContext()
+        when {
+            !Settings.canDrawOverlays(contexto) -> {
+                val tela = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + contexto.packageName))
+                runCatching { pedirSobreposicao.launch(tela) }
+                    .onFailure { mostrarMensagem(getString(R.string.hud_permissao_overlay)) }
+            }
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && !PermissoesBluetooth.concedidas(contexto) ->
+                pedirBluetoothHud.launch(PermissoesBluetooth.necessarias())
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificacaoPerguntada &&
+                ContextCompat.checkSelfPermission(contexto, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED -> {
+                notificacaoPerguntada = true
+                pedirNotificacao.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            else -> {
+                HudFlutuanteService.iniciar(contexto)
+                abrirWaze(AcaoWaze.ABRIR)
+            }
+        }
+    }
+
+    private fun mostrarMidia(estado: EstadoMidia) = with(binding) {
+        grupoMidia.isVisible = estado is EstadoMidia.Ativo
+        textoMidiaVazio.isVisible = estado is EstadoMidia.SemPlayer
+        grupoMidiaPermissao.isVisible = estado is EstadoMidia.SemPermissao
+        if (estado !is EstadoMidia.Ativo) return@with
+        textoTituloMidia.definirTexto(estado.tituloExibicao)
+        textoArtistaMidia.definirTexto(estado.subtituloExibicao)
+        textoArtistaMidia.isVisible = estado.subtituloExibicao.isNotEmpty()
+        val capa = estado.capa
+        if (capa != null) {
+            imagemCapaMidia.scaleType = ImageView.ScaleType.CENTER_CROP
+            imagemCapaMidia.setImageBitmap(capa)
+        } else {
+            imagemCapaMidia.scaleType = ImageView.ScaleType.CENTER_INSIDE
+            imagemCapaMidia.setImageResource(R.drawable.ic_musica)
+        }
+        botaoMidiaTocar.setImageResource(if (estado.tocando) R.drawable.ic_pausar else R.drawable.ic_tocar)
+        botaoMidiaTocar.contentDescription = getString(if (estado.tocando) R.string.midia_pausar else R.string.midia_tocar)
+    }
+
+    private fun mostrarHud(ativo: Boolean) = with(binding) {
+        botaoHud.definirTexto(getString(if (ativo) R.string.hud_desativar else R.string.hud_ativar))
+        botaoHud.setIconResource(if (ativo) R.drawable.ic_fechar else R.drawable.ic_hud)
     }
 
     /**
@@ -264,6 +385,8 @@ class ObdFragment : Fragment() {
                 launch { viewModel.ocupado.collect { atualizarBotoes() } }
                 launch { viewModel.manterTelaAcesa.collect { aplicarTelaAcesa() } }
                 launch { viewModel.historicoLeituras.collect { mostrarHistorico(it) } }
+                controladorMidia?.let { midia -> launch { midia.estado.collect { mostrarMidia(it) } } }
+                launch { telemetriaHud.hudAtivo.collect { mostrarHud(it) } }
                 launch {
                     viewModel.simularFalha.collect { ativa ->
                         if (binding.switchSimularFalha.isChecked != ativa) binding.switchSimularFalha.isChecked = ativa
@@ -573,6 +696,8 @@ class ObdFragment : Fragment() {
         super.onStart()
         Log.d(TAG, "onStart: retoma o polling de PIDs")
         viewModel.retomarPolling()
+        // Também relê a permissão: o usuário pode ter voltado agora da tela do Acesso a notificações.
+        controladorMidia?.iniciar()
     }
 
     override fun onResume() {
@@ -590,13 +715,16 @@ class ObdFragment : Fragment() {
     }
 
     override fun onStop() {
-        Log.d(TAG, "onStop: pausa o polling de PIDs")
+        Log.d(TAG, "onStop: pausa o polling de PIDs (segue se o HUD flutuante estiver aberto)")
         viewModel.pausarPolling()
+        controladorMidia?.parar()
         super.onStop()
     }
 
     override fun onDestroyView() {
         Log.d(TAG, "onDestroyView: libera o binding")
+        controladorMidia?.parar()
+        controladorMidia = null
         _binding = null
         super.onDestroyView()
     }

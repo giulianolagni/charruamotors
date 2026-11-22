@@ -13,6 +13,199 @@
         android:orientation="vertical"
         android:padding="@dimen/margem_tela">
 
+        <!-- Direção: mini-player (Spotify / YouTube Music), atalhos do Waze e Modo HUD -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_direcao"
+            style="@style/Widget.Material3.CardView.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="@dimen/espaco_medio"
+            app:cardCornerRadius="@dimen/raio_card">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="@dimen/espaco_medio"
+                android:paddingTop="@dimen/espaco_pequeno"
+                android:paddingEnd="@dimen/espaco_pequeno"
+                android:paddingBottom="@dimen/espaco_pequeno">
+
+                <!-- Mini-player: só aparece com um player ativo -->
+                <LinearLayout
+                    android:id="@+id/grupo_midia"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <LinearLayout
+                        android:id="@+id/area_abrir_player"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="?attr/selectableItemBackground"
+                        android:contentDescription="@string/midia_capa"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:id="@+id/imagem_capa_midia"
+                            android:layout_width="@dimen/tamanho_capa_midia"
+                            android:layout_height="@dimen/tamanho_capa_midia"
+                            android:background="@drawable/fundo_capa_midia"
+                            android:importantForAccessibility="no"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/ic_musica" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/espaco_pequeno"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/texto_titulo_midia"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:maxLines="1"
+                                android:textAppearance="?attr/textAppearanceTitleSmall"
+                                tools:text="Nome da faixa" />
+
+                            <TextView
+                                android:id="@+id/texto_artista_midia"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:maxLines="1"
+                                android:textAppearance="?attr/textAppearanceBodySmall"
+                                android:textColor="@color/texto_secundario"
+                                tools:text="Artista · Spotify" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <ImageButton
+                        android:id="@+id/botao_midia_anterior"
+                        android:layout_width="@dimen/botao_midia"
+                        android:layout_height="@dimen/botao_midia"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/midia_anterior"
+                        android:src="@drawable/ic_anterior" />
+
+                    <ImageButton
+                        android:id="@+id/botao_midia_tocar"
+                        android:layout_width="@dimen/botao_midia"
+                        android:layout_height="@dimen/botao_midia"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/midia_tocar"
+                        android:src="@drawable/ic_tocar" />
+
+                    <ImageButton
+                        android:id="@+id/botao_midia_proxima"
+                        android:layout_width="@dimen/botao_midia"
+                        android:layout_height="@dimen/botao_midia"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/midia_proxima"
+                        android:src="@drawable/ic_proxima" />
+                </LinearLayout>
+
+                <!-- Sem player ativo -->
+                <TextView
+                    android:id="@+id/texto_midia_vazio"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="@dimen/espaco_minimo"
+                    android:paddingBottom="@dimen/espaco_minimo"
+                    android:text="@string/midia_sem_player"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="@color/texto_secundario"
+                    android:visibility="gone" />
+
+                <!-- Sem Acesso a Notificações: atalho discreto (não bloqueia o scanner) -->
+                <LinearLayout
+                    android:id="@+id/grupo_midia_permissao"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/botao_ativar_midia"
+                        style="@style/Widget.Material3.Button.TextButton.Icon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/midia_ativar"
+                        app:icon="@drawable/ic_musica" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="@dimen/espaco_pequeno"
+                        android:text="@string/midia_ativar_dica"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textColor="@color/texto_secundario" />
+                </LinearLayout>
+
+                <!-- Atalhos do Waze -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:layout_marginEnd="@dimen/espaco_pequeno"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/botao_waze_abrir"
+                        style="@style/Widget.Material3.Button.TonalButton.Icon"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="@dimen/espaco_minimo"
+                        android:layout_weight="1"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:text="@string/waze_abrir"
+                        app:icon="@drawable/ic_navegacao" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/botao_waze_posto"
+                        style="@style/Widget.Material3.Button.TonalButton.Icon"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="@dimen/espaco_minimo"
+                        android:layout_weight="1"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:text="@string/waze_posto"
+                        app:icon="@drawable/ic_posto" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/botao_waze_oficina"
+                        style="@style/Widget.Material3.Button.TonalButton.Icon"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:text="@string/waze_oficina"
+                        app:icon="@drawable/ic_oficina" />
+                </LinearLayout>
+
+                <!-- Modo HUD: painel flutuante com a telemetria sobre o Waze -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_hud"
+                    style="@style/Widget.Material3.Button.Icon"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/espaco_pequeno"
+                    android:text="@string/hud_ativar"
+                    app:icon="@drawable/ic_hud" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- Scanner: modo, dispositivo, conexão e Data Logger -->
         <com.google.android.material.card.MaterialCardView
             style="@style/Widget.Material3.CardView.Filled"

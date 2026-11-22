@@ -14,10 +14,31 @@
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
 
+    <!-- Modo HUD: janela flutuante sobre o Waze, em serviço de primeiro plano ligado ao scanner
+         Bluetooth (tipo connectedDevice, exigido a partir do Android 14). -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Bluetooth opcional: o app também roda no emulador usando o scanner simulado. -->
     <uses-feature
         android:name="android.hardware.bluetooth"
         android:required="false" />
+
+    <!-- Visibilidade de pacotes (Android 11+): abrir o player de música ativo e o Waze pelo ícone
+         do app, e saber se o Waze está instalado (senão, Play Store). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="waze" />
+        </intent>
+        <package android:name="com.waze" />
+    </queries>
 
     <application
         android:name=".CharruaMotorsApp"
@@ -59,6 +80,24 @@
             android:exported="false"
             android:parentActivityName=".ui.dashboard.DashboardActivity"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- Mini-player: o Acesso a Notificações libera a leitura das sessões de mídia
+             (Spotify, YouTube Music...). Nenhuma notificação é lida. -->
+        <service
+            android:name=".direcao.midia.MidiaNotificacaoService"
+            android:exported="true"
+            android:label="@string/midia_servico_nome"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- HUD flutuante sobre o Waze: mantém a conexão OBD2 e o polling com o app minimizado. -->
+        <service
+            android:name=".direcao.hud.HudFlutuanteService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
         <!-- Compartilhamento dos logs CSV salvos na pasta do app (Android 8/9). -->
         <provider

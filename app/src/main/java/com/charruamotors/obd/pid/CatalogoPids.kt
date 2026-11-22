@@ -173,6 +173,7 @@ object Pids {
     const val TEMPERATURA_AR_ADMISSAO = "010F"
     const val MAF = "0110"
     const val BORBOLETA = "0111"
+    const val PRESSAO_RAIL = "0123"
     const val LAMBDA_COMANDADO = "0144"
     const val PERCENTUAL_ETANOL = "0152"
     const val CONSUMO_ECU = "015E"

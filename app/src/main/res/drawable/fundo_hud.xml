@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fundo do HUD flutuante: escuro e semitransparente, para ler de relance sobre o mapa do Waze. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/hud_fundo" />
+    <corners android:radius="16dp" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/hud_borda" />
+</shape>

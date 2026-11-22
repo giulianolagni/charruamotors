@@ -23,4 +23,25 @@
     <style name="Widget.CharruaMotors.TextInput" parent="Widget.Material3.TextInputLayout.OutlinedBox">
         <item name="android:layout_marginTop">@dimen/espaco_pequeno</item>
     </style>
+
+    <!-- HUD flutuante: números grandes, brancos e com algarismos de largura fixa (não "dançam"). -->
+    <style name="HudValor">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/hud_valor</item>
+        <item name="android:textSize">30sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="HudRotulo">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/hud_rotulo</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
 </resources>

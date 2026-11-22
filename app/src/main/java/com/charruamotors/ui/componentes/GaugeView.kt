@@ -8,7 +8,7 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.View
-import android.view.animation.DecelerateInterpolator
+import android.view.animation.LinearInterpolator
 import androidx.core.content.withStyledAttributes
 import androidx.core.graphics.ColorUtils
 import com.charruamotors.R
@@ -127,7 +127,7 @@ class GaugeView @JvmOverloads constructor(
         atualizarDescricao()
     }
 
-    /** Atualiza o valor; o ponteiro desliza até ele (≈ intervalo de polling). */
+    /** Atualiza o valor; o ponteiro desliza até ele em [DURACAO_ANIMACAO_MS]. */
     fun definirValor(novo: Double?, animar: Boolean = true) {
         val v = novo?.toFloat()?.takeIf { it.isFinite() }
         valor = v
@@ -141,7 +141,7 @@ class GaugeView @JvmOverloads constructor(
         }
         animador = ValueAnimator.ofFloat(valorPonteiro, alvo).apply {
             duration = DURACAO_ANIMACAO_MS
-            interpolator = DecelerateInterpolator()
+            interpolator = INTERPOLADOR
             addUpdateListener {
                 valorPonteiro = it.animatedValue as Float
                 invalidate()
@@ -274,7 +274,12 @@ class GaugeView @JvmOverloads constructor(
     }
 
     companion object {
-        private const val DURACAO_ANIMACAO_MS = 240L // ≈ ciclo da fila rápida (250 ms)
+        /**
+         * Curta e linear: a agulha chega ao valor lido bem antes da próxima leitura da fila rápida
+         * (~100–200 ms no ELM327), sem o "arrasto" de uma desaceleração longa.
+         */
+        private const val DURACAO_ANIMACAO_MS = 90L
+        private val INTERPOLADOR = LinearInterpolator()
         private const val TAMANHO_PADRAO_DP = 160
         private val LOCALE_BR = java.util.Locale.forLanguageTag("pt-BR")
     }

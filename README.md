@@ -23,6 +23,7 @@ Disciplina: Desenvolvimento Mobile II. Professor: Jaqson.
 - [Prints das telas](#prints-das-telas)
 - [Funcionalidades](#funcionalidades)
 - [Diferencial: integração OBD2](#diferencial-integração-obd2)
+- [Direção: Spotify, Waze e Modo HUD (v1.1)](#direção-spotify-waze-e-modo-hud-v11)
 - [Regras de negócio e cálculos](#regras-de-negócio-e-cálculos)
 - [Arquitetura e stack](#arquitetura-e-stack)
 - [Como executar](#como-executar)
@@ -140,9 +141,34 @@ O modo é escolhido na própria aba OBD2. O padrão inicial fica em `CharruaMoto
 ### Ciclo de vida da conexão
 
 - O polling de PIDs só roda com a aba visível: começa em `onStart`/`onResume` e pausa em `onPause`/`onStop`.
+  A exceção é o Modo HUD: com o painel flutuante aberto, o polling continua com o app minimizado (ver abaixo).
 - O `ObdViewModel` mantém a conexão durante a rotação de tela.
 - O socket é fechado em `onCleared()`, quando a tela é encerrada de vez.
 - O estado da conexão é exposto como `StateFlow<EstadoConexaoObd>`: `Desconectado`, `Conectando`, `Conectado` ou `Erro(mensagem)`.
+
+---
+
+## Direção: Spotify, Waze e Modo HUD (v1.1)
+
+Card **Direção** no topo da aba OBD2 (pacote `direcao/`):
+
+- **Mini-player nativo** (`ControladorMidia` + `MidiaNotificacaoService`): acha o app de música ativo via
+  `MediaSessionManager` (Spotify tocando tem prioridade, depois qualquer player tocando, depois o Spotify
+  pausado) e mostra capa, faixa e artista com os botões Anterior, Play/Pause e Próxima. Tocar na capa ou no
+  título abre o player. Sem o **Acesso a notificações** liberado, aparece só o botão discreto
+  "Ativar controle de música". Em APK instalado fora da Play Store, o Android pode marcar essa opção como
+  *configuração restrita*: libere em Informações do app › ⋮ › Permitir configurações restritas.
+- **Atalhos do Waze** (`AtalhosWaze` / `AbridorWaze`): abrir o Waze, posto mais próximo
+  (`waze://?q=Posto%20de%20combustivel&navigate=yes`) e oficina mecânica, com fallback para a Play Store.
+- **Modo HUD (sobre Waze)** (`HudFlutuanteService`): serviço em primeiro plano `connectedDevice` com uma
+  janela `TYPE_APPLICATION_OVERLAY` arrastável e semitransparente, mostrando RPM, MAP/turbo (kPa), temperatura
+  do motor (°C) e pressão do rail (bar) ou, sem rail, a tensão da bateria. Acima de 105 °C o painel fica
+  vermelho. Ele tem botões para alternar para o Waze e para fechar o HUD e voltar ao app. Os dados chegam
+  pela `TelemetriaCompartilhada` do Application. Enquanto o HUD está aberto, o `ObdViewModel` mantém o
+  polling mesmo com a Activity em segundo plano (`ObdViewModel.devePollar`).
+
+Ao ativar, o app pede em sequência: "Aparecer sobre outros apps", Bluetooth (pré-requisito do serviço
+`connectedDevice` no Android 14+) e, opcionalmente, notificações (para ver o "Fechar HUD" na gaveta).
 
 ---
 
@@ -261,6 +287,10 @@ app/src/main/java/com/charruamotors/
 │   │                        # EstadoConexaoObd (sealed)...
 │   ├── calculo/             # CalculosVeiculo, ProximaManutencao, ResumoVeiculo
 │   └── validacao/           # Validadores de login, veículo, manutenção, peça e abastecimento
+├── direcao/                 # Card de direção (v1.1):
+│   ├── midia/               #   ControladorMidia, MidiaNotificacaoService, EstadoMidia (lógica pura)
+│   ├── waze/                #   AtalhosWaze (deep links, puro) e AbridorWaze
+│   └── hud/                 #   HudFlutuanteService, FormatadorHud/PainelHud, TelemetriaCompartilhada
 ├── obd/                     # ObdClient, Elm327BluetoothClient, ObdClientFake, ObdParser, DescricaoDtc
 └── ui/
     ├── login/               # LoginActivity + LoginViewModel
@@ -283,7 +313,7 @@ Recursos em `app/src/main/res`:
 
 ## Testes unitários
 
-São **88 testes** JUnit em `app/src/test`, todos sem dependência do Android. Rode com `./gradlew test`.
+São **414 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./gradlew test`. Alguns destaques:
 
 | Classe de teste | Testes | O que cobre |
 |---|---:|---|
@@ -295,6 +325,9 @@ São **88 testes** JUnit em `app/src/test`, todos sem dependência do Android. R
 | `ValidadorLoginTest` | 5 | Formato do e-mail e tamanho da senha |
 | `ValidadorManutencaoTest` | 5 | Data, km mínima e custo |
 | `ValidadorPecaTest` | 5 | Nome, quantidade e valor das peças |
+| `EstadoMidiaTest` | 11 | Escolha do player (prioridade do Spotify), estados de reprodução e textos do mini-player |
+| `PainelHudTest` | 7 | Formatação do HUD (RPM, MAP, temperatura, rail em bar ou tensão), alerta acima de 105 °C e polling com o HUD |
+| `AtalhosWazeTest` | 5 | Deep links do Waze (posto, oficina), codificação da busca e fallback para a Play Store |
 | `ConvertersTest` | 3 | Conversão de `LocalDate`/`LocalDateTime` para o Room |
 
 ---

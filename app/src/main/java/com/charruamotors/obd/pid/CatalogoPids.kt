@@ -182,10 +182,18 @@ object Pids {
     val PAINEL: List<String> = listOf(RPM, VELOCIDADE, TEMPERATURA_MOTOR, CARGA_MOTOR, TENSAO_BATERIA)
 
     /**
-     * Candidatos da fila rápida do polling, em ordem de prioridade: os 4 primeiros suportados são
-     * lidos em todo ciclo (RPM, velocidade, MAP e MAF; sem MAF ou sem MAP entra a borboleta).
+     * Fila rápida do polling (lida em todo ciclo), em ordem de prioridade: só os mostradores
+     * dinâmicos — RPM, MAP/turbo e velocidade. Borboleta e o resto vão para a fila lenta.
      */
-    val CANDIDATOS_FILA_RAPIDA: List<String> = listOf(RPM, VELOCIDADE, PRESSAO_COLETOR, MAF, BORBOLETA)
+    val CANDIDATOS_FILA_RAPIDA: List<String> = listOf(RPM, PRESSAO_COLETOR, VELOCIDADE)
+
+    /**
+     * Candidatos da fila rápida conforme o cálculo de consumo: com [consumoPorMaf] (gasolina,
+     * etanol, flex) o MAF entra junto dos mostradores, para o consumo instantâneo acompanhar o
+     * pé; no diesel (consumo pelo `015E`) ele fica na fila lenta.
+     */
+    fun candidatosFilaRapida(consumoPorMaf: Boolean): List<String> =
+        if (consumoPorMaf) CANDIDATOS_FILA_RAPIDA + MAF else CANDIDATOS_FILA_RAPIDA
 
     /** Sensores congelados no Freeze Frame (modo 02), no momento em que a falha foi registrada. */
     val FREEZE_FRAME: List<String> = listOf(RPM, VELOCIDADE, TEMPERATURA_MOTOR, CARGA_MOTOR)

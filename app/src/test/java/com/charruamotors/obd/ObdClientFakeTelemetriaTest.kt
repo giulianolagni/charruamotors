@@ -25,16 +25,17 @@ class ObdClientFakeTelemetriaTest {
             .also { it.conectar(dispositivo) }
 
     @Test
-    fun `primeiro instantaneo tem os 4 rapidos e 2 lentos e uma volta cobre todos os PIDs`() = runTest {
+    fun `primeiro instantaneo tem os 4 rapidos e 1 lento e uma volta cobre todos os PIDs`() = runTest {
         val obd = conectado()
-        val leituras = obd.lerTelemetria(250).take(13).toList()
+        val leituras = obd.lerTelemetria(250).take(73).toList()
 
         assertEquals(
-            setOf(Pids.RPM, Pids.VELOCIDADE, Pids.PRESSAO_COLETOR, Pids.MAF, Pids.CARGA_MOTOR, Pids.TEMPERATURA_MOTOR),
+            setOf(Pids.RPM, Pids.VELOCIDADE, Pids.PRESSAO_COLETOR, Pids.MAF, Pids.CARGA_MOTOR),
             leituras.first().valores.keys,
         )
-        // 28 suportados − 4 rápidos = 24 lentos → 12 ciclos por volta.
-        assertEquals(ObdClientFake.COMANDOS_SIMULADOS, leituras[11].valores.keys)
+        // 28 suportados − 4 rápidos = 24 lentos, 1 a cada 3 ciclos → 72 ciclos por volta.
+        assertFalse(ObdClientFake.COMANDOS_SIMULADOS == leituras[68].valores.keys)
+        assertEquals(ObdClientFake.COMANDOS_SIMULADOS, leituras[69].valores.keys)
         leituras.last().valores.forEach { (cmd, v) ->
             assertTrue("$cmd = $v", CatalogoTeste.pid(cmd).dentroDaFaixa(v))
         }
@@ -87,7 +88,7 @@ class ObdClientFakeTelemetriaTest {
         assertFalse("VW_TEMP_DSG" in obd.pidsSuportados.value) // Gol sem câmbio DSG
         assertTrue(r.observacao.isNotBlank())
 
-        val volta = obd.lerTelemetria(250).take(14).toList() // 27 lentos → 14 ciclos
+        val volta = obd.lerTelemetria(250, lentosPorVez = 50, ciclosPorLento = 1).take(1).toList() // tudo num ciclo
         r.pids.forEach { d ->
             val v = volta.last()[d.comando]
             assertTrue("${d.comando} = $v", v != null && d.dentroDaFaixa(v))
@@ -99,7 +100,7 @@ class ObdClientFakeTelemetriaTest {
         val obd = conectado()
         val r = obd.ativarPerfilFabricante("Toyota Hilux") as ResultadoPerfil.Ativo
         assertEquals(5, r.pids.size)
-        val dados = obd.lerTelemetria(250).take(15).toList().last()
+        val dados = obd.lerTelemetria(250, lentosPorVez = 50, ciclosPorLento = 1).take(1).toList().last()
         assertTrue(dados["TOYOTA_INJ3"]!! > 1.5) // injetor com desvio simulado
         assertTrue(dados["TOYOTA_ATF"]!! in 20.0..120.0)
     }

@@ -106,7 +106,13 @@ ObdViewModel ──> ObdClient (interface)
   3. **Fallback de serviço:** se a ECU recusar o modo 01 (`7F 01 11`), o app envia `ATSH 7E0` uma única vez e testa o **modo 21** (Toyota M-OBD, Mitsubishi, Suzuki, KWP: `210C`, `2105`...). Se ele não responder, testa o **modo 22 UDS** (VW/Audi, Fiat/Jeep, Ford, GM: `22F40C`...). A marca cadastrada decide qual dos dois vai primeiro.
 - **Mapeamento semântico:** cada PID de `pids_padrao.json` tem uma `chave` (`RPM`, `VELOCIDADE`, `MAP`, `TEMP_MOTOR`...). Os PIDs dos modos 21/22 publicam o valor na mesma chave, então mostradores, gráfico, computador de bordo, 0–100, log CSV e filas de polling funcionam igual, venha o dado de `01xx`, `21xx` ou `22F4xx`. O card da ECU mostra a camada ativa e quantos sensores responderam.
 - **DTCs:** `03`/`07`/`0A`/`04` no OBD2 padrão; `13` (com fallback `18 00 FF 00`) e `14`/`14 FF 00` no modo 21; `19 02 FF` e `14 FF FF FF` no modo 22. Todos são decodificados no padrão SAE J2012 (ex.: `P0300`).
-- **Estabilidade no v2.1:** o `ATSH` só é enviado quando o cabeçalho muda (o ciclo de polling é agrupado por cabeçalho), e há um intervalo mínimo de 30 ms entre comandos.
+- **Baixa latência:**
+  - sufixo de resposta única (`010C1`, `210C1`, `22F40C1`): o ELM327 responde assim que a primeira ECU fala. É testado na conexão (`01001` no OBD2 padrão, o primeiro PID que respondeu nos modos 21/22) e desligado se o adaptador recusar;
+  - `ATAT2` depois do `ATSP0` e `ATST0C` (~49 ms de espera em vez de 200 ms) com a ECU já achada, validado relendo um PID. DTCs, VIN e limpeza voltam ao `ATST32` antes de rodar. Se o clone responder `?`, o app segue no timing padrão;
+  - sem pausa fixa entre comandos (o prompt `>` já indica o fim da resposta). Depois de um timeout ou `STOPPED`, a sessão passa a usar 15 ms de respiro;
+  - telemetria em duas filas: RPM, MAP/turbo e velocidade (mais o MAF fora do diesel) em todo ciclo, e 1 PID lento a cada 3 ciclos;
+  - ponteiros animados em 90 ms, com interpolação linear.
+- **Estabilidade no v2.1:** o `ATSH` só é enviado quando o cabeçalho muda (o ciclo de polling é agrupado por cabeçalho).
 - **Robustez:**
   - toda a I/O roda em `Dispatchers.IO`;
   - um `Mutex` serializa os comandos;

@@ -65,7 +65,8 @@ class Elm327TelemetriaTest {
         "015C1" to "41 5C 87\r\r",
     )
 
-    private val rapidos = listOf("010C1", "010D1", "01101", "01111")
+    /** Sem MAP: RPM, velocidade e MAF (consumo por MAF); a borboleta vai para a fila lenta. */
+    private val rapidos = listOf("010C1", "010D1", "01101")
 
     private fun TestScope.cliente(t: ObdTransport, estendido: CatalogoEstendido = CatalogoEstendido.VAZIO) =
         Elm327BluetoothClient(
@@ -79,24 +80,37 @@ class Elm327TelemetriaTest {
     // ---------------------------------------------------------------- duas filas
 
     @Test
-    fun `cada ciclo le os 4 rapidos e 2 lentos em rodizio`() = runTest {
+    fun `cada ciclo le os rapidos e 1 lento a cada 3 ciclos`() = runTest {
         val t = TransporteRoteirizado(ecu())
         val obd = cliente(t)
         obd.conectar(dispositivo)
         t.enviados.clear()
 
-        val leituras = obd.lerTelemetria(intervaloMinimoMs = 250).take(3).toList()
+        val leituras = obd.lerTelemetria(intervaloMinimoMs = 250).take(7).toList()
 
         assertEquals(
-            rapidos + listOf("01041", "01051") +
-                rapidos + listOf("01061", "01071") +
-                rapidos + listOf("010E1", "010F1"),
+            rapidos + "01041" + rapidos + rapidos +
+                rapidos + "01051" + rapidos + rapidos +
+                rapidos + "01061",
             t.enviados,
         )
         assertEquals(1726, leituras[0].rpm)
         assertEquals(90, leituras[0].velocidade)
         assertEquals(5.0, leituras[0]["0110"]!!, 1e-9)
-        assertEquals(83, leituras[0].temperaturaMotor)
+        assertEquals(null, leituras[2].temperaturaMotor)
+        assertEquals(83, leituras[3].temperaturaMotor)
+    }
+
+    @Test
+    fun `diesel tira o MAF da fila rapida`() = runTest {
+        val t = TransporteRoteirizado(ecu())
+        val obd = cliente(t)
+        obd.conectar(dispositivo)
+        t.enviados.clear()
+
+        obd.lerTelemetria(250, consumoPorMaf = false).take(3).toList()
+
+        assertEquals(listOf("010C1", "010D1", "01041", "010C1", "010D1", "010C1", "010D1"), t.enviados)
     }
 
     @Test
@@ -105,12 +119,13 @@ class Elm327TelemetriaTest {
         val obd = cliente(t)
         obd.conectar(dispositivo)
 
-        // 14 lentos / 2 por ciclo = 7 ciclos por volta.
-        val leituras = obd.lerTelemetria(250).take(7).toList()
-        leituras.drop(1).forEach { assertEquals(83, it.temperaturaMotor) } // lido no 1º ciclo e retido
-        assertFalse("015C" in leituras[5].valores)
-        assertEquals(95.0, leituras[6]["015C"]!!, 0.0) // vez do óleo no 7º ciclo
-        assertEquals(12.6, leituras[6].tensaoBateria!!, 0.0)
+        // 15 lentos (com a borboleta), 1 a cada 3 ciclos = 45 ciclos por volta.
+        val leituras = obd.lerTelemetria(250).take(45).toList()
+        leituras.drop(3).forEach { assertEquals(83, it.temperaturaMotor) } // lido no 4º ciclo e retido
+        assertFalse("015C" in leituras[38].valores)
+        assertEquals(95.0, leituras[39]["015C"]!!, 0.0) // óleo: 14º lento, 40º ciclo
+        assertEquals(95.0, leituras[44]["015C"]!!, 0.0)
+        assertEquals(12.6, leituras[42].tensaoBateria!!, 0.0) // ATRV: 15º lento
     }
 
     @Test
@@ -161,6 +176,7 @@ class Elm327TelemetriaTest {
 
     private fun ecuVw() = ecu().apply {
         put("2211BD", "62 11 BD 82\r\r") // óleo 90 °C
+        put("2211BD1", "62 11 BD 82\r\r") // com o sufixo de resposta única
         put("222109", "7F 22 31\r\r") // carro sem DSG: requestOutOfRange
     }
 
@@ -188,7 +204,7 @@ class Elm327TelemetriaTest {
         t.enviados.clear()
 
         assertEquals(listOf("P0300"), obd.lerCodigosFalha().getOrThrow().map { it.codigo })
-        assertEquals(listOf("ATSH7DF", "03"), t.enviados)
+        assertEquals(listOf("ATST32", "ATSH7DF", "03"), t.enviados)
         obd.lerCodigosPendentes()
         assertEquals("07", t.enviados.last()) // já no 7DF: não repete o ATSH
         assertEquals(1, t.enviados.count { it.startsWith("ATSH") })
@@ -202,13 +218,13 @@ class Elm327TelemetriaTest {
         obd.ativarPerfilFabricante("VW")
         t.enviados.clear()
 
-        // 14 lentos padrão + VW_OLEO = 15 → 8 ciclos por volta; o DID é o último da fila.
-        val leituras = obd.lerTelemetria(250).take(8).toList()
+        // 15 lentos padrão + VW_OLEO = 16; o DID é o último da fila: 46º ciclo.
+        val leituras = obd.lerTelemetria(250).take(46).toList()
         assertEquals(90.0, leituras.last()["VW_OLEO"]!!, 0.0)
-        val i = t.enviados.indexOf("2211BD")
+        val i = t.enviados.indexOf("2211BD1") // com o sufixo de resposta única
         assertEquals("ATSH7E0", t.enviados[i - 1])
         // Ciclo agrupado por cabeçalho: os PIDs padrão do mesmo ciclo vêm antes do DID, então
-        // em 8 ciclos só há uma ida ao 7DF (o perfil deixou o 7E1) e uma ao 7E0.
+        // na volta só há uma ida ao 7DF (o perfil deixou o 7E1) e uma ao 7E0.
         assertEquals(listOf("ATSH7DF", "ATSH7E0"), t.enviados.filter { it.startsWith("ATSH") })
     }
 
@@ -222,13 +238,16 @@ class Elm327TelemetriaTest {
 
         // Todo ciclo tem o DID. Sem a ordenação seriam 2 ATSH por ciclo (6); com ela, o ciclo 2
         // começa no 7E0 que o ciclo 1 deixou e o ciclo 3 no 7DF que o ciclo 2 deixou.
-        obd.lerTelemetria(250, lentosPorCiclo = 15).take(3).toList()
+        obd.lerTelemetria(250, lentosPorVez = 20, ciclosPorLento = 1).take(3).toList()
         assertEquals(listOf("ATSH7DF", "ATSH7E0", "ATSH7DF", "ATSH7E0"), t.enviados.filter { it.startsWith("ATSH") })
     }
 
     @Test
     fun `respostas compartilhadas sao lidas com uma unica requisicao`() = runTest {
-        val t = TransporteRoteirizado(ecu().apply { put("2113", "61 13 80 64 7F 9C\r\r") })
+        val t = TransporteRoteirizado(ecu().apply {
+            put("2113", "61 13 80 64 7F 9C\r\r")
+            put("21131", "61 13 80 64 7F 9C\r\r")
+        })
         val obd = cliente(t, catalogoVw)
         obd.conectar(dispositivo)
         t.enviados.clear()
@@ -237,11 +256,36 @@ class Elm327TelemetriaTest {
         assertEquals(listOf("TOY_INJ1", "TOY_INJ2"), r.pids.map { it.comando })
         assertEquals(1, t.enviados.count { it == "2113" })
 
-        // Na telemetria os dois injetores ocupam uma só vez da fila lenta: 1 requisição por volta.
-        val leituras = obd.lerTelemetria(250).take(8).toList()
+        // Na telemetria os dois injetores ocupam uma só vez da fila lenta: 1 requisição por volta
+        // (16º lento → 46º ciclo), já com o sufixo de resposta única.
+        val leituras = obd.lerTelemetria(250).take(46).toList()
         assertEquals(0.1, leituras.last()["TOY_INJ1"]!!, 1e-9)
         assertEquals(-0.1, leituras.last()["TOY_INJ2"]!!, 1e-9)
-        assertEquals(2, t.enviados.count { it == "2113" })
+        assertEquals(1, t.enviados.count { it == "2113" })
+        assertEquals(1, t.enviados.count { it == "21131" })
+    }
+
+    @Test
+    fun `requisicao truncada com o sufixo e conferida uma vez e segue sem ele`() = runTest {
+        val t = TransporteRoteirizado(ecu().apply {
+            put("2113", "61 13 80 64 7F 9C\r\r")
+            put("21131", "61 13 80 64\r\r") // multi-frame cortado no 1º quadro: faltam C e D
+        })
+        val obd = cliente(t, catalogoVw)
+        obd.conectar(dispositivo)
+        obd.ativarPerfilFabricante("Toyota")
+        t.enviados.clear()
+
+        val leituras = obd.lerTelemetria(250, lentosPorVez = 20, ciclosPorLento = 1).take(3).toList()
+
+        assertEquals("conferida uma única vez", 1, t.enviados.count { it == "21131" })
+        assertEquals(3, t.enviados.count { it == "2113" })
+        assertEquals(t.enviados.indexOf("21131") + 1, t.enviados.indexOf("2113"))
+        leituras.forEach {
+            assertEquals(0.1, it["TOY_INJ1"]!!, 1e-9)
+            assertEquals(-0.1, it["TOY_INJ2"]!!, 1e-9)
+        }
+        assertTrue("o modo 01 continua com o sufixo", "010C1" in t.enviados)
     }
 
     @Test
@@ -287,6 +331,6 @@ class Elm327TelemetriaTest {
         obd.conectar(dispositivo)
         t.enviados.clear()
         obd.lerCodigosFalha()
-        assertEquals(listOf("03"), t.enviados)
+        assertEquals(listOf("ATST32", "03"), t.enviados)
     }
 }

@@ -2,7 +2,6 @@ package com.charruamotors.direcao.hud
 
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.pid.Pids
-import com.charruamotors.ui.diagnostico.obd.ObdViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -10,7 +9,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Formatação e alertas do HUD flutuante, e a ponte de telemetria com o ObdViewModel. */
+/** Formatação e alertas do HUD flutuante, e a ponte de telemetria com a sessão OBD. */
 class PainelHudTest {
 
     private val dieselRodando = DadosObd(
@@ -79,13 +78,5 @@ class PainelHudTest {
         assertEquals("2.350", telemetria.painel.first().rpm)
         telemetria.definirHudAtivo(true)
         assertTrue(telemetria.hudAtivo.value)
-    }
-
-    @Test
-    fun `polling continua em segundo plano so com o hud aberto`() {
-        assertTrue(ObdViewModel.devePollar(telaVisivel = true, hudAtivo = false, conectado = true))
-        assertTrue(ObdViewModel.devePollar(telaVisivel = false, hudAtivo = true, conectado = true))
-        assertFalse(ObdViewModel.devePollar(telaVisivel = false, hudAtivo = false, conectado = true))
-        assertFalse(ObdViewModel.devePollar(telaVisivel = true, hudAtivo = true, conectado = false))
     }
 }

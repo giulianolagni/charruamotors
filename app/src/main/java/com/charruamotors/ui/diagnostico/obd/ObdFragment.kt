@@ -8,9 +8,11 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.annotation.SuppressLint
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
@@ -18,6 +20,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ArrayAdapter
+import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -49,7 +53,12 @@ import com.charruamotors.obd.InfoConexao
 import com.charruamotors.obd.ModoComunicacaoEcu
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ResultadoPerfil
+import com.charruamotors.obd.log.LogsSessaoSalvos
 import com.charruamotors.obd.pid.Pids
+import com.charruamotors.obd.sessao.ConfigAutoConexao
+import com.charruamotors.obd.sessao.EstadoSessao
+import com.charruamotors.obd.sessao.GatilhoBluetooth
+import com.charruamotors.obd.sessao.SessaoObd
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.oficina.bateria.TesteBateriaActivity
 import com.charruamotors.ui.oficina.replay.ReplayLogActivity
@@ -114,6 +123,20 @@ class ObdFragment : Fragment() {
 
     private val pedirNotificacao =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { ativarHud() }
+
+    // Caixa-preta: o broadcast ACL e o serviço connectedDevice exigem a permissão de Bluetooth
+    // (Android 12+); a notificação da sessão, a de notificações (Android 13+, opcional).
+    private val pedirPermissoesCaixaPreta =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            if (!PermissoesBluetooth.concedidas(requireContext())) {
+                mostrarMensagem(getString(R.string.caixa_permissao_bluetooth))
+            } else {
+                pedirNotificacaoCaixaPreta()
+            }
+        }
+
+    private val pedirNotificacaoSessao =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     private val pedirPermissoes =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { resultado ->
@@ -184,15 +207,143 @@ class ObdFragment : Fragment() {
         botaoLimparCodigos.setOnClickListener { confirmarLimpezaCodigos() }
         botaoRegistroComunicacao.setOnClickListener { mostrarRegistroComunicacao() }
         configurarOficina()
+        configurarCaixaPreta()
+    }
+
+    // ------------------------------------------------------------------ caixa-preta (segundo plano)
+
+    /**
+     * Card "Caixa-preta automática": auto-conexão pelo Bluetooth do carro, logs automáticos em
+     * toda conexão, gatilho (padrão `Toyota SW4`), vínculos e o atalho de bateria "Sem restrições".
+     */
+    private fun configurarCaixaPreta() = with(binding) {
+        switchAutoConexao.setOnCheckedChangeListener { _, marcado ->
+            if (marcado == viewModel.configAuto.value.autoConexaoAtiva) return@setOnCheckedChangeListener
+            viewModel.definirAutoConexao(marcado)
+            if (marcado) garantirPermissoesCaixaPreta()
+        }
+        switchLogsAutomaticos.setOnCheckedChangeListener { _, marcado ->
+            if (marcado != viewModel.configAuto.value.gravarLogsAutomaticos) viewModel.definirGravarLogsAutomaticos(marcado)
+        }
+        botaoTrocarGatilho.setOnClickListener { escolherGatilho() }
+        botaoLiberarBateria.setOnClickListener { liberarBateria() }
+    }
+
+    /** Pede o que a auto-conexão precisa para funcionar com o app fechado. */
+    private fun garantirPermissoesCaixaPreta() {
+        val contexto = requireContext()
+        if (PermissoesBluetooth.disponivel(contexto) && !PermissoesBluetooth.concedidas(contexto)) {
+            pedirPermissoesCaixaPreta.launch(PermissoesBluetooth.necessarias())
+        } else {
+            pedirNotificacaoCaixaPreta()
+        }
+    }
+
+    private fun pedirNotificacaoCaixaPreta() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pedirNotificacaoSessao.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    /** Lista de pareados (se a permissão já existir) + o padrão por nome + digitar outro nome. */
+    private fun escolherGatilho() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val permitido = PermissoesBluetooth.concedidas(requireContext())
+            val pareados = if (permitido) runCatching { viewModel.pareadosBluetooth() }.getOrDefault(emptyList()) else emptyList()
+            if (_binding == null) return@launch
+            val opcoes = listOf(getString(R.string.caixa_gatilho_padrao, GatilhoBluetooth.NOME_PADRAO)) +
+                pareados.map { getString(R.string.caixa_gatilho_pareado, it.nome, it.endereco) } +
+                getString(R.string.caixa_gatilho_digitar)
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.caixa_gatilho_titulo)
+                .setItems(opcoes.toTypedArray()) { _, i ->
+                    when {
+                        i == 0 -> viewModel.definirGatilho(GatilhoBluetooth.NOME_PADRAO, null)
+                        i <= pareados.size -> pareados[i - 1].let { viewModel.definirGatilho(it.nome, it.endereco) }
+                        else -> digitarGatilho()
+                    }
+                }
+                .setNegativeButton(R.string.botao_cancelar, null)
+                .show()
+            // Sem a permissão, a lista de pareados não aparece: pede para a próxima vez.
+            if (!permitido) garantirPermissoesCaixaPreta()
+        }
+    }
+
+    private fun digitarGatilho() {
+        val campo = EditText(requireContext()).apply {
+            setSingleLine()
+            setText(viewModel.configAuto.value.gatilhoNome)
+            setSelection(text.length)
+        }
+        val margem = resources.getDimensionPixelSize(R.dimen.espaco_grande)
+        val moldura = FrameLayout(requireContext()).apply {
+            setPadding(margem, resources.getDimensionPixelSize(R.dimen.espaco_pequeno), margem, 0)
+            addView(campo)
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.caixa_gatilho_digitar_titulo)
+            .setMessage(R.string.caixa_gatilho_digitar_mensagem)
+            .setView(moldura)
+            .setNegativeButton(R.string.botao_cancelar, null)
+            .setPositiveButton(R.string.caixa_salvar) { _, _ -> viewModel.definirGatilho(campo.text.toString(), null) }
+            .show()
+    }
+
+    private fun mostrarConfigAuto(config: ConfigAutoConexao) = with(binding) {
+        if (switchAutoConexao.isChecked != config.autoConexaoAtiva) switchAutoConexao.isChecked = config.autoConexaoAtiva
+        if (switchLogsAutomaticos.isChecked != config.gravarLogsAutomaticos) switchLogsAutomaticos.isChecked = config.gravarLogsAutomaticos
+        val gatilho = if (config.gatilhoEndereco != null) "${config.gatilhoNome} (${config.gatilhoEndereco})" else config.gatilhoNome
+        textoGatilho.definirTexto(getString(R.string.caixa_gatilho, gatilho))
+        textoVinculos.definirTexto(getString(
+            R.string.caixa_vinculos,
+            config.scanner?.nome ?: getString(R.string.caixa_scanner_nenhum),
+            config.veiculoDescricao ?: getString(R.string.caixa_veiculo_nenhum),
+        ))
+    }
+
+    private fun mostrarEstadoSessao(estado: EstadoSessao) {
+        binding.textoStatusSessao.definirTexto(when {
+            !estado.ativa -> getString(R.string.caixa_status_inativa)
+            estado.automatica -> getString(R.string.caixa_status_automatica, SessaoObd.descreverStatus(estado))
+            else -> SessaoObd.descreverStatus(estado)
+        })
+        mostrarEstado(viewModel.estado.value)
+    }
+
+    /** One UI / Android 14+: com a bateria "Otimizada", o serviço vindo do segundo plano pode ser barrado. */
+    private fun atualizarAtalhoBateria() {
+        val contexto = context ?: return
+        val energia = contexto.getSystemService(PowerManager::class.java)
+        _binding?.botaoLiberarBateria?.isVisible = energia != null && !energia.isIgnoringBatteryOptimizations(contexto.packageName)
+    }
+
+    @SuppressLint("BatteryLife") // app pessoal: o pedido direto é o caminho de 1 toque para "Sem restrições"
+    private fun liberarBateria() {
+        val pacote = requireContext().packageName
+        val pedido = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$pacote"))
+        if (runCatching { startActivity(pedido) }.isSuccess) return
+        // Sem o diálogo do sistema: a tela do app (Bateria → Sem restrições, no Samsung).
+        val detalhes = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.fromParts("package", pacote, null))
+        runCatching { startActivity(detalhes) }.onFailure { mostrarMensagem(getString(R.string.caixa_bateria_erro)) }
+    }
+
+    /** Sessão encerrada com os logs automáticos salvos: atalho para o visualizador. */
+    private fun oferecerLogsSessao(logs: LogsSessaoSalvos) {
+        val arquivo = logs.txt ?: logs.csv ?: return
+        Snackbar.make(requireView(), getString(R.string.caixa_logs_salvos, arquivo.local), Snackbar.LENGTH_LONG)
+            .setAction(R.string.caixa_ver_logs) { startActivity(ReplayLogActivity.intent(requireContext())) }
+            .show()
     }
 
     // ------------------------------------------------------------------ Ferramentas de Oficina
 
     /**
-     * Hub "Ferramentas de Oficina". Cada ferramenta abre numa tela própria: ao sair desta aba o
-     * polling pausa ([onPause]/[onStop]) e, na bateria e no terminal, a sessão manual do cliente
-     * também suspende o polling do HUD; ao voltar, o cliente restaura o `ATSH` e o polling retoma,
-     * sem fechar o socket Bluetooth.
+     * Hub "Ferramentas de Oficina". Cada ferramenta abre numa tela própria: na bateria e no
+     * terminal, a sessão manual do cliente suspende o polling da sessão compartilhada (e do HUD);
+     * ao voltar, o cliente restaura o `ATSH` e o polling retoma, sem fechar o socket Bluetooth.
      */
     private fun configurarOficina() = with(binding) {
         val veiculoId = requireArguments().getLong(DiagnosticoActivity.EXTRA_VEICULO_ID)
@@ -247,7 +398,7 @@ class ObdFragment : Fragment() {
 
     /**
      * "Modo HUD (sobre Waze)": garante as permissões, sobe o painel flutuante e vai para o Waze.
-     * O app fica minimizado com a conexão OBD2 e o polling rodando (ver [ObdViewModel.devePollar]).
+     * O app fica minimizado com a conexão OBD2 e o polling rodando na sessão compartilhada.
      */
     private fun ativarHud() {
         val contexto = requireContext()
@@ -419,6 +570,8 @@ class ObdFragment : Fragment() {
                 launch { viewModel.historicoLeituras.collect { mostrarHistorico(it) } }
                 controladorMidia?.let { midia -> launch { midia.estado.collect { mostrarMidia(it) } } }
                 launch { telemetriaHud.hudAtivo.collect { mostrarHud(it) } }
+                launch { viewModel.configAuto.collect { mostrarConfigAuto(it) } }
+                launch { viewModel.estadoSessao.collect { mostrarEstadoSessao(it) } }
                 launch {
                     viewModel.simularFalha.collect { ativa ->
                         if (binding.switchSimularFalha.isChecked != ativa) binding.switchSimularFalha.isChecked = ativa
@@ -431,6 +584,7 @@ class ObdFragment : Fragment() {
                             is EventoObd.Texto -> mostrarMensagem(evento.texto)
                             is EventoObd.LogSalvo -> oferecerCompartilhamento(evento.arquivo)
                             is EventoObd.ErroConexao -> mostrarErroConexao(evento.texto)
+                            is EventoObd.LogsSessao -> oferecerLogsSessao(evento.logs)
                         }
                     }
                 }
@@ -451,11 +605,15 @@ class ObdFragment : Fragment() {
 
     private fun mostrarEstado(estado: EstadoConexaoObd) {
         mostrarInfoEcu(viewModel.infoEcu.value)
-        binding.textoEstado.definirTexto(when (estado) {
-            EstadoConexaoObd.Desconectado -> getString(R.string.obd_estado_desconectado)
-            EstadoConexaoObd.Conectando -> getString(R.string.obd_estado_conectando)
-            EstadoConexaoObd.Conectado -> getString(R.string.obd_estado_conectado)
-            is EstadoConexaoObd.Erro -> getString(R.string.obd_estado_erro, estado.mensagem)
+        val sessao = viewModel.estadoSessao.value
+        val aguardandoSessao = sessao.ativa && estado !is EstadoConexaoObd.Conectado && estado !is EstadoConexaoObd.Conectando
+        binding.textoEstado.definirTexto(when {
+            // Sessão esperando a ECU ou entre tentativas: o estado do cliente ainda não diz tudo.
+            aguardandoSessao -> SessaoObd.descreverStatus(sessao)
+            estado is EstadoConexaoObd.Erro -> getString(R.string.obd_estado_erro, estado.mensagem)
+            estado is EstadoConexaoObd.Conectando -> getString(R.string.obd_estado_conectando)
+            estado is EstadoConexaoObd.Conectado -> getString(R.string.obd_estado_conectado)
+            else -> getString(R.string.obd_estado_desconectado)
         })
         atualizarBotoes()
     }
@@ -463,12 +621,14 @@ class ObdFragment : Fragment() {
     private fun atualizarBotoes() = with(binding) {
         val estado = viewModel.estado.value
         val conectado = estado is EstadoConexaoObd.Conectado
-        val livre = estado is EstadoConexaoObd.Desconectado || estado is EstadoConexaoObd.Erro
+        val sessaoAtiva = viewModel.estadoSessao.value.ativa
+        val livre = (estado is EstadoConexaoObd.Desconectado || estado is EstadoConexaoObd.Erro) && !sessaoAtiva
         val ocupado = viewModel.ocupado.value
 
         botaoConectar.isEnabled = livre
-        // Conectando: o mesmo botão cancela (a conexão RFCOMM com um scanner fora de alcance leva ~10 s).
-        val conectando = estado is EstadoConexaoObd.Conectando
+        // Conectando (ou a sessão automática esperando a ECU / entre tentativas): o mesmo botão
+        // cancela (a conexão RFCOMM com um scanner fora de alcance leva ~10 s).
+        val conectando = estado is EstadoConexaoObd.Conectando || (sessaoAtiva && !conectado)
         botaoDesconectar.isEnabled = conectado || conectando
         botaoDesconectar.definirTexto(getString(if (conectando) R.string.obd_cancelar_conexao else R.string.obd_desconectar))
         // Modo, dispositivo e atualização da lista só mudam com o scanner desconectado.
@@ -726,12 +886,11 @@ class ObdFragment : Fragment() {
 
     // ------------------------------------------------------------------ ciclo de vida
 
-    // O polling de PIDs só roda com a aba visível. Em um ViewPager2 a aba vizinha pode ficar
-    // em STARTED sem estar em RESUMED, por isso pausamos também em onPause.
+    // O polling de PIDs é da sessão compartilhada (serviço em primeiro plano): segue com a aba em
+    // segundo plano, para a caixa-preta e o HUD. A tela só observa.
     override fun onStart() {
         super.onStart()
-        Log.d(TAG, "onStart: retoma o polling de PIDs")
-        viewModel.retomarPolling()
+        Log.d(TAG, "onStart: tela observando a sessão OBD")
         // Também relê a permissão: o usuário pode ter voltado agora da tela do Acesso a notificações.
         controladorMidia?.iniciar()
     }
@@ -740,19 +899,18 @@ class ObdFragment : Fragment() {
         super.onResume()
         emPrimeiroPlano = true
         aplicarTelaAcesa()
-        viewModel.retomarPolling()
+        // O usuário pode ter voltado agora da tela de bateria do app.
+        atualizarAtalhoBateria()
     }
 
     override fun onPause() {
         emPrimeiroPlano = false
         aplicarTelaAcesa()
-        viewModel.pausarPolling()
         super.onPause()
     }
 
     override fun onStop() {
-        Log.d(TAG, "onStop: pausa o polling de PIDs (segue se o HUD flutuante estiver aberto)")
-        viewModel.pausarPolling()
+        Log.d(TAG, "onStop: a sessão OBD continua no serviço em primeiro plano")
         controladorMidia?.parar()
         super.onStop()
     }

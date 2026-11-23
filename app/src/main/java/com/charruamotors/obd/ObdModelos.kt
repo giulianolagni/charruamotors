@@ -124,6 +124,18 @@ data class InfoConexao(
     }
 }
 
+/**
+ * Troca manual com o adaptador (Ferramentas de Oficina: terminal, varredura, teste de bateria):
+ * o [comando] como foi enviado, a [resposta] bruta até o prompt `>` (sem ele) e a [latenciaMs]
+ * medida em volta da troca. [semPrompt] = o adaptador não concluiu no prazo ([resposta] vazia).
+ */
+data class RespostaBruta(
+    val comando: String,
+    val resposta: String,
+    val latenciaMs: Long,
+    val semPrompt: Boolean = false,
+)
+
 /** Falha de comunicação com o scanner/ECU (timeout, conexão perdida, resposta inválida...). */
 open class ObdException(mensagem: String, causa: Throwable? = null) : Exception(mensagem, causa)
 

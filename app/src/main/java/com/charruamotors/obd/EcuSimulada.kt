@@ -1,0 +1,237 @@
+package com.charruamotors.obd
+
+import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.exp
+import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlin.random.Random
+
+/** Fase do Teste de Bateria e Alternador que o [ObdClientFake] simula no `ATRV`. */
+enum class FaseBateriaSimulada {
+    /** Ignição ligada, motor desligado: ~12,5 V, com a carga superficial se dissipando. */
+    REPOUSO,
+
+    /** Roteiro da partida: repouso → vale de ~10,3 V (com um `LV RESET`) → compressões → motor pega (~14,2 V). */
+    PARTIDA,
+
+    /** Motor em marcha lenta: alternador carregando a ~14,2 V. */
+    MARCHA_LENTA,
+
+    /** ~2.500 RPM com faróis, ventilação e desembaçador ligados: ~14,1 V. */
+    CARGA,
+}
+
+/**
+ * Curva de tensão do `ATRV` para o Teste de Bateria no modo simulado. O tempo de cada fase conta a
+ * partir de [definir] pelo [relogioMs] (injetável nos testes). Sem fase, o alternador do carro
+ * em trânsito (~14 V), como na telemetria.
+ */
+internal class SimuladorBateria(
+    private val random: Random,
+    private val relogioMs: () -> Long,
+    /** Uma resposta `LV RESET` no vale da partida, para demonstrar a resiliência do teste. */
+    private val lvResetNaPartida: Boolean = true,
+) {
+    @Volatile private var fase: FaseBateriaSimulada? = null
+    @Volatile private var inicioFaseMs = 0L
+    @Volatile private var lvResetEmitido = false
+
+    fun definir(nova: FaseBateriaSimulada?) {
+        fase = nova
+        inicioFaseMs = relogioMs()
+        lvResetEmitido = false
+    }
+
+    /** Resposta crua ao `ATRV` (`12.5V\r\r`), ou `LV RESET` uma vez no vale da partida. */
+    fun responderAtrv(): String {
+        val t = (relogioMs() - inicioFaseMs).toDouble()
+        val volts = when (fase) {
+            null -> 14.0 + ruido(0.3)
+            FaseBateriaSimulada.REPOUSO -> 12.5 + 0.12 * exp(-t / 700.0) + ruido(0.03)
+            FaseBateriaSimulada.PARTIDA -> curvaPartida(t) ?: return "LV RESET\r\r"
+            FaseBateriaSimulada.MARCHA_LENTA -> 14.2 + ruido(0.06)
+            FaseBateriaSimulada.CARGA -> 14.12 + ruido(0.08)
+        }
+        return String.format(Locale.US, "%.1fV\r\r", volts)
+    }
+
+    /** Volts em [t] ms desde o início da partida; null = o adaptador reiniciou nesta amostra. */
+    private fun curvaPartida(t: Double): Double? = when {
+        t < INICIO_PARTIDA_MS -> 12.5 + ruido(0.03) // o motorista ainda vai virar a chave
+        t < FIM_PICO_MS -> 12.5 - (12.5 - VALE) * (t - INICIO_PARTIDA_MS) / (FIM_PICO_MS - INICIO_PARTIDA_MS)
+        t < FIM_VALE_MS -> if (lvResetNaPartida && !lvResetEmitido) {
+            lvResetEmitido = true
+            null
+        } else {
+            VALE + ruido(0.04)
+        }
+        // Motor de arranque girando: cada compressão derruba a tensão (10,5–11,0 V).
+        t < FIM_ARRANQUE_MS -> 10.75 + 0.25 * sin(2 * PI * (t - FIM_VALE_MS) / 180.0) + ruido(0.04)
+        // Motor pegou: o alternador assume.
+        t < MOTOR_PEGOU_MS -> 10.9 + (14.2 - 10.9) * (t - FIM_ARRANQUE_MS) / (MOTOR_PEGOU_MS - FIM_ARRANQUE_MS)
+        else -> 14.2 + ruido(0.06)
+    }
+
+    private fun ruido(amplitude: Double) = random.nextDouble(-amplitude, amplitude)
+
+    companion object {
+        const val VALE = 10.3
+        const val INICIO_PARTIDA_MS = 2_000.0
+        const val FIM_PICO_MS = 2_150.0
+        const val FIM_VALE_MS = 2_300.0
+        const val FIM_ARRANQUE_MS = 3_500.0
+        const val MOTOR_PEGOU_MS = 4_100.0
+    }
+}
+
+/**
+ * ECU simulada para o Terminal ELM327 e a Varredura de PIDs no modo simulado: um ELM327 v1.5 numa
+ * Hilux SW4 D-4D com motor (`7E0`) e câmbio automático (`7E1`) que respondem ao serviço 21
+ * (KWP2000 *readDataByLocalIdentifier*), sem módulo no `7E2`. Respostas no formato real da sessão
+ * (`ATS0` sem espaços, `ATH0` sem cabeçalhos, multi-frame CAN `0:`/`1:` acima de 7 bytes).
+ */
+internal class EcuSimulada(private val random: Random) {
+
+    /** Cabeçalho configurado com `ATSH` (o funcional `7DF` depois de um reset). */
+    @Volatile var cabecalho: String = CABECALHO_FUNCIONAL
+
+    /**
+     * Resposta crua a [compacto] (comando em maiúsculas sem espaços). [leitura] dá os valores
+     * atuais da simulação (RPM, velocidade...) e [codigos] os DTCs armazenados.
+     */
+    fun responder(compacto: String, leitura: () -> Map<String, Double>, codigos: () -> List<String>): String {
+        if (compacto.startsWith("AT")) return responderAt(compacto) + FIM
+        if (compacto.isEmpty() || compacto.any { it !in '0'..'9' && it !in 'A'..'F' }) return "?$FIM"
+        // Sufixo de resposta única (010C1): o pedido é o mesmo.
+        val pedido = if (compacto.length % 2 == 1 && compacto.endsWith("1")) compacto.dropLast(1) else compacto
+        if (pedido.length % 2 == 1) return "?$FIM"
+        return when (val dados = responderEcu(pedido, leitura, codigos)) {
+            null -> "NO DATA$FIM"
+            else -> formatarCan(dados) + FIM
+        }
+    }
+
+    private fun responderAt(c: String): String = when {
+        c == "ATZ" || c == "ATWS" || c == "ATD" -> {
+            cabecalho = CABECALHO_FUNCIONAL
+            if (c == "ATD") "OK" else "\r\rELM327 v1.5"
+        }
+        c == "ATI" -> "ELM327 v1.5"
+        c == "AT@1" -> "OBDII to RS232 Interpreter"
+        c == "ATDP" -> "AUTO, ISO 15765-4 (CAN 11/500)"
+        c == "ATDPN" -> "A6"
+        c.startsWith("ATSH") -> {
+            val novo = c.removePrefix("ATSH")
+            if ((novo.length == 3 || novo.length == 6) && novo.all { it in '0'..'9' || it in 'A'..'F' }) {
+                cabecalho = novo
+                "OK"
+            } else {
+                "?"
+            }
+        }
+        else -> "OK"
+    }
+
+    /** Bytes da resposta positiva, `7F ...` na negativa ou null (`NO DATA`: ninguém no barramento respondeu). */
+    private fun responderEcu(pedido: String, leitura: () -> Map<String, Double>, codigos: () -> List<String>): List<Int>? {
+        val servico = pedido.take(2).toInt(16)
+        val motor = cabecalho == CABECALHO_FUNCIONAL || cabecalho == MOTOR
+        return when {
+            cabecalho == MODULO_AUSENTE -> null
+            servico == 0x01 && motor -> modo01(pedido, leitura())
+            servico == 0x03 && motor -> listOf(0x43, codigos().size) + codigos().flatMap(::bytesDtc)
+            servico == 0x13 && cabecalho == MOTOR -> listOf(0x53, codigos().size) + codigos().flatMap(::bytesDtc)
+            servico == 0x21 && (cabecalho == MOTOR || cabecalho == CAMBIO) -> servico21(pedido, leitura())
+            servico == 0x21 -> null // pedido funcional: as centrais Toyota só atendem o endereço físico
+            cabecalho == MOTOR || cabecalho == CAMBIO || cabecalho == CABECALHO_FUNCIONAL ->
+                listOf(0x7F, servico, NRC_SERVICO_NAO_SUPORTADO)
+            else -> null
+        }
+    }
+
+    private fun modo01(pedido: String, valores: Map<String, Double>): List<Int>? {
+        if (pedido.length != 4) return listOf(0x7F, 0x01, NRC_FORMATO_INVALIDO)
+        val pid = pedido.substring(2).toInt(16)
+        val dados: List<Int> = when (pid) {
+            0x00 -> listOf(0xBE, 0x3F, 0xB8, 0x13)
+            0x04 -> listOf(((valores["0104"] ?: 20.0) * 255 / 100).roundToInt())
+            0x05 -> listOf(((valores["0105"] ?: 85.0) + 40).roundToInt())
+            0x0B -> listOf((valores["010B"] ?: 35.0).roundToInt())
+            0x0C -> ((valores["010C"] ?: 800.0) * 4).roundToInt().let { listOf(it shr 8, it and 0xFF) }
+            0x0D -> listOf((valores["010D"] ?: 0.0).roundToInt())
+            0x0F -> listOf(((valores["010F"] ?: 30.0) + 40).roundToInt())
+            else -> return null
+        }
+        return listOf(0x41, pid) + dados.map { it.coerceIn(0, 0xFF) }
+    }
+
+    /** Blocos de identificadores locais da central (os demais: `7F 21 31` requestOutOfRange). */
+    private fun servico21(pedido: String, valores: Map<String, Double>): List<Int> {
+        if (pedido.length != 4) return listOf(0x7F, 0x21, NRC_FORMATO_INVALIDO)
+        val id = pedido.substring(2).toInt(16)
+        val dados = if (cabecalho == MOTOR) blocoMotor(id, valores) else blocoCambio(id)
+        return dados?.let { listOf(0x61, id) + it } ?: listOf(0x7F, 0x21, NRC_FORA_DA_FAIXA)
+    }
+
+    private fun blocoMotor(id: Int, valores: Map<String, Double>): List<Int>? = when (id) {
+        // Correção dos injetores 1–4 (mm³/st = (256A+B-32768)/1000): 0,42 / -0,31 / 1,85 / -0,12.
+        0x13 -> listOf(0x81, 0xA4, 0x7E, 0xCA, 0x87, 0x3A, 0x7F, 0x88)
+        0x01 -> {
+            val rpm = ((valores["010C"] ?: 780.0) / 2).roundToInt().coerceIn(0, 0xFF)
+            val temp = ((valores["0105"] ?: 85.0) + 40).roundToInt().coerceIn(0, 0xFF)
+            listOf(0x00, temp, rpm, 0x3C, 0x80, 0x12, 0x00, 0x8B, 0x64, 0x1F, 0x00, 0x00) + variacao(4)
+        }
+        0x0C -> ((valores["010C"] ?: 780.0) * 4).roundToInt().let { listOf(it shr 8, it and 0xFF) }
+        0x05 -> listOf(((valores["0105"] ?: 85.0) + 40).roundToInt().coerceIn(0, 0xFF))
+        in IDS_MOTOR -> blocoFixo(id, 2 + id % 9)
+        else -> null
+    }
+
+    private fun blocoCambio(id: Int): List<Int>? = when (id) {
+        // ATF a ~70 °C pela fórmula ((256C+D)*7/100-400)/10: C,D = 0x3D62 (+ oscilação no último byte).
+        0x82 -> listOf(0x00, 0x00, 0x3D, 0x62 + random.nextInt(-2, 3))
+        in IDS_CAMBIO -> blocoFixo(id, 3 + id % 5)
+        else -> null
+    }
+
+    /** Bytes estáveis por identificador (mesma resposta a cada leitura) com o último oscilando. */
+    private fun blocoFixo(id: Int, tamanho: Int): List<Int> {
+        val semente = Random(id * 31 + cabecalho.hashCode())
+        return List(tamanho - 1) { semente.nextInt(0, 0x100) } + variacao(1)
+    }
+
+    private fun variacao(n: Int) = List(n) { random.nextInt(0, 0x100) }
+
+    private fun bytesDtc(codigo: String): List<Int> {
+        val sistema = "PCBU".indexOf(codigo.first()).coerceAtLeast(0)
+        val valor = (sistema shl 14) or codigo.drop(1).toInt(16)
+        return listOf(valor shr 8, valor and 0xFF)
+    }
+
+    /** Até 7 bytes num quadro único; acima disso, o multi-frame do ELM327 com `ATH0` (`00E`, `0:`, `1:`...). */
+    private fun formatarCan(bytes: List<Int>): String {
+        fun hex(lista: List<Int>) = lista.joinToString("") { "%02X".format(it) }
+        if (bytes.size <= 7) return hex(bytes)
+        val linhas = mutableListOf("%03X".format(bytes.size), "0:" + hex(bytes.take(6)))
+        bytes.drop(6).chunked(7).forEachIndexed { i, bloco -> linhas += "${"%X".format((i + 1) % 16)}:" + hex(bloco) }
+        return linhas.joinToString("\r")
+    }
+
+    companion object {
+        const val CABECALHO_FUNCIONAL = "7DF"
+        const val MOTOR = "7E0"
+        const val CAMBIO = "7E1"
+        const val MODULO_AUSENTE = "7E2"
+        private const val FIM = "\r\r"
+        private const val NRC_SERVICO_NAO_SUPORTADO = 0x11
+        private const val NRC_FORMATO_INVALIDO = 0x13
+        private const val NRC_FORA_DA_FAIXA = 0x31
+
+        /** Identificadores do serviço 21 que o motor simulado responde (além de 01, 05, 0C e 13). */
+        val IDS_MOTOR: Set<Int> = setOf(0x02, 0x03, 0x04, 0x06, 0x07, 0x08, 0x10, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x30, 0x31, 0x40, 0x51)
+
+        /** Identificadores do serviço 21 que o câmbio simulado responde (além do 82, ATF). */
+        val IDS_CAMBIO: Set<Int> = setOf(0x01, 0x02, 0x30, 0x83, 0x91)
+    }
+}

@@ -101,8 +101,60 @@ interface ObdClient {
      */
     fun registroComunicacao(): List<EntradaRegistro> = emptyList()
 
+    // ---------------------------------------------------------------- Ferramentas de Oficina
+
+    /**
+     * Sessão manual em andamento (teste de bateria, terminal, varredura de PIDs): enquanto true, os
+     * fluxos de [lerTelemetria] e [lerDadosEmTempoReal] ficam suspensos entre ciclos — inclusive o
+     * polling do HUD flutuante —, sem fechar o socket.
+     */
+    val sessaoManualAtiva: StateFlow<Boolean>
+
+    /**
+     * Pausa o polling (espera o ciclo em andamento terminar) e guarda o estado do adaptador
+     * (cabeçalho `ATSH` ativo) para [encerrarSessaoManual] restaurar. Falha se desconectado.
+     */
+    suspend fun iniciarSessaoManual(): Result<Unit>
+
+    /**
+     * Restaura o adaptador (configuração `ATE0 ATL0 ATS0 ATH0`/`ATAT2` se um comando manual ou um
+     * `LV RESET` a mudou, e o cabeçalho `ATSH` da entrada) e libera o polling. Idempotente; roda
+     * mesmo com o chamador cancelado.
+     */
+    suspend fun encerrarSessaoManual()
+
+    /**
+     * Envia um comando bruto (`ATRV`, `ATSH 7E1`, `2101`, `13`...) exatamente como digitado (só
+     * maiúsculas e sem espaços nas pontas) e devolve a resposta crua e a latência. Sem `ATSH`
+     * automático: o cabeçalho é o que estiver no adaptador. `ATSH`/`ATST`/`ATZ` manuais são
+     * acompanhados para o polling continuar correto depois. Timeout = [RespostaBruta.semPrompt].
+     * @param registrar grava a troca no registro de comunicação (o teste de bateria, a 20 Hz, não grava).
+     */
+    suspend fun enviarComandoManual(
+        comando: String,
+        timeoutMs: Long = TIMEOUT_MANUAL_MS,
+        registrar: Boolean = true,
+    ): Result<RespostaBruta>
+
     companion object {
         const val INTERVALO_PADRAO_MS = 1000L
+
+        /** Prazo padrão de um comando manual (terminal/varredura). */
+        const val TIMEOUT_MANUAL_MS = 2_000L
+
+        /** Maior comando manual aceito (o ELM327 tem buffer de entrada de ~64 caracteres). */
+        const val MAX_COMANDO_MANUAL = 48
+
+        /**
+         * Normaliza um comando digitado: sem espaços nas pontas, maiúsculas; null se vazio, longo
+         * demais ou com caracteres fora do ASCII imprimível (um `\r` no meio enviaria dois comandos).
+         */
+        fun normalizarComandoManual(comando: String): String? {
+            val c = comando.trim().uppercase()
+            if (c.isEmpty() || c.length > MAX_COMANDO_MANUAL) return null
+            if (c.any { it !in ' '..'~' }) return null
+            return c
+        }
 
         /**
          * Período mínimo do ciclo da telemetria em duas filas: só um piso; no ELM327 real o ciclo

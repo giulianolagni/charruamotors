@@ -99,7 +99,8 @@ dependencies {
 
 /**
  * Publicação do APK de release: ao fim do `assembleRelease`, o APK assinado é copiado para
- * `dist/CharruaOBDPro-<versão>-release.apk` (versionado no Git) e, se a pasta do Google Drive
+ * `dist/CharruaOBDPro-<versão>-release.apk` (fora do Git: vai para a GitHub Release pelo
+ * `scripts/publicar-release.ps1`) e, se a pasta do Google Drive
  * existir na máquina (`G:\Meu Drive\CharruaOBD` ou `G:\My Drive\CharruaOBD`), também para lá.
  */
 val nomeApkRelease = "CharruaOBDPro-${android.defaultConfig.versionName}-release.apk"

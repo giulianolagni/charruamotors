@@ -48,7 +48,11 @@ class PersonalizarPainelActivity : AppCompatActivity() {
     private val chipsNavegacao = mutableMapOf<BotaoNavegacao, Chip>()
     /** PIDs que a lista rápida oferece: o catálogo padrão e os perfis de montadora (Toyota SW4, VW...). */
     private val pidsDisponiveis by lazy { app.catalogoPids.pids + app.catalogoEstendido.definicoes }
-    private val nomesPids: Map<String, String> by lazy { pidsDisponiveis.associate { it.comando.uppercase() to it.nome } }
+    private val nomesPids: Map<String, String> by lazy { pidsDisponiveis.associate { it.comando.uppercase() to rotuloDoPid(it.comando, it.nome) } }
+
+    /** Mesmo rótulo claro, com unidade, que o mostrador usa (`SensorPainel.titulo`); sem sensor equivalente, o nome do catálogo. */
+    private fun rotuloDoPid(comando: String, nomeCatalogo: String): String =
+        SensorPainel.entries.firstOrNull { it.comando.equals(comando, ignoreCase = true) }?.titulo ?: nomeCatalogo
     private lateinit var editorHud: EditorConfigHud
 
     private val adapterSecoes = SecoesAdapter(aoOcultar = { secao -> prefs.atualizar { it.ocultar(secao) } })
@@ -189,7 +193,7 @@ class PersonalizarPainelActivity : AppCompatActivity() {
         // (pedal, marcha/alavanca, ATF, 4x4 e VSC da SW4), que só aparecem se o módulo responder.
         for (definicao in pidsDisponiveis) {
             val chip = Chip(this).apply {
-                text = definicao.nome
+                text = nomesPids[definicao.comando.uppercase()] ?: definicao.nome
                 isCheckable = true
                 setOnClickListener { prefs.atualizar { it.alternarListaRapida(definicao.comando) } }
             }

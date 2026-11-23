@@ -17,6 +17,7 @@ import androidx.lifecycle.withStarted
 import com.charruamotors.BuildConfig
 import com.charruamotors.R
 import com.charruamotors.sistema.atualizacao.InterpretadorReleaseGithub
+import com.charruamotors.sistema.atualizacao.OrigemInstalacao
 import com.charruamotors.sistema.atualizacao.ReleaseGithub
 import com.charruamotors.sistema.atualizacao.ResultadoVerificacao
 import com.charruamotors.sistema.atualizacao.SessaoAtualizacao
@@ -32,7 +33,7 @@ import java.io.IOException
 /**
  * Atualizador pelo GitHub Releases, ligado a uma tela:
  * - [verificarAoAbrir]: na abertura da tela principal, consulta em segundo plano e só aparece se
- *   houver versão nova (sem internet, `404/401` ou já atualizado: silêncio). "Depois" vale para
+ *   houver versão nova e o app não tiver vindo da Play Store (sem internet, `404/401` ou já atualizado: silêncio). "Depois" vale para
  *   a sessão inteira;
  * - [verificarManualmente]: "Verificar atualizações" (Sobre o App e Configurações), com resposta
  *   sempre visível ("Você já está na última versão", ou "Abrir Releases no GitHub" se o
@@ -63,6 +64,8 @@ class AtualizadorApp(private val activity: AppCompatActivity) {
     /** Cold start da tela principal: silencioso, só mostra o diálogo se houver versão nova. */
     fun verificarAoAbrir() {
         if (SessaoAtualizacao.adiadaNestaSessao) return
+        // Regra da Play Store: app instalado por ela só se atualiza por ela.
+        if (!OrigemInstalacao.deveVerificarAtualizacao(activity)) return
         activity.lifecycleScope.launch {
             val resultado = verificador.verificar()
             if (resultado !is ResultadoVerificacao.NovaVersao) return@launch

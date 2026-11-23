@@ -3,13 +3,18 @@ package com.charruamotors.ui.painel
 import android.annotation.SuppressLint
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import android.content.Context
+import android.graphics.Typeface
+import android.view.View
 import android.widget.ArrayAdapter
+import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.charruamotors.R
 import com.charruamotors.databinding.ItemMostradorEditorBinding
 import com.charruamotors.databinding.ItemOrdemSimplesBinding
 import com.charruamotors.databinding.ItemSecaoPainelBinding
 import com.charruamotors.direcao.painel.EstiloMostrador
+import com.charruamotors.direcao.painel.HistoricoSensores
 import com.charruamotors.direcao.painel.Mostrador
 import com.charruamotors.direcao.painel.SecaoPainel
 import com.charruamotors.direcao.painel.SensorPainel
@@ -113,12 +118,12 @@ class MostradoresAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Item {
         val item = Item(ItemMostradorEditorBinding.inflate(LayoutInflater.from(parent.context), parent, false))
         val contexto = parent.context
-        item.b.campoMostrador.setAdapter(
-            ArrayAdapter(contexto, android.R.layout.simple_list_item_1, SensorPainel.entries.map { it.titulo }),
-        )
+        val adaptadorSensores = SensoresAgrupadosAdapter(contexto, SensorPainel.agrupados(HistoricoSensores.naoSuportados()))
+        item.b.campoMostrador.setAdapter(adaptadorSensores)
         item.b.campoMostrador.setOnItemClickListener { _, _, i, _ ->
             val posicao = item.bindingAdapterPosition
-            if (posicao != RecyclerView.NO_POSITION) aoEscolherSensor(posicao, SensorPainel.entries[i])
+            val sensor = (adaptadorSensores.getItem(i) as? LinhaSensor.Item)?.sensor
+            if (posicao != RecyclerView.NO_POSITION && sensor != null) aoEscolherSensor(posicao, sensor)
         }
         item.b.grupoEstiloMostrador.addOnButtonCheckedListener { _, id, marcado ->
             val posicao = item.bindingAdapterPosition
@@ -161,5 +166,60 @@ class MostradoresAdapter(
             EstiloMostrador.DIGITAL -> R.id.botao_estilo_digital
             EstiloMostrador.FITA -> R.id.botao_estilo_fita
         }
+    }
+}
+
+/** Linha do seletor de sensores: cabeçalho de categoria (não selecionável) ou um sensor. */
+sealed interface LinhaSensor {
+    data class Cabecalho(val titulo: String) : LinhaSensor {
+        override fun toString() = titulo
+    }
+
+    /** [indisponivel]: da seção "Não suportados neste veículo" (aparece esmaecido, mas continua escolhível). */
+    data class Item(val sensor: SensorPainel, val indisponivel: Boolean) : LinhaSensor {
+        override fun toString() = sensor.titulo
+    }
+
+    companion object {
+        /** Cabeçalhos (mesmas categorias do HUD) e sensores, com os não suportados recolhidos no fim. */
+        fun montar(grupos: List<Pair<String, List<SensorPainel>>>): List<LinhaSensor> = buildList {
+            for ((titulo, sensores) in grupos) {
+                val fora = titulo == SensorPainel.TITULO_NAO_SUPORTADOS
+                add(Cabecalho(if (fora) "$titulo (${sensores.size})" else titulo))
+                sensores.forEach { add(Item(it, fora)) }
+            }
+        }
+    }
+}
+
+/** Dropdown do mostrador agrupado por categoria, no formato do HUD. */
+class SensoresAgrupadosAdapter(contexto: Context, grupos: List<Pair<String, List<SensorPainel>>>) :
+    ArrayAdapter<LinhaSensor>(contexto, android.R.layout.simple_list_item_1, LinhaSensor.montar(grupos)) {
+
+    override fun isEnabled(position: Int) = getItem(position) is LinhaSensor.Item
+
+    override fun areAllItemsEnabled() = false
+
+    override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+        val vista = super.getView(position, convertView, parent) as TextView
+        when (val linha = getItem(position)) {
+            is LinhaSensor.Cabecalho -> {
+                vista.setTypeface(null, Typeface.BOLD)
+                vista.textSize = TAMANHO_CABECALHO
+                vista.alpha = 0.7f
+            }
+            is LinhaSensor.Item -> {
+                vista.setTypeface(null, Typeface.NORMAL)
+                vista.textSize = TAMANHO_ITEM
+                vista.alpha = if (linha.indisponivel) 0.5f else 1f
+            }
+            null -> Unit
+        }
+        return vista
+    }
+
+    private companion object {
+        const val TAMANHO_CABECALHO = 13f
+        const val TAMANHO_ITEM = 16f
     }
 }

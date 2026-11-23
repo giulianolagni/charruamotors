@@ -33,6 +33,9 @@
     </plurals>
     <string name="personalizar_lista_limpar">Limpar seleção</string>
     <string name="personalizar_hud">HUD flutuante (sobre o Waze)</string>
+    <string name="personalizar_layouts_rapidos">Layouts rápidos</string>
+    <string name="personalizar_layout_padrao">Padrão</string>
+    <string name="personalizar_layout_turbo_flex">Turbo Flex (Cruze)</string>
     <string name="personalizar_restaurar">Restaurar padrão</string>
     <string name="personalizar_restaurar_mensagem">Volta todos os blocos na ordem padrão, os 4 relógios Esportivos (RPM, Velocidade, Turbo e Motor), a lista rápida completa e o HUD expandido.</string>
     <string name="personalizar_restaurar_confirmar">Restaurar</string>

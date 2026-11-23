@@ -78,23 +78,26 @@ enum class PresetVeiculo(
         ecuCambio = "7E1",
         servicoMontadora = "22",
         limiteAguaC = 108,
-        limiteAtfC = 110,
-        tensaoMinV = 12.8,
+        limiteAtfC = 105,
+        tensaoMinV = 12.6,
         faixas = FaixasVeiculo(
             "Chevrolet Cruze 1.4 Turbo Flex 2018 (LE2)",
             listOf(
-                FaixaEsperada(ParametroFaixa.RPM_LENTA, 600.0, 800.0),
+                FaixaEsperada(ParametroFaixa.RPM_LENTA, 600.0, 850.0),
                 FaixaEsperada(ParametroFaixa.RPM_MAXIMO, null, 6_000.0),
                 FaixaEsperada(ParametroFaixa.TEMP_AGUA, 85.0, 108.0),
-                FaixaEsperada(ParametroFaixa.TEMP_ATF, 50.0, 110.0),
-                // Regulagem variável de tensão (RVC) da GM: em cruzeiro o alternador pode baixar a ~12,8 V.
-                FaixaEsperada(ParametroFaixa.TENSAO, 12.8, 14.8),
+                FaixaEsperada(ParametroFaixa.TEMP_ATF, 60.0, 105.0),
+                // Regulagem variável de tensão (RVC) da GM: em cruzeiro o alternador modula a carga (12,6–14,8 V).
+                FaixaEsperada(ParametroFaixa.TENSAO, 12.6, 14.8),
                 // Injeção direta (GDI): ~35 bar em marcha lenta a ~200 bar em plena carga.
                 FaixaEsperada(ParametroFaixa.RAIL, 30.0, 200.0),
                 FaixaEsperada(ParametroFaixa.RAIL_LENTA, 30.0, 60.0),
-                FaixaEsperada(ParametroFaixa.MAP_TURBO, 25.0, 240.0),
+                // Lenta em vácuo (~28–38 kPa) até ~1,1 bar relativo em carga.
+                FaixaEsperada(ParametroFaixa.MAP_TURBO, 25.0, 215.0),
                 FaixaEsperada(ParametroFaixa.STFT, -10.0, 10.0),
                 FaixaEsperada(ParametroFaixa.LTFT, -10.0, 10.0),
+                FaixaEsperada(ParametroFaixa.CARGA_MOTOR, 0.0, 100.0),
+                FaixaEsperada(ParametroFaixa.TEMP_ADMISSAO, 10.0, 65.0),
             ),
         ),
     ),

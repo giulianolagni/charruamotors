@@ -149,6 +149,37 @@
                 android:textAppearance="?attr/textAppearanceBodySmall"
                 android:textColor="@color/texto_secundario" />
 
+            <!-- Layouts rápidos: troca todos os relógios de uma vez -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/personalizar_layouts_rapidos"
+                android:textAppearance="?attr/textAppearanceLabelLarge" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/espaco_pequeno"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_layout_padrao"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/espaco_pequeno"
+                    android:layout_weight="1"
+                    android:text="@string/personalizar_layout_padrao" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_layout_turbo_flex"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/personalizar_layout_turbo_flex" />
+            </LinearLayout>
+
             <!-- Prévia com os dois primeiros relógios, cada um no seu estilo -->
             <com.google.android.material.card.MaterialCardView
                 style="@style/Widget.Material3.CardView.Elevated"

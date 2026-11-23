@@ -53,11 +53,11 @@ class IdentificadorPidsTest {
     }
 
     @Test
-    fun `perfil Toyota identifica o ATF no cambio e os 4 injetores no 2113`() {
+    fun `perfil Toyota identifica o ATF no cambio e os 4 bicos no 21AD`() {
         val atf = identificador.conhecido("7E1", "2182")!!
         assertEquals("Toyota", atf.origem)
         assertTrue(atf.nome.contains("ATF"))
-        val injetores = identificador.identificar(resultado("2113", "611381A47ECA873A7F88\r>"), "7E0")
+        val injetores = identificador.identificar(resultado("21AD", "61AD00E600E1015200000000\r>"), "7E0")
         assertEquals(StatusIdentificacao.IDENTIFICADO, injetores.status)
         assertTrue(injetores.descricao, injetores.descricao.endsWith("+3 sensores"))
     }

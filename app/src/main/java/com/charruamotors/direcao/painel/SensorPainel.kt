@@ -8,6 +8,9 @@ import com.charruamotors.sistema.unidades.ValorExibicao
 import com.charruamotors.ui.componentes.EscalaGauge
 import com.charruamotors.ui.util.comoNumero
 
+/** Correção dos bicos: ±3,00 mm³/st é a faixa saudável; a escala vai até ±4 (zona vermelha em 3). */
+private val ESCALA_BICO = mapOf("mm³/st" to EscalaGauge(-4f, 4f, 3f, 8, 2))
+
 /**
  * Sensores que podem ocupar um dos 4 mostradores do Painel ou uma célula do HUD flutuante, com a
  * escala de cada unidade de exibição (métrica e imperial). [comando] é a chave do PID canônico no
@@ -28,6 +31,8 @@ enum class SensorPainel(
     private val escalas: Map<String, EscalaGauge>,
     val alternativos: List<String> = emptyList(),
     val rotulos: Map<Int, String> = emptyMap(),
+    /** Valores positivos levam `+` (correção dos bicos injetores: `+0,45`). */
+    val comSinal: Boolean = false,
 ) {
     RPM(
         "010C", "RPM", "RPM", "rpm", 0,
@@ -80,7 +85,7 @@ enum class SensorPainel(
     ACELERADOR(
         "0149", "Pedal Acelerador", "PEDAL", "%", 0,
         mapOf("%" to EscalaGauge(0f, 100f, null, 5, 4)),
-        alternativos = listOf("TOYOTA_PEDAL_D"),
+        alternativos = listOf("TOYOTA_PEDAL_D", "TOYOTA_PEDAL_E"),
     ),
     TENSAO(
         "ATRV", "Bateria", "BATERIA", "V", 1,
@@ -111,12 +116,12 @@ enum class SensorPainel(
 
     // ---- Toyota SW4 / Hilux (perfil de montadora, pids_estendidos.json): só leem se o módulo responder.
     TEMP_CAMBIO(
-        "TOYOTA_ATF", "Câmbio ATF", "ATF", "°C", 0,
+        "TOYOTA_ATF_CAMBIO", "Temp. Câmbio (ATF)", "ATF", "°C", 0,
         mapOf(
             "°C" to EscalaGauge(40f, 150f, 120f, 11, 2),
             "°F" to EscalaGauge(100f, 300f, 250f, 10, 2),
         ),
-        alternativos = listOf("TOYOTA_ATF_ECM"),
+        alternativos = listOf("TOYOTA_ATF", "TOYOTA_ATF_ECM"),
     ),
     MARCHA_ALAVANCA(
         "TOYOTA_ALAVANCA", "Marcha / Alavanca", "ALAVANCA", "", 0,
@@ -128,7 +133,7 @@ enum class SensorPainel(
         "TOYOTA_MARCHA", "Marcha", "MARCHA", "", 0,
         mapOf("" to EscalaGauge(0f, 6f, null, 6, 1)),
         alternativos = listOf("TOYOTA_MARCHA_ECM"),
-        rotulos = mapOf(0 to "N", 1 to "1ª", 2 to "2ª", 3 to "3ª", 4 to "4ª", 5 to "5ª", 6 to "6ª"),
+        rotulos = mapOf(0 to "N", 1 to "1ª", 2 to "2ª", 3 to "3ª", 4 to "4ª", 5 to "5ª", 255 to "Parado"),
     ),
     TRACAO_4X4(
         "TOYOTA_4WD", "Tração 4x4", "4X4", "", 0,
@@ -140,6 +145,22 @@ enum class SensorPainel(
         mapOf("" to EscalaGauge(0f, 4f, 3f, 4, 1)),
         rotulos = mapOf(0 to "Normal", 1 to "Atuando", 2 to "VSC OFF", 3 to "TRC OFF", 4 to "Falha"),
     ),
+    TENSAO_ECU(
+        "TOYOTA_TENSAO_ECU", "Tensão da ECU", "ECU", "V", 2,
+        mapOf("V" to EscalaGauge(8f, 16f, 15f, 8, 2)),
+    ),
+    PRESSAO_BARO(
+        "TOYOTA_BARO", "Pressão Barométrica", "BARO", "kPa", 0,
+        mapOf(
+            "kPa" to EscalaGauge(60f, 110f, null, 5, 5),
+            "bar" to EscalaGauge(0.6f, 1.1f, null, 5, 5),
+            "psi" to EscalaGauge(8f, 16f, null, 8, 2),
+        ),
+    ),
+    BICO_1("TOYOTA_INJ1", "Bico Injetor #1", "BICO 1", "mm³/st", 2, ESCALA_BICO, comSinal = true),
+    BICO_2("TOYOTA_INJ2", "Bico Injetor #2", "BICO 2", "mm³/st", 2, ESCALA_BICO, comSinal = true),
+    BICO_3("TOYOTA_INJ3", "Bico Injetor #3", "BICO 3", "mm³/st", 2, ESCALA_BICO, comSinal = true),
+    BICO_4("TOYOTA_INJ4", "Bico Injetor #4", "BICO 4", "mm³/st", 2, ESCALA_BICO, comSinal = true),
     ;
 
     /** Todas as chaves que alimentam o mostrador, na ordem de preferência. */
@@ -150,10 +171,11 @@ enum class SensorPainel(
 
     /** Texto de exibição: o rótulo do estado (`D`, `4x4 (H4)`) ou o número já convertido; "—" sem leitura. */
     fun texto(valor: Double?, conversor: ConversorUnidades): String {
-        if (valor == null || !valor.isFinite()) return SEM_LEITURA
+        if (valor == null || !valor.isFinite()) return if (this == TRACAO_4X4 || this == VSC) NAO_DISPONIVEL else SEM_LEITURA
         DefinicaoPid.rotuloDe(rotulos, valor)?.let { return it }
         val v = exibir(valor, conversor)
-        return v.valor.comoNumero(v.casas)
+        val numero = v.valor.comoNumero(v.casas)
+        return if (comSinal && v.valor > 0 && !numero.startsWith("+")) "+$numero" else numero
     }
 
     /**
@@ -188,6 +210,9 @@ enum class SensorPainel(
 
     companion object {
         const val SEM_LEITURA = "—"
+
+        /** 4x4 (7C0) e VSC (7B0) não respondem na SW4 1KD-FTV + A750F. */
+        const val NAO_DISPONIVEL = "N/D"
 
         fun deCodigo(codigo: String?): SensorPainel? = entries.firstOrNull { it.name.equals(codigo?.trim(), ignoreCase = true) }
 

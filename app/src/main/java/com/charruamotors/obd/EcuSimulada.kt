@@ -204,8 +204,11 @@ internal class EcuSimulada(private val random: Random) {
     }
 
     private fun blocoMotor(id: Int, valores: Map<String, Double>): List<Int>? = when (id) {
-        // Correção dos injetores 1–4 (mm³/st = (256A+B-32768)/1000): 0,42 / -0,31 / 1,85 / -0,12.
-        0x13 -> listOf(0x81, 0xA4, 0x7E, 0xCA, 0x87, 0x3A, 0x7F, 0x88)
+        // Correção dos bicos 1–4 (signed short ÷ 512, mm³/st): +0,45 / +0,44 / +0,66 / 0,00 (capturas reais).
+        0xAD -> listOf(0x00, 0xE6, 0x00, 0xE1, 0x01, 0x52, 0x00, 0x00, 0x00, 0x00, 0x00)
+        // Tensão da ECU (A*256+B)/1000 V: 14,18 V; barômetro em kPa: 92 (0x5C).
+        0x42 -> listOf(0x37, 0x63)
+        0x33 -> listOf(0x5C)
         0x01 -> {
             val rpm = ((valores["010C"] ?: 780.0) / 2).roundToInt().coerceIn(0, 0xFF)
             val temp = ((valores["0105"] ?: 85.0) + 40).roundToInt().coerceIn(0, 0xFF)
@@ -221,11 +224,10 @@ internal class EcuSimulada(private val random: Random) {
     }
 
     private fun blocoCambio(id: Int, valores: Map<String, Double>): List<Int>? = when (id) {
-        // ATF a ~70 °C pela fórmula ((256C+D)*7/100-400)/10: C,D = 0x3D62 (+ oscilação no último byte).
-        0x82 -> listOf(0x00, 0x00, 0x3D, 0x62 + random.nextInt(-2, 3))
-        // Marcha engatada (A = 1..6) seguida de bytes de estado; alavanca em D (A = 3).
+        // Marcha engatada (A = 1..5; 0xFF parado) seguida de bytes de estado.
         0x30 -> listOf(marchaSimulada(valores["010D"] ?: 0.0), 0x00, 0x1C)
-        0xD9 -> listOf(ALAVANCA_D, 0x00)
+        // 21D9 (11 bytes): alavanca em D (bit 2 de b3) e ATF em b4:b5 (°C = (raw-10880)/240; ~26 °C = 0x42E0).
+        0xD9 -> listOf(0x00, 0x00, 0x00, 0x04, 0x42, 0xE0 + random.nextInt(0, 0x20), 0x00, 0x00, 0x00, 0x00, 0x00)
         in IDS_CAMBIO -> blocoFixo(id, 3 + id % 5)
         else -> null
     }
@@ -288,7 +290,7 @@ internal class EcuSimulada(private val random: Random) {
         private const val NRC_FORMATO_INVALIDO = 0x13
         private const val NRC_FORA_DA_FAIXA = 0x31
 
-        /** Identificadores do serviço 21 que o motor simulado responde (além de 01, 05, 0C e 13). */
+        /** Identificadores do serviço 21 que o motor simulado responde (além de 01, 05, 0C, 33, 42 e AD). */
         val IDS_MOTOR: Set<Int> = setOf(0x02, 0x03, 0x04, 0x06, 0x07, 0x08, 0x10, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x30, 0x31, 0x40, 0x51)
 
         /** Identificadores do serviço 21 que o câmbio simulado responde (além do 82 ATF, 30 marcha e D9 alavanca). */
@@ -309,14 +311,17 @@ internal class EcuSimulada(private val random: Random) {
         /** Endereço de resposta de um módulo (`7B0` → `7B8`). */
         private fun respostaDe(cabecalho: String) = "%03X".format(cabecalho.toInt(16) + 8)
 
-        /** Marcha do automático de 6 velocidades pela velocidade (1ª parado e arrancando). */
+        /** Marcha do A750F (5 velocidades) pela velocidade; 0xFF parado. */
         fun marchaSimulada(velocidadeKmh: Double): Int = when {
+            velocidadeKmh < 1 -> MARCHA_PARADO
             velocidadeKmh < 18 -> 1
             velocidadeKmh < 32 -> 2
             velocidadeKmh < 48 -> 3
             velocidadeKmh < 66 -> 4
-            velocidadeKmh < 88 -> 5
-            else -> 6
+            else -> 5
         }
+
+        /** `2130` devolve 0xFF com o veículo parado (0 km/h). */
+        const val MARCHA_PARADO = 0xFF
     }
 }

@@ -16,6 +16,9 @@ import kotlin.math.roundToInt
  * @property casasDecimais casas decimais sugeridas para exibição.
  * @property estendida requisição específica de montadora (modos 21/22 com cabeçalho CAN); null nos PIDs padrão.
  * @property chave sensor semântico ([ChaveSemantica]) que o PID representa; null nos que não têm equivalente.
+ * @property decodificador nome de um [Decodificadores] (campo `decodificador` do JSON) para valores que a
+ *   fórmula aritmética não expressa (máscaras de bits, inteiros com sinal); quando presente, substitui a
+ *   [formula] em [converter]. Resultado `NaN` = leitura inválida (fora da faixa).
  * @property rotulos estados discretos (ex.: alavanca do câmbio `0` → `P`, `3` → `D`): o valor inteiro
  *   é exibido pelo rótulo em vez do número. Vazio nos sensores contínuos.
  *
@@ -35,8 +38,12 @@ data class DefinicaoPid(
     val estendida: RequisicaoEstendida? = null,
     val chave: ChaveSemantica? = null,
     val rotulos: Map<Int, String> = emptyMap(),
+    val decodificador: String? = null,
 ) {
     init {
+        require(decodificador == null || Decodificadores.existe(decodificador)) {
+            "$comando: decodificador desconhecido \"$decodificador\""
+        }
         if (estendida == null) {
             require(ehComandoAt || REGEX_MODO_01.matches(comando)) { "Comando inválido: $comando" }
         } else {
@@ -47,6 +54,9 @@ data class DefinicaoPid(
         require(bytes in 0..MAX_BYTES) { "$comando: quantidade de bytes inválida ($bytes)" }
         require(formula.bytesNecessarios <= bytes) {
             "$comando: a fórmula \"$formula\" usa ${formula.bytesNecessarios} byte(s), mas o PID declara $bytes"
+        }
+        require(decodificador == null || Decodificadores.bytesNecessarios(decodificador) <= bytes) {
+            "$comando: o decodificador $decodificador usa mais bytes que os $bytes declarados"
         }
         require(!ehComandoAt || formula.variaveis.all { it == 'X' }) {
             "$comando: comandos AT só podem usar a variável X"
@@ -81,7 +91,8 @@ data class DefinicaoPid(
     val rotuloComando: String get() = estendida?.let { "${it.cabecalho} · ${it.comando}" } ?: comando
 
     /** Converte os bytes de dados (ou o valor textual [x], em comandos AT) na unidade do sensor. */
-    fun converter(dados: List<Int> = emptyList(), x: Double = 0.0): Double = formula.avaliar(dados, x)
+    fun converter(dados: List<Int> = emptyList(), x: Double = 0.0): Double =
+        if (decodificador != null) Decodificadores.decodificar(decodificador, dados) else formula.avaliar(dados, x)
 
     /** A leitura está dentro da faixa teórica? (NaN/Infinito nunca estão.) */
     fun dentroDaFaixa(valor: Double): Boolean =
@@ -158,19 +169,21 @@ class CatalogoPids(val pids: List<DefinicaoPid>) {
          */
         internal fun definicaoDeJson(o: JSONObject, estendida: RequisicaoEstendida? = null): DefinicaoPid {
             val comando = o.getString(if (estendida == null) "comando" else "id").trim().uppercase()
+            val decodificador = o.optString("decodificador", "").trim().uppercase().ifEmpty { null }
             return try {
                 DefinicaoPid(
                     comando = comando,
                     nome = o.getString("nome"),
                     unidade = o.getString("unidade"),
                     bytes = o.getInt("bytes"),
-                    formula = Formula.compilar(o.getString("formula")),
+                    formula = Formula.compilar(o.optString("formula", "").ifBlank { if (decodificador != null) "0" else o.getString("formula") }),
                     min = o.getDouble("min"),
                     max = o.getDouble("max"),
                     casasDecimais = o.optInt("casas", 0),
                     estendida = estendida,
                     chave = ChaveSemantica.deTexto(o.optString("chave", "")),
                     rotulos = rotulosDeJson(o.optJSONObject("rotulos")),
+                    decodificador = decodificador,
                 )
             } catch (e: IllegalArgumentException) {
                 throw IllegalArgumentException("PID $comando: ${e.message}", e)

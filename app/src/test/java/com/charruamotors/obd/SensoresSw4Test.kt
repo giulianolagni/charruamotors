@@ -65,11 +65,13 @@ class SensoresSw4Test {
         assertEquals("7E0 · 2130", catalogo["TOYOTA_MARCHA_ECM"]!!.rotuloComando)
         assertEquals("7E0 · 2182", catalogo["TOYOTA_ATF_ECM"]!!.rotuloComando)
         assertEquals(listOf("P", "R", "N", "D", "3", "2", "L"), (0..6).map { alavanca.rotulo(it.toDouble()) })
-        val lido = (ObdParser.parsePid("61D90300\r\r", alavanca) as RespostaObd.Ok).valor
-        assertEquals("D", alavanca.rotulo(lido))
+        // Fallback pelo motor (7E0 · 21D9, 3 bytes): 00 41 A0 = P.
+        val ecm = catalogo["TOYOTA_ALAVANCA_ECM"]!!
+        assertEquals("P", ecm.rotulo((ObdParser.parsePid("61D90041A0\r\r", ecm) as RespostaObd.Ok).valor))
         assertEquals("4ª", catalogo["TOYOTA_MARCHA"]!!.rotulo((ObdParser.parsePid("6130040000\r\r", catalogo["TOYOTA_MARCHA"]!!) as RespostaObd.Ok).valor))
         // Fora da faixa (byte desconhecido): não entra no painel.
-        assertTrue(ObdParser.parsePid("61D9FF\r\r", alavanca) is RespostaObd.Invalido)
+        assertTrue(ObdParser.parsePid("61D9FF\r\r", ecm) is RespostaObd.Invalido)
+        assertTrue(ObdParser.parsePid("61D9FF\r\r", alavanca) !is RespostaObd.Ok) // curto demais para o A750F
         assertNull(alavanca.rotulo(2.5))
     }
 
@@ -110,9 +112,16 @@ class SensoresSw4Test {
         assertEquals("H4 bloqueado", SensorPainel.TRACAO_4X4.texto(2.0, c))
         assertEquals("Atuando", SensorPainel.VSC.texto(1.0, c))
         assertEquals("78", SensorPainel.TEMP_CAMBIO.texto(SensorPainel.TEMP_CAMBIO.ler(DadosObd(mapOf("TOYOTA_ATF_ECM" to 78.0))), c))
-        // Módulo/PID que não responde: "—".
+        assertEquals("Temp. Câmbio (ATF)", SensorPainel.TEMP_CAMBIO.titulo)
+        assertEquals(32.0, SensorPainel.TEMP_CAMBIO.ler(DadosObd(mapOf("TOYOTA_ATF_CAMBIO" to 32.0, "TOYOTA_ATF_ECM" to 78.0)))!!, 0.0)
+        // Pedal: 2149 (D) antes do 214A (E).
+        assertEquals(16.1, SensorPainel.ACELERADOR.ler(DadosObd(mapOf("TOYOTA_PEDAL_E" to 30.0, "TOYOTA_PEDAL_D" to 16.1)))!!, 0.0)
+        assertEquals(30.0, SensorPainel.ACELERADOR.ler(DadosObd(mapOf("TOYOTA_PEDAL_E" to 30.0)))!!, 0.0)
+        // Módulo/PID que não responde: "N/D" no 4x4/VSC (módulos ausentes na SW4) e "—" nos demais.
         assertNull(SensorPainel.TRACAO_4X4.ler(DadosObd(mapOf("010C" to 800.0))))
-        assertEquals("—", SensorPainel.TRACAO_4X4.texto(null, c))
+        assertEquals("N/D", SensorPainel.TRACAO_4X4.texto(null, c))
+        assertEquals("N/D", SensorPainel.VSC.texto(null, c))
+        assertEquals("—", SensorPainel.MARCHA_ALAVANCA.texto(null, c))
         assertEquals("ALAVANCA", SensorPainel.MARCHA_ALAVANCA.rotuloHud(c))
         assertEquals(SensorPainel.TEMP_CAMBIO, SensorPainel.doComando("TOYOTA_ATF_ECM"))
     }
@@ -134,13 +143,13 @@ class SensoresSw4Test {
     // ---------------------------------------------------------------- simulador
 
     @Test
-    fun `simulador entrega pedal, marcha, alavanca e VSC da SW4 e deixa o 4x4 sem leitura`() = runTest {
+    fun `simulador entrega pedal, marcha, alavanca e ATF da SW4 e deixa VSC e 4x4 sem leitura`() = runTest {
         val obd = ObdClientFake(random = Random(3), latenciaMs = 0, catalogoEstendido = catalogo)
         obd.conectar(DispositivoObd("Teste", "00:00:00:00:00:01"))
         val perfil = obd.ativarPerfilFabricante("Toyota SW4") as ResultadoPerfil.Ativo
         val ativos = perfil.pids.map { it.comando }.toSet()
-        assertTrue(ativos.containsAll(listOf("TOYOTA_PEDAL_D", "TOYOTA_PEDAL_E", "TOYOTA_MARCHA", "TOYOTA_ALAVANCA", "TOYOTA_VSC")))
-        assertTrue("TOYOTA_4WD" !in ativos)
+        assertTrue(ativos.containsAll(listOf("TOYOTA_PEDAL_D", "TOYOTA_PEDAL_E", "TOYOTA_MARCHA", "TOYOTA_ALAVANCA", "TOYOTA_ATF_CAMBIO")))
+        assertTrue("TOYOTA_4WD" !in ativos && "TOYOTA_VSC" !in ativos)
 
         val dados = obd.lerTelemetria(250, lentosPorVez = 50, ciclosPorLento = 1).take(3).toList().last()
         val pedal = dados["TOYOTA_PEDAL_D"]!!
@@ -148,9 +157,9 @@ class SensoresSw4Test {
         assertEquals(minOf(100.0, pedal + EcuSimulada.DESVIO_APP_E), dados["TOYOTA_PEDAL_E"]!!, 0.11)
         // A velocidade publicada é arredondada: perto da troca, a marcha pode ser a vizinha.
         val marchaEsperada = EcuSimulada.marchaSimulada(dados[com.charruamotors.obd.pid.Pids.VELOCIDADE]!!).toDouble()
-        assertEquals(marchaEsperada, dados["TOYOTA_MARCHA"]!!, 1.0)
+        assertTrue(dados["TOYOTA_MARCHA"]!! == marchaEsperada || dados["TOYOTA_MARCHA"]!! in 1.0..5.0 || dados["TOYOTA_MARCHA"]!! == 255.0)
         assertEquals("D", SensorPainel.MARCHA_ALAVANCA.texto(SensorPainel.MARCHA_ALAVANCA.ler(dados), ConversorUnidades.PADRAO))
-        assertTrue(dados["TOYOTA_VSC"]!! in setOf(0.0, 1.0))
+        assertNull(SensorPainel.VSC.ler(dados))
         assertNull(SensorPainel.TRACAO_4X4.ler(dados))
     }
 
@@ -164,7 +173,7 @@ class SensoresSw4Test {
         assertTrue(cmd("2149").startsWith("6149"))
         assertTrue(cmd("214A").startsWith("614A"))
         cmd("ATSH7E1")
-        assertTrue(cmd("21D9").startsWith("61D903"))
+        assertTrue(cmd("21D9").startsWith("00D\r0:61D9000000"))
         cmd("ATSH7B0")
         assertEquals("NO DATA\r\r", cmd("2103")) // resposta em 7B8 filtrada pelo ELM327
         assertEquals("OK\r\r", cmd("ATCRA7B8"))

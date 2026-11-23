@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlin.math.roundToInt
 import kotlin.random.Random
@@ -28,7 +29,13 @@ import kotlin.random.Random
  * [SIMULADOS_ESTENDIDOS] (os demais do perfil "não respondem", como numa ECU real), códigos de
  * falha armazenados, pendentes e permanentes, Freeze Frame e VIN de teste.
  *
+ * Ferramentas de Oficina: comandos manuais respondidos por uma [EcuSimulada] (Hilux SW4 com motor
+ * `7E0` e câmbio `7E1` no serviço 21) e a curva de tensão do Teste de Bateria ([simularBateria]:
+ * repouso ~12,5 V, vale de partida ~10,3 V, alternador ~14,2 V).
+ *
  * @param latenciaMs atraso simulado de conectar/ler DTCs (use 0 nos testes).
+ * @param latenciaComandoMs atraso simulado de cada comando manual (~um ELM327 rápido; 0 nos testes).
+ * @param relogioMs relógio da curva de bateria e da latência (injetável para testes com tempo virtual).
  */
 class ObdClientFake(
     private val random: Random = Random.Default,
@@ -38,6 +45,8 @@ class ObdClientFake(
     private val codigosPermanentes: List<String> = listOf("P0420"),
     private val vin: String = "9BWZZZ377VT004251",
     private val catalogoEstendido: CatalogoEstendido = CatalogoEstendido.VAZIO,
+    private val latenciaComandoMs: Long = 35,
+    private val relogioMs: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : ObdClient {
 
     private val _estado = MutableStateFlow<EstadoConexaoObd>(EstadoConexaoObd.Desconectado)
@@ -53,6 +62,16 @@ class ObdClientFake(
     private val registro = RegistroComunicacao()
 
     override fun registroComunicacao(): List<EntradaRegistro> = registro.entradas()
+
+    private val _sessaoManual = MutableStateFlow(false)
+    override val sessaoManualAtiva: StateFlow<Boolean> = _sessaoManual.asStateFlow()
+
+    private val ecu = EcuSimulada(random)
+    private val bateria = SimuladorBateria(random, relogioMs)
+    private var cabecalhoEntradaManual = EcuSimulada.CABECALHO_FUNCIONAL
+
+    /** Último instantâneo da simulação, para as respostas do modo 01/21 no terminal. */
+    @Volatile private var ultimaLeitura: Map<String, Double> = emptyMap()
 
     private var codigos: List<String> = codigosIniciais
     private var codigosPendentes: List<String> = codigosPendentesIniciais
@@ -126,6 +145,10 @@ class ObdClientFake(
     override fun lerDadosEmTempoReal(intervaloMs: Long, comandos: Collection<String>?): Flow<DadosObd> = flow {
         val pedidos = comandos?.toSet()
         while (_estado.value == EstadoConexaoObd.Conectado) {
+            if (_sessaoManual.value) {
+                _sessaoManual.first { !it }
+                continue
+            }
             val leitura = proximaLeitura(PASSO_POLLING_SIMPLES_S)
             emit(DadosObd(if (pedidos == null) leitura else leitura.filterKeys { it in pedidos }))
             delay(intervaloMs)
@@ -142,6 +165,10 @@ class ObdClientFake(
         val escalonador = EscalonadorPolling(lentosPorVez, ciclosPorLento, Pids.candidatosFilaRapida(consumoPorMaf))
         val passoMs = intervaloMinimoMs.coerceAtLeast(INTERVALO_MINIMO_SIMULADO_MS)
         while (_estado.value == EstadoConexaoObd.Conectado) {
+            if (_sessaoManual.value) {
+                _sessaoManual.first { !it }
+                continue
+            }
             escalonador.atualizarSuportados(_pidsSuportados.value)
             val chaves = escalonador.proximoCiclo()
             val leitura = proximaLeitura(passoMs / 1000.0)
@@ -203,7 +230,55 @@ class ObdClientFake(
         return Result.success(Unit)
     }
 
+    // ---------------------------------------------------------------- Ferramentas de Oficina
+
+    /**
+     * Fase do Teste de Bateria que o `ATRV` manual deve seguir (null = carro em trânsito, ~14 V).
+     * [FaseBateriaSimulada.PARTIDA] começa o roteiro da partida a partir de agora.
+     */
+    fun simularBateria(fase: FaseBateriaSimulada?) = bateria.definir(fase)
+
+    override suspend fun iniciarSessaoManual(): Result<Unit> {
+        if (_estado.value != EstadoConexaoObd.Conectado) return Result.failure(naoConectado())
+        if (!_sessaoManual.value) {
+            cabecalhoEntradaManual = ecu.cabecalho
+            _sessaoManual.value = true
+            registro.evento("Sessão manual iniciada (Ferramentas de Oficina): polling pausado")
+        }
+        return Result.success(Unit)
+    }
+
+    override suspend fun encerrarSessaoManual() {
+        if (!_sessaoManual.value) return
+        ecu.cabecalho = cabecalhoEntradaManual
+        bateria.definir(null)
+        _sessaoManual.value = false
+        registro.evento("Sessão manual encerrada: polling retomado")
+    }
+
+    override suspend fun enviarComandoManual(comando: String, timeoutMs: Long, registrar: Boolean): Result<RespostaBruta> {
+        val normalizado = ObdClient.normalizarComandoManual(comando)
+            ?: return Result.failure(ObdException("Comando vazio, longo demais ou com caracteres inválidos"))
+        if (_estado.value != EstadoConexaoObd.Conectado) return Result.failure(naoConectado())
+        val inicio = relogioMs()
+        val compacto = normalizado.filter { !it.isWhitespace() }
+        val resposta = if (compacto == "ATRV") {
+            bateria.responderAtrv()
+        } else {
+            ecu.responder(compacto, { ultimaLeitura }) { codigos }
+        }
+        if (latenciaComandoMs > 0) {
+            // NO DATA custa o timeout do adaptador (ATST0C ≈ 49 ms) além da troca.
+            val espera = if (resposta.startsWith("NO DATA")) ESPERA_NO_DATA_MS else 0L
+            delay(latenciaComandoMs + random.nextLong(0, JITTER_COMANDO_MS) + espera)
+        }
+        val latencia = relogioMs() - inicio
+        if (registrar) registro.comando(normalizado, resposta, latencia)
+        return Result.success(RespostaBruta(normalizado, resposta, latencia))
+    }
+
     override suspend fun desconectar() {
+        _sessaoManual.value = false
         _pidsSuportados.value = emptySet()
         _infoConexao.value = InfoConexao()
         estendidosAtivos = emptySet()
@@ -322,6 +397,7 @@ class ObdClientFake(
             Pids.TENSAO_BATERIA to tensao.arredondar(1),
         )
         if (estendidosAtivos.isNotEmpty()) leitura += leituraEstendida(map).filterKeys { it in estendidosAtivos }
+        ultimaLeitura = leitura
         return leitura
     }
 
@@ -361,6 +437,8 @@ class ObdClientFake(
         )
 
         const val VELOCIDADE_FIM_ARRANCADA = 115.0
+        private const val ESPERA_NO_DATA_MS = 45L
+        private const val JITTER_COMANDO_MS = 20L
         private const val SEGUNDOS_PARADO_ARRANCADA = 2.0
         private const val PASSO_POLLING_SIMPLES_S = 1.0
 

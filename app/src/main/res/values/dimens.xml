@@ -16,4 +16,8 @@
     <dimen name="botao_midia">44dp</dimen>
     <dimen name="largura_hud">232dp</dimen>
     <dimen name="botao_hud">40dp</dimen>
+
+    <!-- Ferramentas de Oficina -->
+    <dimen name="altura_grafico_tensao">220dp</dimen>
+    <dimen name="texto_tensao_ao_vivo">44sp</dimen>
 </resources>

@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.Mutex
@@ -123,6 +124,21 @@ class Elm327BluetoothClient(
     override val infoConexao: StateFlow<InfoConexao> = _infoConexao.asStateFlow()
 
     private val mutexComandos = Mutex()
+
+    /**
+     * Um ciclo de polling inteiro por vez: [iniciarSessaoManual] espera o ciclo em andamento
+     * terminar, para nenhum `ATSH` do polling cair no meio dos comandos manuais.
+     */
+    private val mutexCiclo = Mutex()
+
+    private val _sessaoManual = MutableStateFlow(false)
+    override val sessaoManualAtiva: StateFlow<Boolean> = _sessaoManual.asStateFlow()
+
+    /** Cabeçalho do adaptador quando a sessão manual começou (restaurado no fim). */
+    @Volatile private var cabecalhoEntradaManual: String? = null
+
+    /** Um comando manual (`ATH1`, `ATZ`...) ou um `LV RESET` mudou a configuração do adaptador. */
+    @Volatile private var configuracaoAlteradaManual = false
 
     /** Camada 3 ativa (modo 21 / 22); null = OBD2 padrão (camadas 1/2). */
     @Volatile private var modoServico: ModoServico? = null
@@ -239,8 +255,12 @@ class Elm327BluetoothClient(
         val sessao = transporte ?: return@flow
         var ciclosSemEcu = 0
         while (_estado.value == EstadoConexaoObd.Conectado && transporte === sessao) {
+            if (_sessaoManual.value) {
+                _sessaoManual.first { !it }
+                continue
+            }
             val ciclo = try {
-                lerCiclo(comandos)
+                cicloForaDaSessaoManual { lerCiclo(comandos) } ?: continue
             } catch (e: ObdException) {
                 perderConexao(sessao, e.message ?: "Conexão com o scanner perdida")
                 break
@@ -265,11 +285,15 @@ class Elm327BluetoothClient(
         val escalonador = EscalonadorPolling(lentosPorVez, ciclosPorLento, Pids.candidatosFilaRapida(consumoPorMaf))
         var ciclosSemEcu = 0
         while (_estado.value == EstadoConexaoObd.Conectado && transporte === sessao) {
+            if (_sessaoManual.value) {
+                _sessaoManual.first { !it }
+                continue
+            }
             val inicioNs = System.nanoTime()
             // Relido a cada ciclo: um perfil de montadora pode ser ativado com o polling já rodando.
             escalonador.atualizarSuportados(_pidsSuportados.value, ::grupoDe)
             val ciclo = try {
-                lerChaves(escalonador.proximoCiclo())
+                cicloForaDaSessaoManual { lerChaves(escalonador.proximoCiclo()) } ?: continue
             } catch (e: ObdException) {
                 perderConexao(sessao, e.message ?: "Conexão com o scanner perdida")
                 break
@@ -436,6 +460,149 @@ class Elm327BluetoothClient(
         }
         throw respostaInesperada(r, "limpar os códigos de falha", bruto)
     }
+
+    // ---------------------------------------------------------------- sessão manual (Ferramentas de Oficina)
+
+    override suspend fun iniciarSessaoManual(): Result<Unit> = withContext(dispatcher) {
+        if (_estado.value != EstadoConexaoObd.Conectado || transporte == null) {
+            return@withContext Result.failure(ObdException("Scanner não conectado"))
+        }
+        mutexCiclo.withLock {
+            if (!_sessaoManual.value) {
+                cabecalhoEntradaManual = cabecalhoAtivo
+                configuracaoAlteradaManual = false
+                _sessaoManual.value = true
+                registro.evento(
+                    "Sessão manual iniciada (Ferramentas de Oficina): polling pausado" +
+                        cabecalhoAtivo?.let { " com ATSH $it" }.orEmpty(),
+                )
+            }
+        }
+        Result.success(Unit)
+    }
+
+    override suspend fun encerrarSessaoManual() {
+        withContext(dispatcher + NonCancellable) {
+            if (!_sessaoManual.value) return@withContext
+            try {
+                mutexComandos.withLock {
+                    val canal = transporte ?: return@withLock
+                    try {
+                        restaurarAposSessaoManual(canal)
+                    } catch (e: IOException) {
+                        perderConexao(canal, "Conexão Bluetooth com o scanner perdida")
+                    }
+                }
+            } catch (e: ObdException) {
+                registro.evento("Falha ao restaurar o adaptador depois da sessão manual: ${e.message}")
+            } finally {
+                _sessaoManual.value = false
+            }
+        }
+    }
+
+    override suspend fun enviarComandoManual(comando: String, timeoutMs: Long, registrar: Boolean): Result<RespostaBruta> =
+        withContext(dispatcher) {
+            val normalizado = ObdClient.normalizarComandoManual(comando)
+                ?: return@withContext Result.failure(ObdException("Comando vazio, longo demais ou com caracteres inválidos"))
+            val compacto = normalizado.filter { !it.isWhitespace() }
+            if (COMANDOS_MANUAIS_BLOQUEADOS.any { compacto.startsWith(it) }) {
+                return@withContext Result.failure(
+                    ObdException("$normalizado não é permitido no terminal (modo monitor/baixo consumo travaria a sessão)"),
+                )
+            }
+            try {
+                exigirConectado()
+                mutexComandos.withLock {
+                    val canal = transporte ?: throw ObdException("Scanner não conectado")
+                    val inicio = System.nanoTime()
+                    fun latencia() = (System.nanoTime() - inicio) / 1_000_000
+                    val resposta = try {
+                        trocar(canal, normalizado, timeoutMs, registrar)
+                    } catch (e: ObdTimeoutException) {
+                        return@withLock Result.success(RespostaBruta(normalizado, "", latencia(), semPrompt = true))
+                    } catch (e: IOException) {
+                        if (transporte !== canal) throw ObdException("Scanner desconectado", e)
+                        perderConexao(canal, "Conexão Bluetooth com o scanner perdida")
+                        throw ObdException("Conexão com o scanner perdida", e)
+                    }
+                    val duracao = latencia()
+                    acompanharComandoManual(compacto, resposta)
+                    Result.success(RespostaBruta(normalizado, resposta, duracao))
+                }
+            } catch (e: ObdException) {
+                Result.failure(e)
+            }
+        }
+
+    /**
+     * Mantém o estado conhecido do adaptador fiel ao que o comando manual fez: o `ATSH`/`ATST`
+     * digitado vira o cabeçalho/timeout ativo (o polling reenvia só o que mudar); `ATZ`/`ATD`/
+     * `ATWS` e um `LV RESET` (queda de tensão na partida) voltam aos padrões e marcam a
+     * configuração para ser reaplicada no fim da sessão; os demais AT que mudam algo também.
+     */
+    private fun acompanharComandoManual(compacto: String, resposta: String) {
+        val ok = "OK" in ObdParser.limparResposta(resposta)
+        val reiniciou = compacto in COMANDOS_REINICIO ||
+            (!compacto.startsWith("ATI") && ObdParser.adaptadorReiniciou(resposta))
+        when {
+            reiniciou -> {
+                if (compacto !in COMANDOS_REINICIO) registro.evento("$compacto: o adaptador reiniciou (LV RESET) durante a sessão manual")
+                cabecalhoAtivo = null
+                timeoutAdaptadorAtivo = null
+                configuracaoAlteradaManual = true
+            }
+            compacto.startsWith("ATSH") -> if (ok) {
+                val cabecalho = compacto.removePrefix("ATSH")
+                cabecalhoAtivo = cabecalho.takeUnless { it == RequisicaoEstendida.CABECALHO_FUNCIONAL }
+            }
+            compacto.startsWith("ATST") -> if (ok) {
+                timeoutAdaptadorAtivo = compacto.removePrefix("ATST").takeUnless { it == TIMEOUT_ADAPTADOR_PADRAO }
+            }
+            compacto.startsWith("ATSP") || compacto.startsWith("ATTP") -> if (ok) {
+                registro.evento("$compacto: protocolo alterado manualmente; o app não o restaura ao sair")
+            }
+            compacto.startsWith("AT") && compacto !in COMANDOS_AT_SOMENTE_LEITURA -> configuracaoAlteradaManual = true
+        }
+    }
+
+    /**
+     * Fim da sessão manual: reaplica a [CONFIGURACAO] (e o `ATAT2`) se ela mudou e devolve o
+     * cabeçalho da entrada ao adaptador. Se o `ATSH` não confirmar, o cabeçalho fica indefinido e
+     * o próximo comando do polling o reenvia.
+     */
+    private suspend fun restaurarAposSessaoManual(canal: ObdTransport) {
+        val alvo = cabecalhoEntradaManual
+        val reconfigurar = configuracaoAlteradaManual
+        if (reconfigurar) {
+            val reconfiguracao = if (usaTimingAdaptativoAgressivo) CONFIGURACAO + TIMING_ADAPTATIVO_AGRESSIVO else CONFIGURACAO
+            for (c in reconfiguracao) {
+                try {
+                    trocar(canal, c, timeoutComandoMs, true)
+                } catch (_: ObdTimeoutException) {
+                }
+            }
+        }
+        if (reconfigurar || cabecalhoAtivo != alvo) {
+            cabecalhoAtivo = CABECALHO_INDEFINIDO
+            val resposta = try {
+                trocar(canal, "ATSH" + (alvo ?: RequisicaoEstendida.CABECALHO_FUNCIONAL), timeoutComandoMs, true)
+            } catch (_: ObdTimeoutException) {
+                ""
+            }
+            if ("OK" in resposta.uppercase()) cabecalhoAtivo = alvo
+        }
+        configuracaoAlteradaManual = false
+        registro.evento(
+            "Sessão manual encerrada: polling retomado" +
+                (if (reconfigurar) ", configuração reaplicada" else "") +
+                (alvo?.let { ", ATSH $it" } ?: ", cabeçalho funcional"),
+        )
+    }
+
+    /** Um ciclo de polling sob [mutexCiclo]; null = uma sessão manual começou (o ciclo é pulado). */
+    private suspend fun cicloForaDaSessaoManual(ler: suspend () -> Ciclo): Ciclo? =
+        mutexCiclo.withLock { if (_sessaoManual.value) null else ler() }
 
     override suspend fun desconectar() {
         // NonCancellable: o fechamento do canal precisa acontecer mesmo se o chamador for cancelado
@@ -1346,6 +1513,9 @@ class Elm327BluetoothClient(
         respiroMs = intervaloEntreComandosMs
         timeoutsSeguidos = 0
         fimUltimoComandoNs = 0L
+        cabecalhoEntradaManual = null
+        configuracaoAlteradaManual = false
+        _sessaoManual.value = false // libera o polling suspenso, que então encerra
     }
 
     companion object {
@@ -1359,6 +1529,20 @@ class Elm327BluetoothClient(
 
         /** Marcador de "qualquer cabeçalho" (comandos AT) em [ordenarPorCabecalho]. */
         private const val NEUTRO = "*"
+
+        /** Cabeçalho desconhecido (restauração falhou): difere de qualquer pedido, então o próximo reenvia o `ATSH`. */
+        private const val CABECALHO_INDEFINIDO = "?"
+
+        /** Comandos manuais que reiniciam o adaptador (voltam aos padrões: eco, cabeçalho, timeout). */
+        private val COMANDOS_REINICIO = setOf("ATZ", "ATWS", "ATD")
+
+        /** Comandos AT manuais que só consultam: não exigem reaplicar a configuração no fim da sessão. */
+        private val COMANDOS_AT_SOMENTE_LEITURA = setOf(
+            "ATRV", "ATDP", "ATDPN", "ATI", "AT@1", "AT@2", "ATCS", "ATIGN", "ATBD", "ATRD", "ATPPS",
+        )
+
+        /** Modo monitor (fluxo contínuo sem prompt) e baixo consumo (desliga o adaptador): fora do terminal. */
+        private val COMANDOS_MANUAIS_BLOQUEADOS = listOf("ATMA", "ATMR", "ATMT", "ATLP")
 
         /** `7F xx 11`: a ECU não tem o serviço — não adianta sondar os outros PIDs do modo. */
         private const val NRC_SERVICO_NAO_SUPORTADO = "11"

@@ -1,0 +1,325 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ferramenta 3: Terminal Manual ELM327 e Varredura Automática de PIDs (duas abas internas). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:colorBackground"
+    android:orientation="vertical"
+    tools:context=".ui.oficina.terminal.TerminalObdActivity">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorPrimary">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            style="@style/Widget.CharruaMotors.Toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:theme="@style/ThemeOverlay.Material3.Dark.ActionBar"
+            app:navigationContentDescription="@string/voltar"
+            app:navigationIcon="?attr/homeAsUpIndicator"
+            app:subtitleTextColor="@color/branco"
+            app:title="@string/terminal_titulo" />
+
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/abas"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/azul_primario"
+            app:tabGravity="fill"
+            app:tabIndicatorColor="@color/laranja_destaque"
+            app:tabMode="fixed"
+            app:tabSelectedTextColor="@color/branco"
+            app:tabTextColor="@color/branco">
+
+            <com.google.android.material.tabs.TabItem
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/terminal_aba_terminal" />
+
+            <com.google.android.material.tabs.TabItem
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/terminal_aba_varredura" />
+        </com.google.android.material.tabs.TabLayout>
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <FrameLayout
+        android:id="@+id/conteudo"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- Aba Terminal -->
+        <LinearLayout
+            android:id="@+id/painel_terminal"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="@dimen/espaco_pequeno">
+
+            <ScrollView
+                android:id="@+id/rolagem_log"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/fundo_terminal"
+                android:padding="@dimen/espaco_pequeno">
+
+                <TextView
+                    android:id="@+id/texto_log"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:text="@string/terminal_log_vazio"
+                    android:textColor="@color/terminal_texto"
+                    android:textIsSelectable="true"
+                    android:textSize="12sp" />
+            </ScrollView>
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/grupo_atalhos"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:singleLine="true" />
+            </HorizontalScrollView>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/layout_comando"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="@string/terminal_comando_hint">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/campo_comando"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:imeOptions="actionSend"
+                        android:inputType="textCapCharacters|textNoSuggestions|textVisiblePassword"
+                        android:maxLength="48"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_enviar"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/espaco_pequeno"
+                    android:text="@string/terminal_enviar" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="end"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_limpar_log"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/terminal_limpar" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_copiar_log"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/terminal_copiar_log" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Aba Varredura de PIDs (engenharia reversa) -->
+        <LinearLayout
+            android:id="@+id/painel_varredura"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/margem_tela"
+            android:paddingTop="@dimen/espaco_pequeno"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_preset"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense.ExposedDropdownMenu"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/varredura_preset">
+
+                <AutoCompleteTextView
+                    android:id="@+id/campo_preset"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/layout_cabecalho"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense.ExposedDropdownMenu"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/espaco_pequeno"
+                    android:layout_weight="1"
+                    android:hint="@string/varredura_cabecalho">
+
+                    <AutoCompleteTextView
+                        android:id="@+id/campo_cabecalho"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/layout_servico"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense.ExposedDropdownMenu"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/espaco_pequeno"
+                    android:layout_weight="1"
+                    android:hint="@string/varredura_servico">
+
+                    <AutoCompleteTextView
+                        android:id="@+id/campo_servico"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/espaco_pequeno"
+                    android:layout_weight="1"
+                    android:hint="@string/varredura_inicio">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/campo_inicio"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:inputType="textCapCharacters|textNoSuggestions|textVisiblePassword"
+                        android:maxLength="4"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="@string/varredura_fim">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/campo_fim"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:inputType="textCapCharacters|textNoSuggestions|textVisiblePassword"
+                        android:maxLength="4"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_minimo"
+                android:text="@string/varredura_aviso"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="@color/texto_secundario" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_varredura"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/varredura_iniciar" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_mostrar_tudo"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/espaco_medio"
+                    android:layout_weight="1"
+                    android:text="@string/varredura_mostrar_tudo"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+            </LinearLayout>
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/progresso_varredura"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:max="100"
+                android:visibility="invisible" />
+
+            <TextView
+                android:id="@+id/texto_progresso"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFeatureSettings="tnum"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                tools:text="128/256 · 19 responderam · 2180" />
+
+            <TextView
+                android:id="@+id/texto_varredura_vazia"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingVertical="@dimen/espaco_pequeno"
+                android:text="@string/varredura_vazia"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="@color/texto_secundario" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/lista_resultados"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                tools:itemCount="5"
+                tools:listitem="@layout/item_resultado_pid" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_relatorio"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/espaco_pequeno"
+                android:text="@string/varredura_relatorio" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

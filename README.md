@@ -24,6 +24,7 @@ Disciplina: Desenvolvimento Mobile II. Professor: Jaqson.
 - [Funcionalidades](#funcionalidades)
 - [Diferencial: integração OBD2](#diferencial-integração-obd2)
 - [Direção: Spotify, Waze e Modo HUD (v1.1)](#direção-spotify-waze-e-modo-hud-v11)
+- [Pacote Oficina (v1.2)](#pacote-oficina-v12)
 - [Regras de negócio e cálculos](#regras-de-negócio-e-cálculos)
 - [Arquitetura e stack](#arquitetura-e-stack)
 - [Como executar](#como-executar)
@@ -172,6 +173,82 @@ Ao ativar, o app pede em sequência: "Aparecer sobre outros apps", Bluetooth (pr
 
 ---
 
+## Pacote Oficina (v1.2)
+
+Card **Ferramentas de Oficina** na aba OBD2, logo abaixo do card do scanner. Cada ferramenta abre numa
+tela própria; a lógica de cada uma fica no pacote puro `oficina/` (testável na JVM) e as telas em `ui/oficina/`.
+
+**Sessão manual sem derrubar o Bluetooth.** O Teste de Bateria e o Terminal abrem uma *sessão manual* no
+`ObdClient` (`iniciarSessaoManual` / `enviarComandoManual` / `encerrarSessaoManual`):
+
+- o polling pausa: a aba OBD2 sai de cena (`onPause`/`onStop`) e os fluxos `lerTelemetria`/`lerDadosEmTempoReal`
+  ficam suspensos entre ciclos enquanto a sessão estiver ativa, inclusive com o HUD flutuante aberto. Um
+  `Mutex` de ciclo garante que a sessão só começa depois que o ciclo em andamento termina, então nenhum `ATSH`
+  do polling cai no meio dos comandos manuais;
+- os comandos manuais vão crus, sem `ATSH` automático. Quando o usuário envia `ATSH`/`ATST`, o cliente
+  passa a considerar esse cabeçalho/timeout como o ativo. Um `ATZ`, um `ATH1` ou um `LV RESET` marcam a
+  configuração para ser reaplicada;
+- ao fechar a tela, o cliente reaplica `ATE0 ATL0 ATS0 ATH0` (e `ATAT2`) se algo mudou e devolve ao
+  adaptador o cabeçalho que estava ativo na entrada. O polling retoma no mesmo socket;
+- o modo monitor (`ATMA`/`ATMR`/`ATMT`) e o `ATLP` são recusados, porque travariam a sessão.
+
+### 1. Teste de Bateria e Alternador (`TesteBateriaActivity`)
+
+Tela guiada em 3 etapas. Ela lê `ATRV` na taxa máxima do adaptador (piso de 50 ms, ~20 amostras/s) e mostra a
+tensão num gráfico em `Canvas` (`GraficoTensaoView`, janela de 20 s com as linhas de referência da etapa). A
+máquina de estados `TesteBateria` é pura:
+
+| Etapa | Captura | Classificação |
+|---|---|---|
+| 1. Repouso (ignição ligada, motor desligado) | 5 s; vale a média da 2ª metade (tensão estabilizada) | Saudável ≥ 12,4 V · Carga baixa 12,0–12,3 V · Crítica < 12,0 V |
+| 2. Partida (cranking) | espera a queda (≥ 0,8 V ou um `LV RESET`), guarda o vale `V_min` e termina 1 s depois de o motor pegar (> 13,2 V) | OK ≥ 10,0 V · Atenção 9,6–9,9 V · Fraca < 9,6 V |
+| 3. Alternador | 8 s em marcha lenta e 10 s a ~2.500 RPM com cargas: média, pico e ripple estimado | Subcarga < 13,5 V · Normal 13,6–14,6 V · Sobrecarga > 14,8 V |
+
+- O `LV RESET` (o ELM327 reiniciando por subtensão na partida) conta como amostra perdida e nunca aborta o
+  teste. O laudo avisa que o vale real pode ter sido menor que o registrado.
+- Etapas podem ser puladas ou refeitas. Sem queda de tensão em 20 s, a etapa 2 pede para repetir.
+- O **Laudo Resumido** (`LaudoBateria`) traz o veredito da bateria e do alternador e os valores medidos, com
+  botões Copiar e Compartilhar.
+- No modo simulado, o `ObdClientFake` acompanha as fases. Em repouso a tensão fica em ~12,5 V, com a carga
+  superficial se dissipando. Na partida cai para um vale de ~10,3 V, com um `LV RESET` e as oscilações das
+  compressões. Com o motor ligado, o alternador fica em ~14,2 V.
+
+### 2. Visualizador de Logs CSV (`ReplayLogActivity`)
+
+- Lista os `.csv` de `Downloads/CharruaOBD`: no Android 10+ pelo `MediaStore`, que mostra os logs criados
+  pelo próprio app sem pedir permissão; no Android 8–9, pela pasta do app. O botão **Abrir outro CSV** usa o
+  Storage Access Framework (`ACTION_OPEN_DOCUMENT`).
+- `LeitorCsvLog` lê o cabeçalho dinamicamente (`Nome (unidade) [comando]`; `timestamp_ms`/`data_hora`/`tempo_s`
+  são as colunas de tempo) em streaming. Ele aceita RFC 4180 com BOM e também o CSV reexportado pelo Excel
+  pt-BR (`;` e vírgula decimal).
+- `LogReplayChartView` é um `Canvas` sem bibliotecas. Mostra até 3 sensores, escolhidos por chips, cada um
+  com cor própria e escala normalizada no mínimo/máximo da janela. Gestos:
+  - pinça para zoom (`ScaleGestureDetector`) e arraste da linha do tempo (`GestureDetector`);
+  - toque para posicionar o cursor vertical (toque longo e arraste para movê-lo) e toque duplo para ver tudo.
+
+  Com mais pontos que pixels, cada coluna desenha o mínimo e o máximo do trecho, então os picos não somem.
+- Abaixo do gráfico aparecem o horário exato do cursor, o valor de cada sensor nele e o resumo
+  **Mínimo / Máximo / Média** da janela visível (`AnaliseReplay`).
+
+### 3. Terminal ELM327 e Varredura de PIDs (`TerminalObdActivity`)
+
+- **Terminal:** comandos brutos (`ATDP`, `ATSH 7E0`, `2101`, `13`...) e atalhos (`ATDP`, `ATRV`,
+  `ATSH 7E0/7E1/7DF`...). O log monoespaçado mostra o comando, a resposta bruta (um quadro por linha) e a
+  latência em ms, com opção de copiar.
+- **Varredura de PIDs (engenharia reversa):** cabeçalho (`7E0`, `7E1`, `7E2`, `7DF`), serviço (`21`, `01`, `22`,
+  com DIDs de 4 dígitos) e faixa hex. Há presets **Toyota Motor (7E0 · 2100–21FF)** e **Toyota Câmbio
+  (7E1 · 2100–21FF)**, além de OBD2 padrão e UDS.
+  - A varredura roda em sequência, com barra de progresso e botão Parar. O Parar é atendido entre comandos,
+    para não deixar resposta atrasada no canal. A varredura também para sozinha depois de 5 timeouts seguidos.
+  - Um filtro oculta `NO DATA`/`7F`/erros, com opção de mostrar tudo.
+  - Cada PID que respondeu aparece com seus bytes hexadecimais brutos, inclusive multi-frame CAN.
+  - O relatório pode ser copiado ou compartilhado (útil para mapear a temperatura do ATF e a correção de
+    injetores da Hilux SW4, por exemplo).
+- No modo simulado, uma `EcuSimulada` responde como uma Hilux: motor no `7E0` e câmbio no `7E1` pelo
+  serviço 21, `7F 21 31` fora dos blocos, nenhum módulo no `7E2` e multi-frame acima de 7 bytes.
+
+---
+
 ## Regras de negócio e cálculos
 
 Validações e cálculos ficam na camada de domínio (`domain/`), sem dependência do Android, e são cobertos por testes unitários. A UI apenas exibe os resultados.
@@ -291,7 +368,12 @@ app/src/main/java/com/charruamotors/
 │   ├── midia/               #   ControladorMidia, MidiaNotificacaoService, EstadoMidia (lógica pura)
 │   ├── waze/                #   AtalhosWaze (deep links, puro) e AbridorWaze
 │   └── hud/                 #   HudFlutuanteService, FormatadorHud/PainelHud, TelemetriaCompartilhada
-├── obd/                     # ObdClient, Elm327BluetoothClient, ObdClientFake, ObdParser, DescricaoDtc
+├── obd/                     # ObdClient, Elm327BluetoothClient, ObdClientFake (+ EcuSimulada), ObdParser
+├── oficina/                 # Pacote Oficina (v1.2), lógica pura:
+│   ├── bateria/             #   TesteBateria (máquina de estados), ClassificadorBateria, LaudoBateria
+│   ├── replay/              #   LeitorCsvLog, AnaliseReplay (estatísticas, normalização, zoom/arraste)
+│   ├── varredura/           #   VarreduraPids (faixas, classificação, execução), RelatorioVarredura
+│   └── terminal/            #   FormatadorTerminal (log com latência)
 └── ui/
     ├── login/               # LoginActivity + LoginViewModel
     ├── dashboard/           # DashboardActivity, VeiculoAdapter, DashboardViewModel
@@ -300,6 +382,8 @@ app/src/main/java/com/charruamotors/
     │   ├── obd/             #   ObdFragment, ObdViewModel, CodigoFalhaAdapter
     │   ├── manutencoes/     #   ManutencoesFragment, ManutencaoSheet, adapter, ViewModel
     │   └── abastecimentos/  #   AbastecimentosFragment, AbastecimentoSheet, adapter, ViewModel
+    ├── oficina/             # Telas do Pacote Oficina: bateria/, replay/ e terminal/
+    ├── componentes/         # GaugeView, TelemetriaChartView, GraficoTensaoView, LogReplayChartView
     └── util/                # Formatadores, insets, seletor de data, permissões Bluetooth, rótulos
 ```
 
@@ -313,7 +397,7 @@ Recursos em `app/src/main/res`:
 
 ## Testes unitários
 
-São **414 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./gradlew test`. Alguns destaques:
+São **486 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./gradlew test`. Alguns destaques:
 
 | Classe de teste | Testes | O que cobre |
 |---|---:|---|
@@ -329,6 +413,12 @@ São **414 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./g
 | `PainelHudTest` | 7 | Formatação do HUD (RPM, MAP, temperatura, rail em bar ou tensão), alerta acima de 105 °C e polling com o HUD |
 | `AtalhosWazeTest` | 5 | Deep links do Waze (posto, oficina), codificação da busca e fallback para a Play Store |
 | `ConvertersTest` | 3 | Conversão de `LocalDate`/`LocalDateTime` para o Room |
+| `TesteBateriaTest` | 19 | Faixas de repouso/partida/alternador, máquina de estados das 3 etapas, `LV RESET` na partida, partida não detectada e laudo |
+| `SessaoManualTest` | 14 | Pausa e retomada do polling, comando bruto sem `ATSH` automático, restauração do `ATSH`/configuração, curva de bateria e ECU Hilux do simulado |
+| `VarreduraPidsTest` | 13 | Gerador de faixas (serviços 21/01/22), validação, classificação (positiva, multi-frame, `7F`, `NO DATA`, timeout), filtro, Parar e relatório |
+| `LeitorCsvLogTest` | 11 | CSV do Data Logger (ida e volta), Excel pt-BR, aspas, BOM, linhas malformadas e ordenação |
+| `AnaliseReplayTest` | 11 | Estatísticas da janela, normalização por série, zoom com foco, arraste nos limites, cursor e seleção de até 3 sensores |
+| `FormatadorTerminalTest` | 4 | Log do terminal com latência, timeout e erros |
 
 ---
 

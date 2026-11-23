@@ -36,6 +36,14 @@
         <item name="android:textStyle">bold</item>
     </style>
 
+    <!-- Ferramentas de Oficina: linha de resultado do teste de bateria. -->
+    <style name="OficinaLinhaResultado">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/espaco_minimo</item>
+        <item name="android:textAppearance">?attr/textAppearanceBodyMedium</item>
+    </style>
+
     <style name="HudRotulo">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>

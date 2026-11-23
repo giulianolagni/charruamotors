@@ -100,6 +100,16 @@
             android:parentActivityName=".ui.diagnostico.DiagnosticoActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- v1.4: Diagnóstico de Erros (aba Oficina) e Personalizar Painel (engrenagem da aba Painel) -->
+        <activity
+            android:name=".ui.oficina.falhas.DiagnosticoErrosActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
+        <activity
+            android:name=".ui.painel.PersonalizarPainelActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
+
         <!-- v1.3: Assistente de Primeira Abertura, Configurações e Checklist de Permissões (menu lateral) -->
         <activity
             android:name=".ui.assistente.AssistenteActivity"

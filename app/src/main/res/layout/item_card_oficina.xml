@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Card grande e ilustrado de uma ferramenta da aba Oficina: ícone em destaque, título e descrição. -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    style="@style/Widget.Material3.CardView.Elevated"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/espaco_medio"
+    android:clickable="true"
+    android:focusable="true"
+    app:cardCornerRadius="20dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:minHeight="@dimen/altura_card_oficina"
+        android:orientation="horizontal"
+        android:padding="@dimen/espaco_medio">
+
+        <FrameLayout
+            android:id="@+id/fundo_icone"
+            android:layout_width="@dimen/icone_card_oficina"
+            android:layout_height="@dimen/icone_card_oficina"
+            android:background="@drawable/fundo_icone_oficina">
+
+            <ImageView
+                android:id="@+id/imagem_icone"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                app:tint="@color/branco"
+                tools:src="@drawable/ic_bateria" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/espaco_medio"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/texto_titulo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceTitleLarge"
+                tools:text="🔋 Teste de Bateria" />
+
+            <TextView
+                android:id="@+id/texto_descricao"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_minimo"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="@color/texto_secundario"
+                tools:text="Guiado e com diagnóstico: repouso, partida e alternador." />
+
+            <TextView
+                android:id="@+id/texto_requisito"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_minimo"
+                android:background="@drawable/fundo_badge"
+                android:paddingHorizontal="@dimen/espaco_pequeno"
+                android:paddingVertical="2dp"
+                android:text="@string/oficina_requer_scanner"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
+                android:textColor="?attr/colorOnSecondaryContainer"
+                android:visibility="gone"
+                app:backgroundTint="?attr/colorSecondaryContainer"
+                tools:visibility="visible" />
+        </LinearLayout>
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_chevron"
+            app:tint="@color/texto_secundario" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

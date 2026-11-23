@@ -10,4 +10,8 @@
     <color name="status_ok">#66BB6A</color>
     <color name="status_pendente">#EF5350</color>
     <color name="status_espera">#8A9099</color>
+    <color name="varredura_identificado">#66BB6A</color>
+    <color name="varredura_desconhecido">#64B5F6</color>
+    <color name="varredura_ignorado">#757B84</color>
+    <color name="varredura_trilho">#33FFFFFF</color>
 </resources>

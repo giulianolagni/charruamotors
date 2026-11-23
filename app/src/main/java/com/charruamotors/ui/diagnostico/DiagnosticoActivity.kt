@@ -14,13 +14,14 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.R
 import com.charruamotors.databinding.ActivityDiagnosticoBinding
 import com.charruamotors.ui.util.aplicarInsetsDoSistema
-import com.google.android.material.tabs.TabLayoutMediator
+import androidx.viewpager2.widget.ViewPager2
 import kotlinx.coroutines.launch
 
 /**
- * Activity 4 — Diagnóstico OBD2 e Manutenções.
- * Recebe [EXTRA_VEICULO_ID] e organiza três abas (TabLayout + ViewPager2 com Fragments):
- * Diagnóstico OBD2, Manutenções e Abastecimentos.
+ * Activity 4 — tela do veículo. Recebe [EXTRA_VEICULO_ID] e organiza as 4 abas principais na
+ * navegação inferior (BottomNavigationView + ViewPager2 sem deslizar): Painel (direção e
+ * mostradores), Oficina (bateria, DTCs, varredura e terminal), Manutenções e Histórico
+ * (abastecimentos, logs salvos e diário de viagens). [EXTRA_ABA] abre direto numa delas.
  */
 class DiagnosticoActivity : AppCompatActivity() {
 
@@ -40,21 +41,28 @@ class DiagnosticoActivity : AppCompatActivity() {
         binding = ActivityDiagnosticoBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.appbar.aplicarInsetsDoSistema(base = false)
-        binding.conteudo.aplicarInsetsDoSistema(topo = false)
 
         binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         binding.toolbar.setTitle(R.string.diagnostico_titulo)
 
         binding.paginas.adapter = DiagnosticoPagerAdapter(this, viewModel.veiculoId)
-        TabLayoutMediator(binding.abas, binding.paginas) { aba, posicao ->
-            aba.setText(
-                when (posicao) {
-                    DiagnosticoPagerAdapter.ABA_OBD -> R.string.aba_obd
-                    DiagnosticoPagerAdapter.ABA_MANUTENCOES -> R.string.aba_manutencoes
-                    else -> R.string.aba_abastecimentos
-                },
-            )
-        }.attach()
+        // Navegação só pela barra inferior: o deslize lateral brigaria com a rolagem e o arraste da tela.
+        binding.paginas.isUserInputEnabled = false
+        binding.paginas.offscreenPageLimit = DiagnosticoPagerAdapter.ABAS - 1
+        binding.navegacao.setOnItemSelectedListener { item ->
+            binding.paginas.setCurrentItem(DiagnosticoPagerAdapter.paginaDoItem(item.itemId), false)
+            true
+        }
+        binding.paginas.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                val item = DiagnosticoPagerAdapter.itemDaPagina(position)
+                if (binding.navegacao.selectedItemId != item) binding.navegacao.selectedItemId = item
+            }
+        })
+        if (savedInstanceState == null) {
+            val aba = intent.getIntExtra(EXTRA_ABA, DiagnosticoPagerAdapter.ABA_PAINEL)
+            binding.navegacao.selectedItemId = DiagnosticoPagerAdapter.itemDaPagina(aba)
+        }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -66,6 +74,11 @@ class DiagnosticoActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /** Troca de aba por código (ex.: a Oficina manda conectar o scanner no Painel). */
+    fun mostrarAba(aba: Int) {
+        binding.navegacao.selectedItemId = DiagnosticoPagerAdapter.itemDaPagina(aba)
     }
 
     // Callbacks do ciclo de vida registrados no Logcat (filtro "DiagnosticoActivity").
@@ -96,9 +109,12 @@ class DiagnosticoActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_VEICULO_ID = "extra_veiculo_id"
+        const val EXTRA_ABA = "extra_aba"
         private const val TAG = "DiagnosticoActivity"
 
-        fun intent(context: Context, veiculoId: Long): Intent =
-            Intent(context, DiagnosticoActivity::class.java).putExtra(EXTRA_VEICULO_ID, veiculoId)
+        fun intent(context: Context, veiculoId: Long, aba: Int = DiagnosticoPagerAdapter.ABA_PAINEL): Intent =
+            Intent(context, DiagnosticoActivity::class.java)
+                .putExtra(EXTRA_VEICULO_ID, veiculoId)
+                .putExtra(EXTRA_ABA, aba)
     }
 }

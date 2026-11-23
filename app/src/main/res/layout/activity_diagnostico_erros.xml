@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Oficina → Diagnóstico de Erros (DTCs): leitura completa (confirmados, pendentes, permanentes),
+     limpeza (modo 04) e o Freeze Frame (modo 02), sobre a conexão ativa. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:colorBackground"
+    android:orientation="vertical"
+    tools:context=".ui.oficina.falhas.DiagnosticoErrosActivity">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorPrimary">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            style="@style/Widget.CharruaMotors.Toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:theme="@style/ThemeOverlay.Material3.Dark.ActionBar"
+            app:navigationContentDescription="@string/voltar"
+            app:navigationIcon="?attr/homeAsUpIndicator"
+            app:subtitleTextColor="@color/branco"
+            app:title="@string/falhas_titulo" />
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <ScrollView
+        android:id="@+id/conteudo"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="@dimen/margem_tela">
+
+            <TextView
+                android:id="@+id/texto_falhas_estado"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/falhas_descricao"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="@color/texto_secundario" />
+
+            <!-- Códigos de falha por categoria -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_medio"
+                android:text="@string/obd_codigos_falha"
+                android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_ler_codigos"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/espaco_pequeno"
+                    android:layout_weight="1"
+                    android:text="@string/obd_ler_codigos" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_limpar_codigos"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/obd_limpar_codigos" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/texto_codigos_vazio"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="@dimen/espaco_medio"
+                android:text="@string/obd_codigos_nao_lidos"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="@color/texto_secundario" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/lista_codigos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                tools:itemCount="3"
+                tools:listitem="@layout/item_codigo_falha" />
+
+            <!-- Quadro congelado (Freeze Frame, modo 02) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_freeze_frame"
+                style="@style/Widget.Material3.CardView.Elevated"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_medio"
+                android:visibility="gone"
+                app:cardCornerRadius="@dimen/raio_card"
+                tools:visibility="visible">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/espaco_medio">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/obd_ff_titulo"
+                        android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/obd_ff_subtitulo"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textColor="@color/texto_secundario" />
+
+                    <TextView
+                        android:id="@+id/texto_ff_vazio"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_pequeno"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        android:textColor="@color/texto_secundario"
+                        tools:text="Nenhum quadro congelado armazenado." />
+
+                    <LinearLayout
+                        android:id="@+id/grupo_ff_dados"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/texto_ff_dtc"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/espaco_pequeno"
+                            android:textAppearance="?attr/textAppearanceTitleLarge"
+                            android:textColor="@color/erro"
+                            tools:text="P0300" />
+
+                        <TextView
+                            android:id="@+id/texto_ff_descricao"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textAppearance="?attr/textAppearanceBodyMedium"
+                            tools:text="Falhas de ignição aleatórias ou em múltiplos cilindros" />
+
+                        <GridLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/espaco_medio"
+                            android:columnCount="2"
+                            android:useDefaultMargins="false">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_columnWeight="1"
+                                android:text="@string/obd_rpm"
+                                android:textAppearance="?attr/textAppearanceLabelMedium"
+                                android:textColor="@color/texto_secundario" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_columnWeight="1"
+                                android:text="@string/obd_velocidade"
+                                android:textAppearance="?attr/textAppearanceLabelMedium"
+                                android:textColor="@color/texto_secundario" />
+
+                            <TextView
+                                android:id="@+id/valor_ff_rpm"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_columnWeight="1"
+                                android:textAppearance="?attr/textAppearanceTitleMedium"
+                                tools:text="2.350 rpm" />
+
+                            <TextView
+                                android:id="@+id/valor_ff_velocidade"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_columnWeight="1"
+                                android:textAppearance="?attr/textAppearanceTitleMedium"
+                                tools:text="62 km/h" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_columnWeight="1"
+                                android:layout_marginTop="@dimen/espaco_pequeno"
+                                android:text="@string/obd_temperatura"
+                                android:textAppearance="?attr/textAppearanceLabelMedium"
+                                android:textColor="@color/texto_secundario" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_columnWeight="1"
+                                android:layout_marginTop="@dimen/espaco_pequeno"
+                                android:text="@string/obd_carga"
+                                android:textAppearance="?attr/textAppearanceLabelMedium"
+                                android:textColor="@color/texto_secundario" />
+
+                            <TextView
+                                android:id="@+id/valor_ff_temperatura"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_columnWeight="1"
+                                android:textAppearance="?attr/textAppearanceTitleMedium"
+                                tools:text="97 °C" />
+
+                            <TextView
+                                android:id="@+id/valor_ff_carga"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_columnWeight="1"
+                                android:textAppearance="?attr/textAppearanceTitleMedium"
+                                tools:text="78,4 %" />
+                        </GridLayout>
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

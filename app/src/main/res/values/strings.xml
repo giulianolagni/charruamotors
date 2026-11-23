@@ -205,7 +205,7 @@
     <string name="obd_bordo_km_l">%1$s km/L</string>
     <string name="obd_bordo_l_h">%1$s L/h</string>
     <string name="obd_bordo_parado">Parado</string>
-    <string name="obd_bordo_totais">%1$s km · %2$s L</string>
+    <string name="obd_bordo_totais">%1$s %2$s · %3$s %4$s</string>
     <string name="obd_bordo_zerar">Zerar viagem</string>
     <string name="obd_bordo_metodo_maf">MAF</string>
     <string name="obd_bordo_metodo_sd">Speed-Density</string>
@@ -224,7 +224,7 @@
     <string name="obd_cronometro_desarmado">Arme o cronômetro com o carro parado. Só em local seguro e permitido.</string>
     <string name="obd_cronometro_aguardando">Armado: pare o veículo para começar.</string>
     <string name="obd_cronometro_pronto">Pronto: a contagem começa quando o carro sair do 0.</string>
-    <string name="obd_cronometro_medindo">Medindo… %1$d km/h</string>
+    <string name="obd_cronometro_medindo">Medindo… %1$d %2$s</string>
     <string name="obd_cronometro_concluido">0–100 km/h concluído!</string>
     <string name="obd_cronometro_melhor">Melhor tempo nesta sessão: %1$s s</string>
     <string name="obd_cronometro_sem_conexao">Conecte o scanner para usar o cronômetro</string>

@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.4: abas inferiores, personalização do Painel e do HUD, aba Oficina, Histórico,
+     Terminal didático, varredura amigável e unidades globais. -->
+<resources>
+    <!-- Navegação inferior -->
+    <string name="aba_painel">Painel</string>
+    <string name="aba_oficina">Oficina</string>
+    <string name="aba_historico">Histórico</string>
+
+    <!-- Aba Painel -->
+    <string name="painel_titulo">Painel</string>
+    <string name="painel_personalizar">Personalizar</string>
+    <string name="painel_personalizar_descricao">Personalizar Painel: ordem, estilo dos mostradores, sensores e HUD</string>
+    <string name="painel_abrir_falhas">Diagnóstico de erros (DTCs) na Oficina</string>
+    <string name="painel_ver_todos">Ver todos (%1$d)</string>
+    <string name="painel_so_lista_rapida">Só a lista rápida</string>
+    <string name="painel_lista_rapida_qtd">Lista rápida (%1$d)</string>
+    <string name="obd_ecu_secao">Módulo do motor</string>
+
+    <!-- Personalizar Painel -->
+    <string name="personalizar_titulo">Personalizar Painel</string>
+    <string name="personalizar_ordem">O que aparece primeiro</string>
+    <string name="personalizar_ordem_dica">Arraste pela alça (≡) para reordenar Músicas, Navegação e Marcadores no topo do Painel.</string>
+    <string name="personalizar_arrastar">Arrastar para reordenar</string>
+    <string name="personalizar_secao_descricao">Posição %1$d: %2$s. Arraste pela alça para mudar a ordem.</string>
+    <string name="personalizar_estilo">Estilo dos mostradores</string>
+    <string name="personalizar_estilo_esportivo">Esportivo</string>
+    <string name="personalizar_estilo_digital">Digital</string>
+    <string name="personalizar_estilo_fita">Fita</string>
+    <string name="personalizar_mostradores">Os 4 relógios principais</string>
+    <string name="personalizar_mostradores_dica">Escolher um sensor que já está em outro relógio troca os dois de lugar.</string>
+    <string name="personalizar_relogio">Relógio %1$d</string>
+    <string name="personalizar_lista_rapida">Lista rápida de sensores</string>
+    <string name="personalizar_lista_vazia">Nenhum marcado: a lista mostra todos os sensores que a ECU suporta.</string>
+    <plurals name="personalizar_lista_qtd">
+        <item quantity="one">%1$d sensor na lista rápida (os outros ficam em \"Ver todos\").</item>
+        <item quantity="other">%1$d sensores na lista rápida (os outros ficam em \"Ver todos\").</item>
+    </plurals>
+    <string name="personalizar_lista_limpar">Limpar seleção</string>
+    <string name="personalizar_hud">HUD flutuante (sobre o Waze)</string>
+    <string name="personalizar_restaurar">Restaurar padrão</string>
+    <string name="personalizar_restaurar_mensagem">Volta a ordem, o estilo Esportivo, os relógios RPM, Velocidade, Turbo e Motor, a lista rápida completa e o HUD expandido.</string>
+    <string name="personalizar_restaurar_confirmar">Restaurar</string>
+
+    <!-- HUD: tela de ativação -->
+    <string name="hud_config_titulo">Modo HUD sobre o Waze</string>
+    <string name="hud_config_ativar">Ativar HUD</string>
+    <string name="hud_config_tamanho">Tamanho</string>
+    <string name="hud_config_minimizado">Minimizado</string>
+    <string name="hud_config_expandido">Expandido</string>
+    <string name="hud_config_minimizado_dica">Compacto, só com RPM e Turbo: atrapalha menos o mapa.</string>
+    <string name="hud_config_expandido_dica">%1$d de %2$d sensores fixados. Toque para escolher.</string>
+    <string name="hud_config_sensores">Dados fixados (até 4)</string>
+    <string name="hud_config_estilo">Estilo de texto e gráficos</string>
+    <string name="hud_config_numeros">Números</string>
+    <string name="hud_config_grandes">Grandes</string>
+    <string name="hud_config_barras">Com barra</string>
+
+    <!-- Aba Oficina -->
+    <string name="oficina_aba_titulo">Oficina</string>
+    <string name="oficina_aba_descricao">Ferramentas de diagnóstico sobre o scanner conectado no Painel.</string>
+    <string name="oficina_conectado">Scanner conectado: ferramentas liberadas</string>
+    <string name="oficina_desconectado">Scanner desconectado · toque para conectar no Painel</string>
+    <string name="oficina_requer_scanner">Requer o scanner conectado</string>
+    <string name="oficina_ir_painel">Ir ao Painel</string>
+    <string name="oficina_card_bateria">🔋 Teste de Bateria</string>
+    <string name="oficina_card_bateria_desc">Guiado e com diagnóstico: repouso, partida e alternador, com laudo para compartilhar.</string>
+    <string name="oficina_card_falhas">🔍 Diagnóstico de Erros (DTCs)</string>
+    <string name="oficina_card_falhas_desc">Ler e apagar as falhas da injeção: confirmadas, pendentes, permanentes e Freeze Frame.</string>
+    <string name="oficina_card_varredura">📡 Varredura de PIDs</string>
+    <string name="oficina_card_varredura_desc">Busca de sensores extras: cruza cada resposta com o catálogo e mostra o que é cada PID.</string>
+    <string name="oficina_card_terminal">💻 Terminal ELM327</string>
+    <string name="oficina_card_terminal_desc">Terminal manual para engenharia, com atalhos de um toque e respostas traduzidas.</string>
+
+    <!-- Diagnóstico de Erros -->
+    <string name="falhas_titulo">Diagnóstico de Erros</string>
+    <string name="falhas_descricao">Lê os códigos da injeção (modos 03, 07 e 0A) e o quadro congelado (modo 02). Apagar (modo 04) desliga a luz da injeção.</string>
+
+    <!-- Aba Histórico -->
+    <string name="historico_abastecimentos">Abastecimentos</string>
+    <string name="historico_logs">Logs</string>
+    <string name="historico_viagens">Viagens</string>
+    <string name="historico_logs_titulo">Logs salvos</string>
+    <string name="historico_logs_titulo_qtd">Logs salvos (%1$d)</string>
+    <string name="historico_logs_dica">CSV do Data Logger e da caixa-preta em Downloads/CharruaOBD. Toque para o replay no gráfico; toque longo para compartilhar.</string>
+    <string name="historico_logs_vazio">Nenhum log CSV salvo ainda. Grave pelo Painel (Gravar Log CSV) ou ative os logs automáticos da caixa-preta.</string>
+    <string name="historico_abrir_visualizador">Visualizador</string>
+    <string name="historico_viagens_titulo">Diário de viagens</string>
+    <string name="historico_viagens_titulo_qtd">Diário de viagens (%1$d)</string>
+    <string name="historico_viagens_dica">O relatório .txt de cada sessão da caixa-preta (resumo da viagem, falhas e comunicação) e as leituras salvas no Painel.</string>
+    <string name="historico_viagens_vazio">Nenhuma viagem registrada ainda: os relatórios aparecem ao fim de cada sessão com os logs automáticos ligados.</string>
+
+    <!-- Terminal didático -->
+    <string name="terminal_ajuda_titulo">O que dá para fazer aqui</string>
+    <string name="terminal_ajuda_ocultar">Ocultar</string>
+    <string name="terminal_ajuda_mostrar">Mostrar</string>
+    <string name="terminal_atalho">%1$s · %2$s</string>
+    <string name="terminal_atalho_descricao">Enviar %1$s: %2$s</string>
+    <string name="terminal_descricao_comando">%1$s: %2$s</string>
+    <string name="terminal_laudo">Laudo</string>
+    <string name="terminal_laudo_titulo">Laudo do Terminal</string>
+    <string name="terminal_laudo_vazio">Envie algum comando antes de gerar o laudo.</string>
+
+    <!-- Varredura amigável -->
+    <string name="varredura_filtro_modelo">Ver apenas o que a %1$s respondeu</string>
+    <string name="varredura_filtro_carro">Ver apenas o que o carro respondeu</string>
+    <plurals name="varredura_encontrados">
+        <item quantity="one">%1$d sensor encontrado</item>
+        <item quantity="other">%1$d sensores encontrados</item>
+    </plurals>
+    <string name="varredura_metricas">%1$d identificados · %2$d ignorados</string>
+    <string name="varredura_barra_descricao">%1$d de %2$d consultados: %3$d identificados, %4$d desconhecidos e %5$d ignorados</string>
+
+    <!-- Configurações: unidades globais -->
+    <string name="config_sistema_unidades">Unidades globais</string>
+    <string name="config_sistema_metrico">Métrico</string>
+    <string name="config_sistema_imperial">Imperial</string>
+    <string name="config_sistema_metrico_descricao">km/h, °C, kPa ou bar e km/L em todo o app e no HUD.</string>
+    <string name="config_sistema_imperial_descricao">mph, °F, psi e MPG (galão americano) em todo o app e no HUD.</string>
+    <string name="config_unidade_imperial">No sistema imperial a pressão é sempre em psi. Os logs continuam em kPa.</string>
+</resources>

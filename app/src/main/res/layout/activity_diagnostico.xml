@@ -24,29 +24,20 @@
             app:navigationIcon="?attr/homeAsUpIndicator"
             app:subtitleTextColor="@color/branco"
             tools:subtitle="ABC-1234"
-            tools:title="Chevrolet Onix 2020" />
-
-        <com.google.android.material.tabs.TabLayout
-            android:id="@+id/abas"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@color/azul_primario"
-            app:tabGravity="fill"
-            app:tabIndicatorColor="@color/laranja_destaque"
-            app:tabMode="fixed"
-            app:tabSelectedTextColor="@color/branco"
-            app:tabTextColor="@color/branco" />
+            tools:title="Toyota SW4 2019" />
     </com.google.android.material.appbar.AppBarLayout>
 
-    <FrameLayout
-        android:id="@+id/conteudo"
+    <!-- As 4 abas ficam vivas (sem deslizar: os mostradores e listas rolam na vertical). -->
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/paginas"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1" />
 
-        <androidx.viewpager2.widget.ViewPager2
-            android:id="@+id/paginas"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-    </FrameLayout>
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/navegacao"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/menu_abas" />
 </LinearLayout>

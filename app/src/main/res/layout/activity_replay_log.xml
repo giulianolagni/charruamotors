@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ferramenta 2: Visualizador Interno de Logs CSV (lista de logs → replay com zoom). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:colorBackground"
+    android:orientation="vertical"
+    tools:context=".ui.oficina.replay.ReplayLogActivity">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorPrimary">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            style="@style/Widget.CharruaMotors.Toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:theme="@style/ThemeOverlay.Material3.Dark.ActionBar"
+            app:navigationContentDescription="@string/voltar"
+            app:navigationIcon="?attr/homeAsUpIndicator"
+            app:subtitleTextColor="@color/branco"
+            app:title="@string/replay_titulo" />
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <FrameLayout
+        android:id="@+id/conteudo"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- Lista dos logs salvos -->
+        <LinearLayout
+            android:id="@+id/painel_lista"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="@dimen/margem_tela">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/replay_lista_titulo"
+                android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_abrir_outro"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/espaco_pequeno"
+                    android:layout_weight="1"
+                    android:text="@string/replay_abrir_outro" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_atualizar"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/replay_atualizar" />
+            </LinearLayout>
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/progresso_carregando"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:indeterminate="true"
+                android:visibility="invisible" />
+
+            <TextView
+                android:id="@+id/texto_lista_vazia"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingVertical="@dimen/espaco_pequeno"
+                android:text="@string/replay_lista_vazia"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="@color/texto_secundario"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/lista_arquivos"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                tools:itemCount="4"
+                tools:listitem="@layout/item_arquivo_log" />
+        </LinearLayout>
+
+        <!-- Replay: chips de sensores, gráfico com zoom e cursor, resumo da janela -->
+        <LinearLayout
+            android:id="@+id/painel_grafico"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/margem_tela"
+            android:paddingTop="@dimen/espaco_pequeno"
+            android:paddingBottom="@dimen/espaco_pequeno"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/texto_nome_log"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="middle"
+                        android:maxLines="1"
+                        android:textAppearance="?attr/textAppearanceTitleSmall"
+                        tools:text="charrua_obd_2026-11-20_14-30-05.csv" />
+
+                    <TextView
+                        android:id="@+id/texto_info_log"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textColor="@color/texto_secundario"
+                        tools:text="12.480 amostras · 28 sensores · 52 min" />
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_ver_tudo"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/replay_ver_tudo" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_outros_logs"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/replay_voltar_lista" />
+            </LinearLayout>
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/grupo_sensores"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:singleLine="true" />
+            </HorizontalScrollView>
+
+            <com.charruamotors.ui.componentes.LogReplayChartView
+                android:id="@+id/grafico_replay"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="@dimen/espaco_minimo"
+                android:layout_weight="1"
+                android:minHeight="160dp" />
+
+            <TextView
+                android:id="@+id/texto_sem_sensor"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/replay_sem_sensor"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="@color/texto_secundario"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/texto_janela"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="@color/texto_secundario"
+                tools:text="Janela 14:30:05 – 14:35:12 (5 min 7 s)" />
+
+            <TextView
+                android:id="@+id/texto_cursor"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_minimo"
+                android:fontFeatureSettings="tnum"
+                android:textAppearance="?attr/textAppearanceLabelLarge"
+                tools:text="Cursor em 14:31:22.250" />
+
+            <!-- Uma linha por sensor: valor no cursor e mín/máx/média da janela -->
+            <LinearLayout
+                android:id="@+id/lista_resumo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/texto_dica_gestos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_minimo"
+                android:text="@string/replay_dica_gestos"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="@color/texto_secundario" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

@@ -81,6 +81,21 @@
             android:parentActivityName=".ui.dashboard.DashboardActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Ferramentas de Oficina (abertas pelo hub da aba OBD2) -->
+        <activity
+            android:name=".ui.oficina.bateria.TesteBateriaActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
+        <activity
+            android:name=".ui.oficina.replay.ReplayLogActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
+        <activity
+            android:name=".ui.oficina.terminal.TerminalObdActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Mini-player: o Acesso a Notificações libera a leitura das sessões de mídia
              (Spotify, YouTube Music...). Nenhuma notificação é lida. -->
         <service

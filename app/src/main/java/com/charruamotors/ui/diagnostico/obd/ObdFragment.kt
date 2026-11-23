@@ -51,6 +51,9 @@ import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ResultadoPerfil
 import com.charruamotors.obd.pid.Pids
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
+import com.charruamotors.ui.oficina.bateria.TesteBateriaActivity
+import com.charruamotors.ui.oficina.replay.ReplayLogActivity
+import com.charruamotors.ui.oficina.terminal.TerminalObdActivity
 import com.charruamotors.ui.util.ArquivoExportado
 import com.charruamotors.ui.util.ExportadorCsv
 import com.charruamotors.ui.util.PermissoesBluetooth
@@ -66,7 +69,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Aba 1 — Scanner OBD2: card de direção (mini-player do Spotify/YouTube Music, atalhos do Waze e
- * Modo HUD flutuante), conexão, painel de telemetria (mostradores, gráfico ao vivo, computador
+ * Modo HUD flutuante), conexão, hub "Ferramentas de Oficina" (teste de bateria e alternador,
+ * replay de logs CSV, terminal ELM327 e varredura de PIDs), painel de telemetria (mostradores, gráfico ao vivo, computador
  * de bordo, cronômetro 0–100 km/h e grade de todos os PIDs suportados, inclusive os da
  * montadora), Data Logger CSV e diagnóstico completo (VIN, falhas por categoria, Freeze Frame).
  */
@@ -179,6 +183,34 @@ class ObdFragment : Fragment() {
         botaoLerCodigos.setOnClickListener { viewModel.lerCodigos() }
         botaoLimparCodigos.setOnClickListener { confirmarLimpezaCodigos() }
         botaoRegistroComunicacao.setOnClickListener { mostrarRegistroComunicacao() }
+        configurarOficina()
+    }
+
+    // ------------------------------------------------------------------ Ferramentas de Oficina
+
+    /**
+     * Hub "Ferramentas de Oficina". Cada ferramenta abre numa tela própria: ao sair desta aba o
+     * polling pausa ([onPause]/[onStop]) e, na bateria e no terminal, a sessão manual do cliente
+     * também suspende o polling do HUD; ao voltar, o cliente restaura o `ATSH` e o polling retoma,
+     * sem fechar o socket Bluetooth.
+     */
+    private fun configurarOficina() = with(binding) {
+        val veiculoId = requireArguments().getLong(DiagnosticoActivity.EXTRA_VEICULO_ID)
+        botaoOficinaBateria.setOnClickListener {
+            abrirFerramentaConectada { TesteBateriaActivity.intent(requireContext(), veiculoId) }
+        }
+        botaoOficinaReplay.setOnClickListener { startActivity(ReplayLogActivity.intent(requireContext())) }
+        botaoOficinaTerminal.setOnClickListener {
+            abrirFerramentaConectada { TerminalObdActivity.intent(requireContext(), veiculoId) }
+        }
+    }
+
+    private fun abrirFerramentaConectada(intent: () -> Intent) {
+        if (viewModel.estado.value !is EstadoConexaoObd.Conectado) {
+            mostrarMensagem(getString(R.string.oficina_requer_conexao))
+            return
+        }
+        startActivity(intent())
     }
 
     // ------------------------------------------------------------------ direção: música, Waze e HUD
@@ -452,6 +484,10 @@ class ObdFragment : Fragment() {
         botaoZerarViagem.isEnabled = viewModel.computador.value.viagem.segundos > 0
         botaoLerCodigos.isEnabled = conectado && !ocupado
         botaoLimparCodigos.isEnabled = conectado && !ocupado
+        // Bateria e terminal usam a conexão ativa; o replay de logs funciona sempre.
+        botaoOficinaBateria.isEnabled = conectado && !ocupado
+        botaoOficinaTerminal.isEnabled = conectado && !ocupado
+        textoOficinaRequerConexao.isVisible = !conectado
     }
 
     private fun mostrarDispositivos(lista: List<DispositivoObd>) {

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Hub "Ferramentas de Oficina" na aba OBD2 -->
+    <string name="oficina_titulo">Ferramentas de Oficina</string>
+    <string name="oficina_descricao">Testes guiados e engenharia reversa sobre a conexão ativa. Enquanto uma ferramenta estiver aberta, o polling dos sensores fica pausado (sem derrubar o Bluetooth) e volta sozinho ao sair.</string>
+    <string name="oficina_bateria">Teste de Bateria e Alternador</string>
+    <string name="oficina_replay">Visualizador de Logs CSV</string>
+    <string name="oficina_terminal">Terminal ELM327 e Varredura de PIDs</string>
+    <string name="oficina_requer_conexao">Conecte o scanner para usar o teste de bateria e o terminal.</string>
+    <string name="oficina_sem_conexao">Scanner não conectado. Conecte-o na aba OBD2 e abra a ferramenta de novo.</string>
+    <string name="oficina_conexao_perdida">A conexão com o scanner caiu. Volte à aba OBD2 e reconecte.</string>
+    <string name="oficina_copiar">Copiar</string>
+    <string name="oficina_compartilhar">Compartilhar</string>
+    <string name="oficina_copiado">Copiado para a área de transferência</string>
+
+    <!-- Ferramenta 1: Teste de Bateria e Alternador -->
+    <string name="bateria_titulo">Teste de Bateria e Alternador</string>
+    <string name="bateria_etapa_n">Etapa %1$d de 3</string>
+    <string name="bateria_etapa_concluida">Teste concluído</string>
+    <string name="bateria_etapa1_titulo">Bateria em repouso</string>
+    <string name="bateria_etapa1_instrucao">Ignição ligada e motor desligado, com faróis, som e ar-condicionado desligados. Toque em Medir: o app lê a tensão por 5 s até ela estabilizar.</string>
+    <string name="bateria_etapa2_titulo">Teste de partida (cranking)</string>
+    <string name="bateria_etapa2_instrucao">Toque em Iniciar captura e, em seguida, dê a partida normalmente. O app registra o vale mínimo de tensão enquanto o motor de arranque gira. Se o scanner reiniciar por subtensão (LV RESET), o teste continua.</string>
+    <string name="bateria_etapa3a_titulo">Alternador em marcha lenta</string>
+    <string name="bateria_etapa3a_instrucao">Motor ligado em marcha lenta, sem acelerar. Toque em Medir: 8 s de leitura da tensão de carga.</string>
+    <string name="bateria_etapa3b_titulo">Alternador a ~2.500 RPM com cargas</string>
+    <string name="bateria_etapa3b_instrucao">Ligue faróis, ventilação no máximo e desembaçador. Mantenha o motor a ~2.500 RPM e toque em Medir: 10 s de leitura.</string>
+    <string name="bateria_concluido_instrucao">Desligue as cargas e volte o motor à marcha lenta. Confira o laudo abaixo.</string>
+    <string name="bateria_medir">Medir</string>
+    <string name="bateria_iniciar_partida">Iniciar captura da partida</string>
+    <string name="bateria_cancelar">Cancelar medição</string>
+    <string name="bateria_pular">Pular etapa</string>
+    <string name="bateria_refazer">Refazer teste</string>
+    <string name="bateria_medindo">Medindo… mantenha as condições da etapa</string>
+    <string name="bateria_aguardando_partida">Aguardando a partida… dê a partida agora</string>
+    <string name="bateria_partida_em_curso">Partida detectada · vale %1$s</string>
+    <string name="bateria_partida_nao_detectada">Nenhuma queda de tensão em 20 s. Toque em Iniciar captura e dê a partida logo em seguida.</string>
+    <string name="bateria_leituras_insuficientes">Poucas leituras válidas do adaptador. Confira a conexão e meça de novo.</string>
+    <string name="bateria_etapa_ok">Etapa concluída: %1$s</string>
+    <string name="bateria_tensao_ao_vivo">%1$s V</string>
+    <string name="bateria_taxa">%1$s amostras/s · ATRV</string>
+    <string name="bateria_lv_resets">LV RESET: %1$d (o teste continua)</string>
+    <string name="bateria_resultados">Resultados</string>
+    <string name="bateria_res_repouso">Repouso: %1$s — %2$s</string>
+    <string name="bateria_res_partida">Partida: vale %1$s — %2$s</string>
+    <string name="bateria_res_lenta">Marcha lenta: média %1$s · pico %2$s · ripple ~%3$s — %4$s</string>
+    <string name="bateria_res_carga">2.500 RPM c/ cargas: média %1$s · pico %2$s · ripple ~%3$s — %4$s</string>
+    <string name="bateria_res_repouso_pendente">Repouso: pendente</string>
+    <string name="bateria_res_partida_pendente">Partida: pendente</string>
+    <string name="bateria_res_lenta_pendente">Marcha lenta: pendente</string>
+    <string name="bateria_res_carga_pendente">2.500 RPM c/ cargas: pendente</string>
+    <string name="bateria_res_pulada">%1$s: pulada</string>
+    <string name="bateria_laudo_titulo">Laudo resumido</string>
+    <string name="bateria_veredito_bateria">Bateria: %1$s</string>
+    <string name="bateria_veredito_alternador">Alternador: %1$s</string>
+    <string name="bateria_motor_ligado">Acima de 13,2 V em repouso: o motor parece ligado. Refaça a etapa 1 com o motor desligado.</string>
+    <string name="bateria_grafico_descricao">Gráfico da tensão da bateria nos últimos 20 segundos</string>
+    <string name="bateria_grafico_vale">V mín %1$s</string>
+    <string name="bateria_laudo_assunto">Laudo do teste de bateria e alternador</string>
+
+    <!-- Ferramenta 2: Visualizador de Logs CSV (Replay) -->
+    <string name="replay_titulo">Visualizador de Logs CSV</string>
+    <string name="replay_lista_titulo">Logs em Downloads/CharruaOBD</string>
+    <string name="replay_lista_vazia">Nenhum log CSV encontrado. Grave um na aba OBD2 (Gravar Log CSV) ou toque em Abrir outro CSV.</string>
+    <string name="replay_abrir_outro">Abrir outro CSV</string>
+    <string name="replay_atualizar">Atualizar lista</string>
+    <string name="replay_carregando">Carregando…</string>
+    <string name="replay_item_detalhe">%1$s · %2$s</string>
+    <string name="replay_erro_ler">Não foi possível ler o CSV: %1$s</string>
+    <string name="replay_max_sensores">No máximo 3 sensores ao mesmo tempo. Desmarque um para trocar.</string>
+    <string name="replay_ver_tudo">Ver tudo</string>
+    <string name="replay_voltar_lista">Outros logs</string>
+    <string name="replay_dica_gestos">Toque: cursor · pinça: zoom · arrastar: navegar · toque longo e arrastar: mover o cursor · toque duplo: ver tudo</string>
+    <string name="replay_info_log">%1$s amostras · %2$d sensores · %3$s</string>
+    <string name="replay_janela">Janela %1$s – %2$s (%3$s)</string>
+    <string name="replay_cursor">Cursor em %1$s</string>
+    <string name="replay_cursor_vazio">Toque no gráfico para posicionar o cursor</string>
+    <string name="replay_estatistica">mín %1$s · máx %2$s · média %3$s</string>
+    <string name="replay_sem_leituras">sem leituras na janela</string>
+    <string name="replay_sem_sensor">Selecione ao menos um sensor nos chips acima.</string>
+    <string name="replay_grafico_descricao">Gráfico do log com %1$d sensores selecionados</string>
+    <string name="replay_linhas_ignoradas">%1$d linhas malformadas ignoradas</string>
+
+    <!-- Ferramenta 3: Terminal ELM327 e Varredura de PIDs -->
+    <string name="terminal_titulo">Terminal ELM327</string>
+    <string name="terminal_aba_terminal">Terminal</string>
+    <string name="terminal_aba_varredura">Varredura de PIDs</string>
+    <string name="terminal_comando_hint">Comando (ex.: ATDP, ATSH 7E0, 2101, 13)</string>
+    <string name="terminal_enviar">Enviar</string>
+    <string name="terminal_log_vazio">Envie comandos brutos ao ELM327 pela conexão ativa. Cada linha mostra o comando, a resposta bruta e a latência.</string>
+    <string name="terminal_copiar_log">Copiar log</string>
+    <string name="terminal_limpar">Limpar</string>
+    <string name="terminal_ocupado">Aguarde: há uma varredura em andamento</string>
+    <string name="terminal_log_assunto">Log do terminal ELM327</string>
+    <string name="varredura_preset">Preset</string>
+    <string name="varredura_cabecalho">Cabeçalho</string>
+    <string name="varredura_servico">Serviço</string>
+    <string name="varredura_inicio">Início (hex)</string>
+    <string name="varredura_fim">Fim (hex)</string>
+    <string name="varredura_iniciar">Iniciar varredura</string>
+    <string name="varredura_parar">Parar</string>
+    <string name="varredura_mostrar_tudo">Mostrar também NO DATA, 7F e erros</string>
+    <string name="varredura_progresso">%1$d/%2$d · %3$d responderam · %4$s</string>
+    <string name="varredura_concluida">Concluída: %1$d de %2$d responderam</string>
+    <string name="varredura_parada">Parada: %1$s</string>
+    <string name="varredura_relatorio">Copiar / Compartilhar relatório da varredura</string>
+    <string name="varredura_relatorio_titulo">Relatório da varredura</string>
+    <string name="varredura_vazia">Escolha um preset ou configure cabeçalho, serviço e faixa e toque em Iniciar. Os PIDs que responderem aparecem aqui com os bytes brutos.</string>
+    <string name="varredura_aviso">Só leitura: os serviços 01, 21 e 22 não alteram a ECU. Ignição ligada, motor desligado ou em marcha lenta.</string>
+    <string name="varredura_nrc">7F %1$s %2$s · %3$s</string>
+    <string name="varredura_dados">%1$d bytes de dados</string>
+</resources>

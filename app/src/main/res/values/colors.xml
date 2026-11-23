@@ -21,4 +21,14 @@
     <color name="hud_alerta">#F2C62828</color>
     <color name="hud_valor">#FFFFFF</color>
     <color name="hud_rotulo">#B0BEC5</color>
+
+    <!-- Ferramentas de Oficina: séries do replay de logs e faixas do teste de bateria -->
+    <color name="serie_1">#1565C0</color>
+    <color name="serie_2">#EF6C00</color>
+    <color name="serie_3">#2E7D32</color>
+    <color name="veredito_bom">#2E7D32</color>
+    <color name="veredito_atencao">#B26A00</color>
+    <color name="veredito_ruim">#B3261E</color>
+    <color name="terminal_fundo">#0B0F14</color>
+    <color name="terminal_texto">#C8E6C9</color>
 </resources>

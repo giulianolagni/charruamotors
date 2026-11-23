@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ferramenta 1: Teste de Bateria e Alternador guiado em 3 etapas, com ATRV em alta taxa. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:colorBackground"
+    android:orientation="vertical"
+    tools:context=".ui.oficina.bateria.TesteBateriaActivity">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorPrimary">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            style="@style/Widget.CharruaMotors.Toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:theme="@style/ThemeOverlay.Material3.Dark.ActionBar"
+            app:navigationContentDescription="@string/voltar"
+            app:navigationIcon="?attr/homeAsUpIndicator"
+            app:subtitleTextColor="@color/branco"
+            app:title="@string/bateria_titulo" />
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <ScrollView
+        android:id="@+id/conteudo"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="@dimen/margem_tela">
+
+            <!-- Etapa atual: instruções, tensão ao vivo, gráfico e ação -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Material3.CardView.Filled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="@dimen/raio_card">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/espaco_medio">
+
+                    <TextView
+                        android:id="@+id/texto_etapa"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/textAppearanceLabelLarge"
+                        android:textColor="?attr/colorPrimary"
+                        tools:text="Etapa 1 de 3" />
+
+                    <TextView
+                        android:id="@+id/titulo_etapa"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/textAppearanceTitleLarge"
+                        tools:text="Bateria em repouso" />
+
+                    <TextView
+                        android:id="@+id/instrucao_etapa"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_minimo"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        tools:text="@string/bateria_etapa1_instrucao" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_medio"
+                        android:gravity="bottom"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/texto_tensao"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFeatureSettings="tnum"
+                            android:includeFontPadding="false"
+                            android:textSize="@dimen/texto_tensao_ao_vivo"
+                            android:textStyle="bold"
+                            tools:text="12,5 V" />
+
+                        <TextView
+                            android:id="@+id/texto_taxa"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/espaco_pequeno"
+                            android:layout_marginBottom="@dimen/espaco_minimo"
+                            android:layout_weight="1"
+                            android:gravity="end"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="@color/texto_secundario"
+                            tools:text="20 amostras/s · ATRV" />
+                    </LinearLayout>
+
+                    <com.charruamotors.ui.componentes.GraficoTensaoView
+                        android:id="@+id/grafico_tensao"
+                        android:layout_width="match_parent"
+                        android:layout_height="@dimen/altura_grafico_tensao"
+                        android:layout_marginTop="@dimen/espaco_pequeno" />
+
+                    <com.google.android.material.progressindicator.LinearProgressIndicator
+                        android:id="@+id/progresso_captura"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_pequeno"
+                        android:visibility="invisible" />
+
+                    <TextView
+                        android:id="@+id/texto_status"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_minimo"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        android:visibility="gone"
+                        tools:text="Aguardando a partida… dê a partida agora"
+                        tools:visibility="visible" />
+
+                    <LinearLayout
+                        android:id="@+id/grupo_acoes"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_medio"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/botao_acao"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="@dimen/espaco_pequeno"
+                            android:layout_weight="2"
+                            tools:text="@string/bateria_medir" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/botao_pular"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/bateria_pular" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Resultados de cada etapa -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_grande"
+                android:text="@string/bateria_resultados"
+                android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+            <TextView
+                android:id="@+id/res_repouso"
+                style="@style/OficinaLinhaResultado"
+                tools:text="Repouso: 12,52 V — Saudável" />
+
+            <TextView
+                android:id="@+id/res_partida"
+                style="@style/OficinaLinhaResultado"
+                tools:text="Partida: vale 10,30 V — OK" />
+
+            <TextView
+                android:id="@+id/res_lenta"
+                style="@style/OficinaLinhaResultado"
+                tools:text="Marcha lenta: pendente" />
+
+            <TextView
+                android:id="@+id/res_carga"
+                style="@style/OficinaLinhaResultado"
+                tools:text="2.500 RPM c/ cargas: pendente" />
+
+            <TextView
+                android:id="@+id/aviso_motor_ligado"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:text="@string/bateria_motor_ligado"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="@color/veredito_atencao"
+                android:visibility="gone" />
+
+            <!-- Laudo resumido: só ao concluir as 3 etapas -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_laudo"
+                style="@style/Widget.Material3.CardView.Outlined"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_medio"
+                android:visibility="gone"
+                app:cardCornerRadius="@dimen/raio_card"
+                tools:visibility="visible">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/espaco_medio">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/bateria_laudo_titulo"
+                        android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                    <TextView
+                        android:id="@+id/veredito_bateria"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_pequeno"
+                        android:textAppearance="?attr/textAppearanceTitleLarge"
+                        android:textStyle="bold"
+                        tools:text="Bateria: SAUDÁVEL" />
+
+                    <TextView
+                        android:id="@+id/veredito_alternador"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/textAppearanceTitleLarge"
+                        android:textStyle="bold"
+                        tools:text="Alternador: NORMAL" />
+
+                    <TextView
+                        android:id="@+id/texto_laudo"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_pequeno"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textIsSelectable="true"
+                        tools:text="LAUDO — TESTE DE BATERIA E ALTERNADOR" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_medio"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/botao_copiar_laudo"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="@dimen/espaco_pequeno"
+                            android:layout_weight="1"
+                            android:text="@string/oficina_copiar" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/botao_compartilhar_laudo"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/oficina_compartilhar" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/botao_refazer"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end"
+                        android:text="@string/bateria_refazer" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

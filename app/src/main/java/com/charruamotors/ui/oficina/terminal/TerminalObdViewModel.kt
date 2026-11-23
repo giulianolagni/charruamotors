@@ -1,0 +1,229 @@
+package com.charruamotors.ui.oficina.terminal
+
+import android.os.SystemClock
+import androidx.annotation.StringRes
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.charruamotors.CharruaMotorsApp
+import com.charruamotors.R
+import com.charruamotors.domain.model.EstadoConexaoObd
+import com.charruamotors.domain.model.Veiculo
+import com.charruamotors.obd.ObdClient
+import com.charruamotors.oficina.terminal.EntradaTerminal
+import com.charruamotors.oficina.terminal.FormatadorTerminal
+import com.charruamotors.oficina.varredura.ConfigVarredura
+import com.charruamotors.oficina.varredura.ProgressoVarredura
+import com.charruamotors.oficina.varredura.RelatorioVarredura
+import com.charruamotors.oficina.varredura.ResultadoPid
+import com.charruamotors.oficina.varredura.ResultadoVarredura
+import com.charruamotors.oficina.varredura.VarreduraPids
+import com.charruamotors.ui.diagnostico.DiagnosticoActivity
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
+import java.time.LocalDateTime
+
+/** Estado da aba Varredura de PIDs. */
+data class EstadoVarredura(
+    val rodando: Boolean = false,
+    val config: ConfigVarredura? = null,
+    val progresso: ProgressoVarredura? = null,
+    val resultados: List<ResultadoPid> = emptyList(),
+    val mostrarTudo: Boolean = false,
+    /** Varredura terminada (concluída, parada ou interrompida); null enquanto roda ou antes da primeira. */
+    val final: ResultadoVarredura? = null,
+) {
+    val visiveis: List<ResultadoPid> get() = VarreduraPids.filtrar(resultados, mostrarTudo)
+}
+
+sealed interface EventoTerminal {
+    data class Mensagem(@param:StringRes val resId: Int) : EventoTerminal
+    data class Texto(val texto: String) : EventoTerminal
+    data class SemConexao(@param:StringRes val resId: Int) : EventoTerminal
+}
+
+/**
+ * Terminal Manual ELM327 e Varredura Automática de PIDs sobre a conexão Bluetooth ativa, numa
+ * sessão manual: o polling dos sensores fica pausado enquanto a tela está aberta e, ao fechar, o
+ * cliente restaura o `ATSH` ativo (e a configuração, se um comando a mudou). Terminal e varredura
+ * não rodam ao mesmo tempo (o `ATSH` de um mudaria o do outro).
+ */
+class TerminalObdViewModel(
+    private val cliente: ObdClient,
+    private val veiculo: suspend () -> Veiculo?,
+    private val relogioParede: () -> Long = System::currentTimeMillis,
+) : ViewModel() {
+
+    private val _log = MutableStateFlow<List<EntradaTerminal>>(emptyList())
+    val log: StateFlow<List<EntradaTerminal>> = _log.asStateFlow()
+
+    private val _enviando = MutableStateFlow(false)
+    val enviando: StateFlow<Boolean> = _enviando.asStateFlow()
+
+    private val _varredura = MutableStateFlow(EstadoVarredura())
+    val varredura: StateFlow<EstadoVarredura> = _varredura.asStateFlow()
+
+    private val _eventos = Channel<EventoTerminal>(Channel.BUFFERED)
+    val eventos: Flow<EventoTerminal> = _eventos.receiveAsFlow()
+
+    private val descricaoVeiculo = viewModelScope.async {
+        runCatching { veiculo() }.getOrNull()?.let { "${it.descricao} (${it.placaFormatada})" }
+    }
+
+    private var sessao: Job? = null
+    private var sessaoIniciada = false
+    private var jobVarredura: Job? = null
+    private var inicioVarreduraMs = 0L
+    private var duracaoVarreduraMs: Long? = null
+    @Volatile private var pararSolicitado = false
+
+    init {
+        sessao = viewModelScope.launch {
+            if (cliente.iniciarSessaoManual().isSuccess) {
+                sessaoIniciada = true
+            } else {
+                _eventos.send(EventoTerminal.SemConexao(R.string.oficina_sem_conexao))
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- terminal
+
+    fun enviar(comando: String) {
+        val texto = comando.trim()
+        if (texto.isEmpty()) return
+        if (_varredura.value.rodando) {
+            _eventos.trySend(EventoTerminal.Mensagem(R.string.terminal_ocupado))
+            return
+        }
+        if (_enviando.value) return
+        viewModelScope.launch {
+            sessao?.join()
+            _enviando.value = true
+            try {
+                val instante = relogioParede()
+                val entrada = cliente.enviarComandoManual(texto).fold(
+                    onSuccess = { EntradaTerminal.de(it, instante) },
+                    onFailure = { EntradaTerminal.falha(texto.uppercase(), it.message ?: "falha de comunicação", instante) },
+                )
+                adicionar(entrada)
+                verificarConexao()
+            } finally {
+                _enviando.value = false
+            }
+        }
+    }
+
+    private fun adicionar(entrada: EntradaTerminal) {
+        _log.value = (_log.value + entrada).takeLast(MAX_ENTRADAS_LOG)
+    }
+
+    fun limparLog() {
+        _log.value = emptyList()
+    }
+
+    fun textoLog(): String? = _log.value.takeIf { it.isNotEmpty() }?.let { FormatadorTerminal.formatar(it) }
+
+    // ---------------------------------------------------------------- varredura
+
+    /** Valida os campos e inicia a varredura; erro de validação vira mensagem. */
+    fun iniciarVarredura(cabecalho: String, servico: String, inicioHex: String, fimHex: String) {
+        if (_varredura.value.rodando || _enviando.value) return
+        val config = VarreduraPids.configurar(cabecalho, servico, inicioHex, fimHex).getOrElse {
+            _eventos.trySend(EventoTerminal.Texto(it.message ?: ""))
+            return
+        }
+        jobVarredura = viewModelScope.launch {
+            sessao?.join()
+            inicioVarreduraMs = SystemClock.elapsedRealtime()
+            duracaoVarreduraMs = null
+            _varredura.value = _varredura.value.copy(rodando = true, config = config, progresso = null, resultados = emptyList(), final = null)
+            val acumulados = ArrayList<ResultadoPid>()
+            pararSolicitado = false
+            val final = try {
+                VarreduraPids.executar(
+                    config,
+                    enviar = { cliente.enviarComandoManual(it, ObdClient.TIMEOUT_MANUAL_MS, registrar = false) },
+                    deveParar = { pararSolicitado },
+                ) { progresso, resultado ->
+                    resultado?.let(acumulados::add)
+                    _varredura.value = _varredura.value.copy(progresso = progresso, resultados = acumulados.toList())
+                }
+            } catch (e: CancellationException) {
+                concluir(ResultadoVarredura(config, acumulados.toList(), config.quantidade, VarreduraPids.PARADA_USUARIO))
+                throw e
+            }
+            concluir(final)
+            verificarConexao()
+        }
+    }
+
+    private fun concluir(final: ResultadoVarredura) {
+        duracaoVarreduraMs = SystemClock.elapsedRealtime() - inicioVarreduraMs
+        _varredura.value = _varredura.value.copy(rodando = false, resultados = final.resultados, final = final)
+    }
+
+    /** Parada cooperativa: a varredura termina depois do comando em andamento. */
+    fun pararVarredura() {
+        pararSolicitado = true
+    }
+
+    fun definirMostrarTudo(mostrar: Boolean) {
+        _varredura.value = _varredura.value.copy(mostrarTudo = mostrar)
+    }
+
+    /** Relatório da última varredura (ou da parcial em andamento); null se nada foi lido. */
+    suspend fun relatorio(): String? {
+        val estado = _varredura.value
+        val config = estado.config ?: return null
+        if (estado.resultados.isEmpty()) return null
+        val resultado = estado.final ?: ResultadoVarredura(config, estado.resultados, config.quantidade, "em andamento")
+        return RelatorioVarredura.gerar(
+            resultado,
+            LocalDateTime.now(),
+            veiculo = descricaoVeiculo.await(),
+            protocolo = cliente.infoConexao.value.protocolo,
+            duracaoMs = duracaoVarreduraMs,
+        )
+    }
+
+    private suspend fun verificarConexao() {
+        if (cliente.estado.value !is EstadoConexaoObd.Conectado) _eventos.send(EventoTerminal.SemConexao(R.string.oficina_conexao_perdida))
+    }
+
+    /** Tela fechada de vez: para a varredura e encerra a sessão manual (restaura o `ATSH` e o polling). */
+    override fun onCleared() {
+        jobVarredura?.cancel()
+        if (sessaoIniciada) CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { cliente.encerrarSessaoManual() }
+        super.onCleared()
+    }
+
+    companion object {
+        const val MAX_ENTRADAS_LOG = 300
+
+        val Factory = viewModelFactory {
+            initializer {
+                val app = this[APPLICATION_KEY] as CharruaMotorsApp
+                val veiculoId = createSavedStateHandle().get<Long>(DiagnosticoActivity.EXTRA_VEICULO_ID) ?: 0L
+                TerminalObdViewModel(
+                    cliente = app.obdClientDe(app.modoObd),
+                    veiculo = { app.veiculoRepository.buscarPorId(veiculoId) },
+                )
+            }
+        }
+    }
+}

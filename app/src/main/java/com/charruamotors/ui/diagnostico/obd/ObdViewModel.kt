@@ -285,24 +285,6 @@ class ObdViewModel(
         if (modo.value == ModoObd.BLUETOOTH) preferencias?.vincularScanner(dispositivo)
     }
 
-    /** Aparelhos pareados no Bluetooth real, para escolher o gatilho do carro (exige a permissão). */
-    suspend fun pareadosBluetooth(): List<DispositivoObd> = clientePorModo(ModoObd.BLUETOOTH).listarDispositivos()
-
-    // ------------------------------------------------------------------ caixa-preta (preferências)
-
-    fun definirAutoConexao(ativa: Boolean) {
-        preferencias?.definirAutoConexao(ativa)
-    }
-
-    fun definirGravarLogsAutomaticos(ativo: Boolean) {
-        preferencias?.definirGravarLogs(ativo)
-    }
-
-    /** Bluetooth gatilho do carro; [endereco] null = reconhecer só pelo nome. */
-    fun definirGatilho(nome: String, endereco: String?) {
-        if (nome.isNotBlank()) preferencias?.definirGatilho(nome, endereco)
-    }
-
     // ------------------------------------------------------------------ conexão
 
     /**

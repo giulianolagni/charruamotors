@@ -263,12 +263,13 @@ class Elm327CascataTest {
         val vin = obd.lerVin()
 
         assertTrue(perfil is ResultadoPerfil.Indisponivel)
-        assertEquals("só o 2113 (7E0 · 21) do perfil é compatível", listOf("2113"), t.enviados)
+        // Só as requisições do motor (7E0 · 21) do perfil: injetores, pedal, ATF, marcha e alavanca pelo motor.
+        assertEquals("só o 7E0 · 21xx do perfil é compatível", listOf("2113", "2149", "214A", "2182", "2130", "21D9"), t.enviados)
         assertTrue(vin.isFailure)
         assertTrue(vin.exceptionOrNull()!!.message!!, "Modo 21" in vin.exceptionOrNull()!!.message!!)
         assertTrue(obd.lerCodigosPendentes().isFailure)
         assertTrue(obd.lerFreezeFrame().isFailure)
-        assertEquals(listOf("2113"), t.enviados)
+        assertEquals(listOf("2113", "2149", "214A", "2182", "2130", "21D9"), t.enviados) // VIN, 07 e 02 não gastaram comando
     }
 
     @Test

@@ -195,6 +195,50 @@ class Elm327TelemetriaTest {
         assertFalse("VW_DSG" in obd.pidsSuportados.value)
     }
 
+    private val catalogoChassi = CatalogoEstendido.deJson(
+        """{"perfis":[{"fabricante":"Toyota","pids":[
+            {"id":"TOY_VSC","cabecalho":"7B0","servico":"21","identificador":"03","nome":"VSC","unidade":"","bytes":1,"formula":"A","min":0,"max":4,"rotulos":{"0":"Normal","1":"Atuando"}},
+            {"id":"TOY_PEDAL","cabecalho":"7E0","servico":"21","identificador":"49","nome":"Pedal","unidade":"%","bytes":1,"formula":"A*100/255","min":0,"max":100}
+        ]}]}""",
+    )
+
+    @Test
+    fun `modulo de chassi 7B0 ajusta o filtro ATCRA e o motor volta ao padrao`() = runTest {
+        val t = TransporteRoteirizado(ecu().apply {
+            put("2103", "61 03 01 00\r\r")
+            put("2149", "61 49 CC\r\r")
+        })
+        val obd = cliente(t, catalogoChassi)
+        obd.conectar(dispositivo)
+        t.enviados.clear()
+
+        val r = obd.ativarPerfilFabricante("Toyota SW4") as ResultadoPerfil.Ativo
+        assertEquals(setOf("TOY_VSC", "TOY_PEDAL"), r.pids.map { it.comando }.toSet())
+        // ABS/VSC responde em 7B8 (fora do filtro padrão 7E8–7EF): ATCRA 7B8 depois do ATSH; o motor desfaz.
+        assertEquals(listOf("ATDPN", "ATSH7B0", "ATCRA7B8", "2103", "ATSH7E0", "ATCRA", "2149"), t.enviados)
+        assertEquals("Atuando", r.pids.single { it.comando == "TOY_VSC" }.rotulo(1.0))
+
+        // Na volta ao funcional (7DF) o filtro já é o padrão: não repete o ATCRA.
+        t.enviados.clear()
+        obd.lerCodigosFalha()
+        assertFalse(t.enviados.any { it.startsWith("ATCRA") })
+    }
+
+    @Test
+    fun `adaptador que recusa o ATCRA nao insiste a cada troca de cabecalho`() = runTest {
+        val t = TransporteRoteirizado(ecu().apply {
+            put("ATCRA7B8", "?\r\r")
+            put("2149", "61 49 CC\r\r")
+        })
+        val obd = cliente(t, catalogoChassi)
+        obd.conectar(dispositivo)
+        t.enviados.clear()
+
+        val r = obd.ativarPerfilFabricante("Toyota") as ResultadoPerfil.Ativo
+        assertEquals(listOf("TOY_PEDAL"), r.pids.map { it.comando }) // o VSC não respondeu sem o filtro
+        assertEquals(1, t.enviados.count { it.startsWith("ATCRA") })
+    }
+
     @Test
     fun `cabecalho funcional volta antes de comandos OBD padrao`() = runTest {
         val t = TransporteRoteirizado(ecuVw().apply { put("03", "43 01 03 00\r\r") })

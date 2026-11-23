@@ -54,6 +54,7 @@ object MontadorMostradores {
         gauge.unidade = sensor.unidade(conversor)
         gauge.escala = sensor.escala(conversor)
         gauge.casasDecimais = sensor.exibir(0.0, conversor).casas
+        gauge.rotulos = sensor.rotulos
         gauge.estilo = estilo
     }
 }

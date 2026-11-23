@@ -167,6 +167,15 @@ class Elm327BluetoothClient(
     /** Comandos seguidos sem prompt; zera a cada resposta. */
     @Volatile private var timeoutsSeguidos = 0
 
+    /**
+     * Filtro de recepção (`ATCRA`) ativo no adaptador: null = o padrão (respostas `7E8`–`7EF`);
+     * `7B8` com o ABS/VSC (`7B0`), `7C8` com o painel/4WD (`7C0`).
+     */
+    @Volatile private var filtroRecepcaoAtivo: String? = null
+
+    /** O adaptador recusou o `ATCRA` nesta conexão: não insiste a cada troca de cabeçalho. */
+    @Volatile private var semFiltroRecepcao = false
+
     /** Fim da última troca com o adaptador (`System.nanoTime`); 0 = nenhuma nesta sessão. */
     @Volatile private var fimUltimoComandoNs = 0L
 
@@ -554,7 +563,11 @@ class Elm327BluetoothClient(
                 if (compacto !in COMANDOS_REINICIO) registro.evento("$compacto: o adaptador reiniciou (LV RESET) durante a sessão manual")
                 cabecalhoAtivo = null
                 timeoutAdaptadorAtivo = null
+                filtroRecepcaoAtivo = null
                 configuracaoAlteradaManual = true
+            }
+            compacto.startsWith("ATCRA") -> if (ok) {
+                filtroRecepcaoAtivo = compacto.removePrefix("ATCRA").ifEmpty { null }
             }
             compacto.startsWith("ATSH") -> if (ok) {
                 val cabecalho = compacto.removePrefix("ATSH")
@@ -596,12 +609,34 @@ class Elm327BluetoothClient(
             }
             if ("OK" in resposta.uppercase()) cabecalhoAtivo = alvo
         }
+        if (filtroRecepcaoAtivo != RequisicaoEstendida.filtroRecepcao(alvo)) ajustarFiltroRecepcao(canal, alvo, registrar = true)
         configuracaoAlteradaManual = false
         registro.evento(
             "Sessão manual encerrada: polling retomado" +
                 (if (reconfigurar) ", configuração reaplicada" else "") +
                 (alvo?.let { ", ATSH $it" } ?: ", cabeçalho funcional"),
         )
+    }
+
+    /**
+     * Ajusta o `ATCRA` ao [cabecalho] recém-fixado (só se mudar): `ATCRA 7B8` para o ABS/VSC,
+     * `ATCRA` (sem endereço = filtro padrão) ao voltar ao motor/funcional. Um clone que não aceite
+     * o comando segue sem o filtro: as requisições desse módulo apenas não respondem.
+     */
+    private suspend fun ajustarFiltroRecepcao(canal: ObdTransport, cabecalho: String?, registrar: Boolean) {
+        val alvo = RequisicaoEstendida.filtroRecepcao(cabecalho)
+        if (alvo == filtroRecepcaoAtivo || semFiltroRecepcao) return
+        val resposta = try {
+            trocar(canal, "ATCRA" + alvo.orEmpty(), timeoutComandoMs, registrar)
+        } catch (_: ObdTimeoutException) {
+            ""
+        }
+        if ("OK" in resposta.uppercase()) {
+            filtroRecepcaoAtivo = alvo
+        } else {
+            semFiltroRecepcao = true
+            registro.evento("ATCRA ${alvo ?: "(padrão)"} recusado pelo adaptador: \"${RegistroComunicacao.visivel(resposta)}\"")
+        }
     }
 
     /** Um ciclo de polling sob [mutexCiclo]; null = uma sessão manual começou (o ciclo é pulado). */
@@ -1362,6 +1397,7 @@ class Elm327BluetoothClient(
                 val resposta = trocar(canal, atsh, timeoutComandoMs, registrar)
                 if ("OK" !in resposta.uppercase()) return@withLock resposta
                 cabecalhoAtivo = cabecalho
+                ajustarFiltroRecepcao(canal, cabecalho, registrar)
             }
             var resposta = trocar(canal, comando, timeoutMs, registrar)
             if (ObdParser.interrompido(resposta)) {
@@ -1371,6 +1407,7 @@ class Elm327BluetoothClient(
             if (!comando.startsWith("ATZ") && !comando.startsWith("ATI") && ObdParser.adaptadorReiniciou(resposta)) {
                 registro.evento("O adaptador reiniciou sozinho (queda de tensão na partida?); reaplicando a configuração")
                 cabecalhoAtivo = null // o reset volta ao cabeçalho funcional
+                filtroRecepcaoAtivo = null // e ao filtro de recepção padrão
                 timeoutAdaptadorAtivo = null // e ao ATST padrão (o próximo comando à ECU reaplica o curto)
                 val reconfiguracao = if (usaTimingAdaptativoAgressivo) CONFIGURACAO + TIMING_ADAPTATIVO_AGRESSIVO else CONFIGURACAO
                 for (c in reconfiguracao) runCatching { trocar(canal, c, timeoutComandoMs, true) }
@@ -1506,6 +1543,8 @@ class Elm327BluetoothClient(
         _infoConexao.value = InfoConexao()
         definicoesEstendidas = emptyMap()
         cabecalhoAtivo = null
+        filtroRecepcaoAtivo = null
+        semFiltroRecepcao = false
         modoServico = null
         cabecalhoServico = null
         usaSufixoRespostaUnica = false

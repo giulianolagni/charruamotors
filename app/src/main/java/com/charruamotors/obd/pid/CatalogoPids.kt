@@ -2,6 +2,8 @@ package com.charruamotors.obd.pid
 
 import org.json.JSONException
 import org.json.JSONObject
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Definição de um sensor lido do veículo: comando enviado ao ELM327, fórmula de conversão
@@ -14,6 +16,8 @@ import org.json.JSONObject
  * @property casasDecimais casas decimais sugeridas para exibição.
  * @property estendida requisição específica de montadora (modos 21/22 com cabeçalho CAN); null nos PIDs padrão.
  * @property chave sensor semântico ([ChaveSemantica]) que o PID representa; null nos que não têm equivalente.
+ * @property rotulos estados discretos (ex.: alavanca do câmbio `0` → `P`, `3` → `D`): o valor inteiro
+ *   é exibido pelo rótulo em vez do número. Vazio nos sensores contínuos.
  *
  * Um **espelho** é um PID dos modos 21/22 que lê o mesmo sensor de um PID padrão (`210C`,
  * `22F40C` ↔ `010C`): tem [estendida], [chave] e, como [comando], o do PID canônico — o valor
@@ -30,6 +34,7 @@ data class DefinicaoPid(
     val casasDecimais: Int = 0,
     val estendida: RequisicaoEstendida? = null,
     val chave: ChaveSemantica? = null,
+    val rotulos: Map<Int, String> = emptyMap(),
 ) {
     init {
         if (estendida == null) {
@@ -48,7 +53,11 @@ data class DefinicaoPid(
         }
         require(min < max) { "$comando: faixa inválida ($min..$max)" }
         require(casasDecimais in 0..6) { "$comando: casas decimais inválidas ($casasDecimais)" }
+        require(rotulos.values.all { it.isNotBlank() }) { "$comando: rótulo vazio" }
     }
+
+    /** Rótulo do estado [valor] (`3.0` → `D`); null se o sensor não tiver rótulos ou o valor não for um deles. */
+    fun rotulo(valor: Double?): String? = rotuloDe(rotulos, valor)
 
     /** Comando AT do adaptador (não é enviado à ECU e não aparece nos bitmasks de suporte). */
     val ehComandoAt: Boolean get() = estendida == null && comando.startsWith("AT")
@@ -83,6 +92,13 @@ data class DefinicaoPid(
         private val REGEX_ID_ESTENDIDO = Regex("^[A-Z][A-Z0-9_]{2,31}$")
         private const val MAX_BYTES = 8
         private const val TOLERANCIA = 1e-9
+
+        /** Rótulo de [valor] num mapa de estados discretos: só valores (quase) inteiros. */
+        fun rotuloDe(rotulos: Map<Int, String>, valor: Double?): String? {
+            if (rotulos.isEmpty() || valor == null || !valor.isFinite()) return null
+            val inteiro = valor.roundToInt()
+            return if (abs(valor - inteiro) < 0.01) rotulos[inteiro] else null
+        }
     }
 }
 
@@ -124,6 +140,7 @@ class CatalogoPids(val pids: List<DefinicaoPid>) {
 
         /**
          * Lê o catálogo do JSON (`{"pids": [{"comando", "nome", "unidade", "bytes", "formula", "min", "max", "casas"}]}`).
+         * Opcional em qualquer PID: `"rotulos": {"0": "P", "1": "R"}` (estados discretos).
          * @throws IllegalArgumentException se o JSON ou alguma definição for inválida.
          */
         fun deJson(json: String): CatalogoPids = try {
@@ -153,10 +170,19 @@ class CatalogoPids(val pids: List<DefinicaoPid>) {
                     casasDecimais = o.optInt("casas", 0),
                     estendida = estendida,
                     chave = ChaveSemantica.deTexto(o.optString("chave", "")),
+                    rotulos = rotulosDeJson(o.optJSONObject("rotulos")),
                 )
             } catch (e: IllegalArgumentException) {
                 throw IllegalArgumentException("PID $comando: ${e.message}", e)
             }
+        }
+
+        private fun rotulosDeJson(o: JSONObject?): Map<Int, String> {
+            if (o == null) return emptyMap()
+            return o.keys().asSequence().associate { k ->
+                val estado = k.trim().toIntOrNull() ?: throw IllegalArgumentException("rótulo com estado não inteiro: \"$k\"")
+                estado to o.getString(k).trim()
+            }.toSortedMap()
         }
     }
 }

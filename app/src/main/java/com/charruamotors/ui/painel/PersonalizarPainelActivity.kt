@@ -45,7 +45,9 @@ class PersonalizarPainelActivity : AppCompatActivity() {
     private val prefs get() = app.preferenciasPainel
     private val chipsLista = mutableMapOf<String, Chip>()
     private val chipsNavegacao = mutableMapOf<BotaoNavegacao, Chip>()
-    private val nomesPids: Map<String, String> by lazy { app.catalogoPids.pids.associate { it.comando.uppercase() to it.nome } }
+    /** PIDs que a lista rápida oferece: o catálogo padrão e os perfis de montadora (Toyota SW4, VW...). */
+    private val pidsDisponiveis by lazy { app.catalogoPids.pids + app.catalogoEstendido.definicoes }
+    private val nomesPids: Map<String, String> by lazy { pidsDisponiveis.associate { it.comando.uppercase() to it.nome } }
     private lateinit var editorHud: EditorConfigHud
 
     private val adapterSecoes = SecoesAdapter(aoOcultar = { secao -> prefs.atualizar { it.ocultar(secao) } })
@@ -170,8 +172,9 @@ class PersonalizarPainelActivity : AppCompatActivity() {
     // ---------------------------------------------------------------- 3. lista rápida
 
     private fun configurarListaRapida() {
-        // Todos os PIDs que o app sabe ler (modo 01 e a tensão do adaptador).
-        for (definicao in app.catalogoPids.pids) {
+        // Todos os PIDs que o app sabe ler: modo 01, a tensão do adaptador e os de montadora
+        // (pedal, marcha/alavanca, ATF, 4x4 e VSC da SW4), que só aparecem se o módulo responder.
+        for (definicao in pidsDisponiveis) {
             val chip = Chip(this).apply {
                 text = definicao.nome
                 isCheckable = true
@@ -238,6 +241,11 @@ class PersonalizarPainelActivity : AppCompatActivity() {
             SensorPainel.MAF to 32.0,
             SensorPainel.COMBUSTIVEL to 64.0,
             SensorPainel.CONSUMO to 4.2,
+            SensorPainel.TEMP_CAMBIO to 78.0,
+            SensorPainel.MARCHA_ALAVANCA to 3.0,
+            SensorPainel.MARCHA_ATUAL to 4.0,
+            SensorPainel.TRACAO_4X4 to 0.0,
+            SensorPainel.VSC to 0.0,
         )
 
         fun intent(context: Context): Intent = Intent(context, PersonalizarPainelActivity::class.java)

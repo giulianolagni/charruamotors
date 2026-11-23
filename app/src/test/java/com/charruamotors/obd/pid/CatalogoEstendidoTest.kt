@@ -39,7 +39,8 @@ class CatalogoEstendidoTest {
         val requisicoes = catalogo.perfilPara("Toyota")!!.requisicoes
         val injetores = requisicoes.values.single { grupo -> grupo.any { it.comando == "TOYOTA_INJ1" } }
         assertEquals(listOf("TOYOTA_INJ1", "TOYOTA_INJ2", "TOYOTA_INJ3", "TOYOTA_INJ4"), injetores.map { it.comando })
-        assertEquals(2, requisicoes.size) // ATF (7E1) + injetores (7E0)
+        // 7E0: injetores, pedal D/E, ATF, marcha e alavanca; 7E1: ATF, marcha e alavanca; 7B0 VSC; 7C0 4x4.
+        assertEquals(11, requisicoes.size)
     }
 
     @Test

@@ -48,6 +48,10 @@ class GaugeView @JvmOverloads constructor(
     var casasDecimais: Int = 0
         set(v) { field = v.coerceIn(0, 4); invalidate() }
 
+    /** Estados discretos (ex.: alavanca `3` → `D`): o centro mostra o rótulo do valor em vez do número. */
+    var rotulos: Map<Int, String> = emptyMap()
+        set(v) { field = v; atualizarDescricao(); invalidate() }
+
     /** Estilo de desenho; a Fita muda a proporção (pede um novo layout). */
     var estilo: EstiloMostrador = EstiloMostrador.ESPORTIVO
         set(v) {
@@ -401,6 +405,7 @@ class GaugeView @JvmOverloads constructor(
 
     private fun textoValor(): String {
         val v = valor ?: return "—"
+        com.charruamotors.obd.pid.DefinicaoPid.rotuloDe(rotulos, v.toDouble())?.let { return it }
         return String.format(LOCALE_BR, "%.${casasDecimais}f", v)
     }
 

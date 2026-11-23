@@ -38,6 +38,20 @@ data class RequisicaoEstendida(val cabecalho: String, val servico: String, val i
 
         /** Cabeçalho funcional (broadcast) padrão do OBD2 em CAN de 11 bits. */
         const val CABECALHO_FUNCIONAL = "7DF"
+
+        /**
+         * Filtro de recepção (`ATCRA`) que o [cabecalho] físico exige: a resposta de um módulo
+         * vem no endereço + 8 (`7B0` → `7B8`), e o ELM327 só aceita por padrão as respostas OBD2
+         * `7E8`–`7EF`. Null para o funcional `7DF`, os módulos `7E0`–`7E7` (cobertos pelo filtro
+         * padrão) e cabeçalhos de 29 bits.
+         */
+        fun filtroRecepcao(cabecalho: String?): String? {
+            val c = cabecalho?.trim()?.uppercase() ?: return null
+            if (!REGEX_CABECALHO.matches(c)) return null
+            val endereco = c.toInt(16)
+            if (endereco == 0x7DF || endereco in 0x7E0..0x7E7 || endereco + 8 > 0x7FF) return null
+            return "%03X".format(endereco + 8)
+        }
     }
 }
 

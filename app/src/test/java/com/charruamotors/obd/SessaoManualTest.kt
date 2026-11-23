@@ -297,7 +297,7 @@ class SessaoManualTest {
 
         assertTrue(resultado.completa)
         assertEquals(256, resultado.resultados.size)
-        val esperados = (EcuSimulada.IDS_MOTOR + setOf(0x01, 0x05, 0x0C, 0x13)).map { "21%02X".format(it) }.toSet()
+        val esperados = (EcuSimulada.IDS_MOTOR + setOf(0x01, 0x05, 0x0C, 0x13, 0x49, 0x4A)).map { "21%02X".format(it) }.toSet()
         assertEquals(esperados, resultado.positivas.map { it.comando }.toSet())
         assertTrue(resultado.resultados.filterNot { it.respondeu }.all { it.tipo == TipoRespostaPid.NEGATIVA && it.nrc == "31" })
 

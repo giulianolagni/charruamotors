@@ -28,7 +28,7 @@ class LimpezaSensoresTest {
     @Test
     fun `agrupados cobre todos os sensores uma unica vez e isola os nao suportados`() {
         val normal = SensorPainel.agrupados()
-        assertEquals(listOf("Principal", "Temperaturas", "Injeção & Diesel", "Câmbio & Chassi", "Elétrica"), normal.map { it.first })
+        assertEquals(listOf("Principal", "Temperaturas", "Injeção & Diesel", "Mistura & Flex", "Câmbio & Chassi", "Elétrica"), normal.map { it.first })
         assertEquals(SensorPainel.entries.size, normal.sumOf { it.second.size })
 
         val fora = setOf(SensorPainel.TRACAO_4X4, SensorPainel.VSC, SensorPainel.TEMP_OLEO)

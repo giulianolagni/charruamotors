@@ -33,6 +33,11 @@ import kotlin.random.Random
  * `7E0` e câmbio `7E1` no serviço 21) e a curva de tensão do Teste de Bateria ([simularBateria]:
  * repouso ~12,5 V, vale de partida ~10,3 V, alternador ~14,2 V).
  *
+ * v2.1: com um veículo Chevrolet/GM a simulação vira o **Cruze 1.4 Turbo Flex 2018 (LE2)**
+ * ([PerfilSimulacao.CRUZE_14T_FLEX], [SimuladorCruze]): turbo, injeção direta, etanol (`0152`),
+ * sonda de banda larga (`0124`), câmbio de 6 marchas com ATF por UDS 22 1940 e uma ECU que
+ * responde ao Teste de Atuadores (`10 03`, `3E 00`, `2F`; bobinas pedem Seed/Key `7F 2F 33`).
+ *
  * @param latenciaMs atraso simulado de conectar/ler DTCs (use 0 nos testes).
  * @param latenciaComandoMs atraso simulado de cada comando manual (~um ELM327 rápido; 0 nos testes).
  * @param relogioMs relógio da curva de bateria e da latência (injetável para testes com tempo virtual).
@@ -82,6 +87,19 @@ class ObdClientFake(
     override val sessaoManualAtiva: StateFlow<Boolean> = _sessaoManual.asStateFlow()
 
     private val ecu = EcuSimulada(random)
+    private val cruze = SimuladorCruze(random)
+
+    /** Carro simulado nesta conexão (pela marca do veículo); [PerfilSimulacao.PADRAO] até conectar. */
+    @Volatile var perfilSimulacao: PerfilSimulacao = PerfilSimulacao.PADRAO
+        private set
+
+    /**
+     * Força o carro simulado (null = pela marca do veículo na conexão). Só vale na próxima conexão.
+     */
+    @Volatile var perfilForcado: PerfilSimulacao? = null
+
+    /** Teste de Atuadores: ignição ligada com o motor desligado (o `010C` manual devolve 0 rpm). */
+    @Volatile private var motorDesligadoSimulado = false
     private val bateria = SimuladorBateria(random, relogioMs)
     private var cabecalhoEntradaManual = EcuSimulada.CABECALHO_FUNCIONAL
 
@@ -137,6 +155,9 @@ class ObdClientFake(
             _estado.value = EstadoConexaoObd.Erro(msg)
             return Result.failure(ObdException(msg))
         }
+        perfilSimulacao = perfilForcado ?: PerfilSimulacao.paraMarca(marcaVeiculo)
+        ecu.perfil = perfilSimulacao
+        cruze.reiniciar()
         velocidade = 0.0
         velocidadeAlvo = 40.0
         temperatura = 35.0
@@ -148,11 +169,15 @@ class ObdClientFake(
         registro.comando("0100", "SEARCHING...\r4100BE3FB813\r\r", 1_350)
         registro.comando("ATDP", "AUTO, ISO 15765-4 (CAN 11/500)\r\r", 30)
         registro.comando("ATRV", "14.2V\r\r", 40)
+        val comandos = comandosDoPerfil()
+        if (perfilSimulacao == PerfilSimulacao.CRUZE_14T_FLEX) {
+            registro.evento("Modo simulado: ${perfilSimulacao.titulo} (ATSP6 · motor 7E0 · TCM 7E1)")
+        }
         _infoConexao.value = InfoConexao(
             protocolo = "AUTO, ISO 15765-4 (CAN 11/500)",
-            sensoresResponderam = COMANDOS_SIMULADOS.count { !it.startsWith("AT") },
+            sensoresResponderam = comandos.count { !it.startsWith("AT") },
         )
-        _pidsSuportados.value = COMANDOS_SIMULADOS
+        _pidsSuportados.value = comandos
         _estado.value = EstadoConexaoObd.Conectado
         return Result.success(Unit)
     }
@@ -267,6 +292,8 @@ class ObdClientFake(
         if (!_sessaoManual.value) return
         ecu.cabecalho = cabecalhoEntradaManual
         ecu.filtroRecepcao = null
+        ecu.reiniciarSessaoDiagnostico()
+        motorDesligadoSimulado = false
         bateria.definir(null)
         _sessaoManual.value = false
         registro.evento("Sessão manual encerrada: polling retomado")
@@ -281,7 +308,7 @@ class ObdClientFake(
         val resposta = if (compacto == "ATRV") {
             bateria.responderAtrv()
         } else {
-            ecu.responder(compacto, { ultimaLeitura }) { codigos }
+            ecu.responder(compacto, ::leituraParaComandoManual) { codigos }
         }
         if (latenciaComandoMs > 0) {
             // NO DATA custa o timeout do adaptador (ATST0C ≈ 49 ms) além da troca.
@@ -292,6 +319,28 @@ class ObdClientFake(
         if (registrar) registro.comando(normalizado, resposta, latencia)
         return Result.success(RespostaBruta(normalizado, resposta, latencia))
     }
+
+    /**
+     * Teste de Atuadores no modo simulado: [ligado] = false simula a ignição ligada com o motor
+     * parado (RPM e velocidade 0 nas respostas manuais), liberando os itens críticos.
+     */
+    fun simularMotor(ligado: Boolean) {
+        motorDesligadoSimulado = !ligado
+    }
+
+    /** Teor de etanol do tanque do Cruze simulado (0–100 %), para demonstrar a detecção do Auto Flex. */
+    fun simularEtanol(percentual: Double) {
+        cruze.percentualEtanol = percentual.coerceIn(0.0, 100.0)
+    }
+
+    /** Teor de etanol atual do tanque do Cruze simulado (%). */
+    val etanolSimulado: Double get() = cruze.percentualEtanol
+
+    private fun leituraParaComandoManual(): Map<String, Double> =
+        if (motorDesligadoSimulado) ultimaLeitura + mapOf(Pids.RPM to 0.0, Pids.VELOCIDADE to 0.0) else ultimaLeitura
+
+    private fun comandosDoPerfil(): Set<String> =
+        if (perfilSimulacao == PerfilSimulacao.CRUZE_14T_FLEX) SimuladorCruze.COMANDOS else COMANDOS_SIMULADOS
 
     override suspend fun desconectar() {
         _sessaoManual.value = false
@@ -351,7 +400,9 @@ class ObdClientFake(
     private fun proximaLeitura(dt: Double): Map<String, Double> {
         val aceleracao = avancarVelocidade(dt)
 
-        temperatura = (temperatura + random.nextDouble(1.0, 3.0) * dt).coerceAtMost(90.0 + random.nextDouble(-1.0, 1.0))
+        // Temperatura de trabalho: ~90 °C no genérico; ~97 °C no Cruze (termostato GM ~95–105 °C).
+        val tetoTemperatura = if (perfilSimulacao == PerfilSimulacao.CRUZE_14T_FLEX) 97.0 else 90.0
+        temperatura = (temperatura + random.nextDouble(1.0, 3.0) * dt).coerceAtMost(tetoTemperatura + random.nextDouble(-1.0, 1.0))
         // O óleo esquenta mais devagar que o líquido de arrefecimento e estabiliza um pouco acima dele.
         temperaturaOleo += (temperatura + 6.0 - temperaturaOleo) * (0.06 * dt).coerceAtMost(1.0)
 
@@ -382,6 +433,18 @@ class ObdClientFake(
         if (codigos.isNotEmpty()) kmComLuzAcesa += kmNoPasso
         nivelCombustivel = (nivelCombustivel - consumoLh / 3600.0 * dt / TANQUE_LITROS * 100.0).coerceAtLeast(0.0)
 
+        if (perfilSimulacao == PerfilSimulacao.CRUZE_14T_FLEX) {
+            val lc = cruze.leitura(
+                dt, velocidade, aceleracao, temperatura, temperaturaOleo, segundosMotorLigado,
+                (nivelCombustivel + random.nextDouble(-0.4, 0.4)).coerceIn(0.0, 100.0), kmComLuzAcesa, kmDesdeLimpeza,
+            )
+            val consumoCruze = cruze.litrosPorHora(lc[Pids.MAF] ?: 0.0)
+            nivelCombustivel = (nivelCombustivel - (consumoCruze - consumoLh) / 3600.0 * dt / TANQUE_LITROS * 100.0).coerceAtLeast(0.0)
+            val filtrada = lc.filterKeys { it in SimuladorCruze.COMANDOS || it in estendidosAtivos }
+            ultimaLeitura = filtrada
+            return filtrada
+        }
+
         val leitura = linkedMapOf(
             Pids.CARGA_MOTOR to carga.arredondar(1),
             Pids.TEMPERATURA_MOTOR to temperatura.roundToInt().toDouble(),
@@ -399,9 +462,12 @@ class ObdClientFake(
             "011F" to segundosMotorLigado.roundToInt().toDouble(),
             "0121" to kmComLuzAcesa.roundToInt().toDouble(),
             "0123" to (4000.0 + carga * 90.0 + random.nextDouble(-150.0, 150.0)).roundToInt().toDouble(),
+            // Sonda de banda larga: segue o λ comandado com o erro da malha fechada (v2.1).
+            Pids.LAMBDA_BANDA_LARGA to (lambda + random.nextDouble(-0.015, 0.015)).arredondar(3),
             "012F" to (nivelCombustivel + random.nextDouble(-0.4, 0.4)).coerceIn(0.0, 100.0).arredondar(1),
             "0131" to kmDesdeLimpeza.roundToInt().toDouble(),
             "0133" to PRESSAO_BAROMETRICA,
+            Pids.LAMBDA_BANDA_LARGA_CORRENTE to (lambda + random.nextDouble(-0.015, 0.015)).arredondar(3),
             "0142" to (tensao - 0.2).arredondar(2),
             Pids.LAMBDA_COMANDADO to lambda.arredondar(3),
             "0145" to (borboleta - BORBOLETA_FECHADA).coerceAtLeast(0.0).arredondar(1),
@@ -450,7 +516,7 @@ class ObdClientFake(
         /** PIDs que a "ECU" simulada suporta: todos os do catálogo padrão (`pids_padrao.json`). */
         val COMANDOS_SIMULADOS: Set<String> = setOf(
             "0104", "0105", "0106", "0107", "010A", "010B", "010C", "010D", "010E", "010F",
-            "0110", "0111", "0114", "011F", "0121", "0123", "012F", "0131", "0133", "0142",
+            "0110", "0111", "0114", "011F", "0121", "0123", "0124", "012F", "0131", "0133", "0134", "0142",
             "0144", "0145", "0146", "0149", "0152", "015C", "015E", "ATRV",
         )
 
@@ -465,6 +531,8 @@ class ObdClientFake(
             // de fora: mostram "N/D" como na SW4 real, onde esses módulos não respondem.
             "TOYOTA_PEDAL_D", "TOYOTA_PEDAL_E", "TOYOTA_TENSAO_ECU", "TOYOTA_BARO", "TOYOTA_MARCHA", "TOYOTA_ALAVANCA",
             "VW_TEMP_OLEO", "VW_TURBO_REAL", "VW_TURBO_ALVO",
+            // Cruze 1.4T (LE2): o TCM 7E1 responde ao 22 1940; o 7E2 (alternativa) fica mudo, como num Cruze real.
+            "GM_ATF",
         )
 
         const val VELOCIDADE_FIM_ARRANCADA = 115.0

@@ -50,6 +50,8 @@
 
     <!-- v1.4: card do Terminal na aba Oficina e a barra colorida da varredura -->
     <color name="terminal_card">#263238</color>
+    <!-- Card do Teste de Atuadores (v2.1) -->
+    <color name="atuador_card">#5E35B1</color>
     <color name="varredura_identificado">#2E7D32</color>
     <color name="varredura_desconhecido">#1565C0</color>
     <color name="varredura_ignorado">#9E9E9E</color>

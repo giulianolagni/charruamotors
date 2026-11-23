@@ -19,6 +19,7 @@ import com.charruamotors.domain.calculo.Cronometro0a100
 import com.charruamotors.domain.calculo.EstadoCronometro
 import com.charruamotors.domain.calculo.ParametrosMotor
 import com.charruamotors.domain.calculo.TelemetriaCalculada
+import com.charruamotors.domain.faixas.FaixasVeiculo
 import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.model.Veiculo
 import com.charruamotors.obd.DadosObd
@@ -200,6 +201,10 @@ class ObdViewModel(
     /** Limites de alerta do veículo (água, ATF, alternador); padrão até o veículo carregar. */
     val limites: StateFlow<LimitesProtecao> = _limites.asStateFlow()
 
+    private val _faixas = MutableStateFlow(FaixasVeiculo.genericas(null))
+    /** Faixas mínimas/máximas esperadas do veículo (preset SW4/Cruze ou as genéricas do cadastro). */
+    val faixas: StateFlow<FaixasVeiculo> = _faixas.asStateFlow()
+
     /** Cilindrada e combustível para o consumo; padrão até o veículo carregar. */
     private var parametrosMotor = ParametrosMotor()
 
@@ -225,6 +230,7 @@ class ObdViewModel(
             val v = dadosVeiculo.await()
             parametrosMotor = ParametrosMotor.deVeiculo(v?.modelo, v?.tipoCombustivel, v?.calibracaoConsumo ?: 1.0)
             _limites.value = LimitesProtecao.deVeiculo(v)
+            _faixas.value = FaixasVeiculo.paraVeiculo(v)
             _computador.value = _computador.value.copy(motor = parametrosMotor)
             // O favorito (veículo da caixa-preta) só muda pela estrela em Meus Veículos; aqui ele é
             // definido se ainda não houver um, e a descrição acompanha renomeações.
@@ -416,7 +422,7 @@ class ObdViewModel(
             _eventos.trySend(EventoObd.Mensagem(R.string.obd_log_sem_conexao))
             return
         }
-        val colunas = sessao.definicoesSuportadas(pidsSuportados.value) + sessao.colunasDoAparelho()
+        val colunas = sessao.definicoesSuportadas(pidsSuportados.value) + sessao.colunasDoAparelho(pidsSuportados.value)
         if (colunas.isEmpty()) {
             _eventos.trySend(EventoObd.Mensagem(R.string.obd_log_sem_pids))
             return

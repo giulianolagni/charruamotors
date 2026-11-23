@@ -114,6 +114,10 @@
             android:exported="false"
             android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
         <activity
+            android:name=".ui.oficina.atuadores.TesteAtuadoresActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
+        <activity
             android:name=".ui.oficina.replay.ReplayLogActivity"
             android:exported="false"
             android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />

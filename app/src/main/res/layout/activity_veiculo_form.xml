@@ -251,6 +251,62 @@
                     android:inputType="numberDecimal" />
             </com.google.android.material.textfield.TextInputLayout>
 
+            <!-- Ficha técnica: preset reconhecido (rede/ECUs) e faixas mínimas/máximas esperadas (v2.1) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_ficha"
+                style="@style/Widget.Material3.CardView.Filled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_grande"
+                app:cardCornerRadius="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/espaco_medio">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/veiculo_faixas_titulo"
+                        android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                    <TextView
+                        android:id="@+id/texto_perfil_ficha"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_minimo"
+                        android:textAppearance="?attr/textAppearanceLabelLarge"
+                        tools:text="Toyota Hilux SW4 3.0 D-4D 2013 (1KD-FTV)" />
+
+                    <TextView
+                        android:id="@+id/texto_rede_ficha"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textColor="@color/texto_secundario"
+                        tools:text="ATSP6 · ISO 15765-4 CAN 11 bits / 500 kbps" />
+
+                    <TextView
+                        android:id="@+id/texto_faixas_ficha"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_pequeno"
+                        android:lineSpacingExtra="2dp"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        tools:text="RPM marcha lenta: 650 – 750 rpm" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/botao_preset"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_pequeno"
+                        android:text="@string/veiculo_preset_botao" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/botao_salvar"
                 android:layout_width="match_parent"

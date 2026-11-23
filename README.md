@@ -29,6 +29,7 @@ Disciplina: Desenvolvimento Mobile II. Professor: Jaqson.
 - [Abas, personalização do Painel e unidades globais (v1.4)](#abas-personalização-do-painel-e-unidades-globais-v14)
 - [Veículo favorito, navegação limpa e Painel livre (v1.5)](#veículo-favorito-navegação-limpa-e-painel-livre-v15)
 - [GitHub Releases, atualizador e sensores da SW4 (v1.5)](#github-releases-atualizador-e-sensores-da-sw4-v15)
+- [Modo Flex, faixas esperadas, Cruze 1.4T e Teste de Atuadores (v2.1)](#modo-flex-faixas-esperadas-cruze-14t-e-teste-de-atuadores-v21)
 - [Regras de negócio e cálculos](#regras-de-negócio-e-cálculos)
 - [Arquitetura e stack](#arquitetura-e-stack)
 - [Como executar](#como-executar)
@@ -455,6 +456,45 @@ cabeçalhos em sequência (pulando cedo o módulo ausente) e gera um relatório 
 brutos de cada identificador, para copiar e decodificar marcha, alavanca, 4x4 e VSC na SW4 real. No modo simulado, a
 ECU da Hilux responde também ao pedal (`2149`/`214A`), à marcha/alavanca e aos módulos `7B0`/`7C0`.
 
+
+## Modo Flex, faixas esperadas, Cruze 1.4T e Teste de Atuadores (v2.1)
+
+**Modo Flex Automático e A/F** (`domain/calculo/CombustivelFlex.kt`). No cadastro o combustível é **Diesel**,
+**Gasolina**, **Etanol** ou **Auto Flex**. No Auto Flex o app lê o teor de etanol (`0152`) a cada ciclo, classifica o
+tanque (**Gasolina E27** abaixo de 40 %, **Mistura Flex** de 40 a 85 %, **Etanol E100** a partir de 85 %) e ajusta a
+estequiometria de referência por interpolação linear (14,7:1 no E0, **13,2:1 no E27**, **9,0:1 no E100**). O consumo via
+MAF e o computador de bordo usam essa relação. A **Relação A/F Real** é λ medido (sonda de banda larga `0124`/`0134`;
+sem ela, o λ comandado `0144`) × a estequiometria, calculada pela sessão em cada instantâneo (`CALC_AFR`, também
+gravada no CSV). Mostradores novos no Painel, Cluster e HUD (grupo *Mistura & Flex*): **Sonda Lambda 1 (V)** `0114`,
+**Sonda Lambda 1 (λ)**, **Relação A/F Real (:1)**, **Teor de Etanol (%)**, **STFT**/**LTFT** e **Avanço de Ignição**.
+
+**Faixas mínimas e máximas por veículo** (`domain/faixas`). Cada veículo tem um conjunto de faixas esperadas: o
+preset reconhecido pela marca/modelo/ano ou, sem preset, as genéricas montadas a partir dos limites de alerta do
+cadastro. As faixas aparecem na ficha do veículo (cadastro → *Ficha técnica · Faixas esperadas*), deixam vermelho o
+mostrador que sair delas (o RPM de marcha lenta só vale parado e sem acelerar; a tensão, só com o motor ligado) e
+entram no relatório `.txt` da sessão (lido mín.–máx. e % das leituras fora). Preset **Toyota Hilux SW4 3.0 D-4D 2013
+(1KD-FTV)**: lenta 650–750 rpm, máx. seguro 4.200 rpm, água 80–98 °C, ATF 60–105 °C, bateria/alternador 13,4–14,6 V,
+Common Rail 280–1.800 bar (lenta 280–380 bar), turbo (MAP) 95–215 kPa e bicos #1–#4 entre −3,0 e +3,0 mm³/st.
+
+**Perfil Chevrolet / GM e Cruze 1.4 Turbo Flex 2018 (LE2)**. Preset com `ATSP6` (ISO 15765-4 CAN 11 bits 500 kbps),
+ECU do motor `7E0` e TCM `7E1`. O motor usa o OBD2 padrão (RPM, velocidade ECU + GPS, MAP/turbo, MAF, temperaturas,
+carga, borboleta, rail GDI `0123`, avanço `010E`, sonda lambda, etanol `0152`, STFT/LTFT, tensão `0142`). A temperatura
+do ATF vem por UDS `22 1940` no TCM `7E1` e, na alternativa, no `7E2`; o módulo que não responder fica fora do polling
+sem derrubar a sessão. No **Modo Simulado**, um veículo Chevrolet/GM liga a simulação do Cruze (`SimuladorCruze`):
+turbo com vácuo na lenta e ~230 kPa em plena carga, câmbio de 6 marchas, mistura E48 (ajustável no Teste de
+Atuadores), sonda de banda larga com corte na desaceleração e o ATF do TCM.
+
+**Teste de Atuadores** (aba Oficina, `oficina/atuadores` + `TesteAtuadoresActivity`). Abre uma sessão manual (o
+polling fica pausado sem fechar o Bluetooth), fixa `ATSH 7E0`, entra na sessão estendida `10 03` e a mantém com
+`3E 00` a cada 2 s (também durante pulsos longos). Testes: bomba de combustível, eletroventilador (baixa e alta),
+embreagem do A/C, válvula do cânister (EVAP), pulso dos bicos #1–#4 e das bobinas #1–#4, além de um comando `2F`
+customizado. Cada teste envia `2F <DID> 03 <estado>` e sempre devolve o controle com `2F <DID> 00`, inclusive ao tocar
+em Parar. Os itens críticos (bomba, A/C, bicos, bobinas e o comando customizado) só são liberados com RPM = 0. Uma
+recusa da central vira uma mensagem técnica com o NRC (ex.: `7F 2F 33` Seed/Key, `7F 2F 11` serviço não suportado,
+`7F 2F 31` DID fora da faixa) e a sessão continua utilizável. A tabela GM traz **DIDs de referência didática**
+(numeração ilustrativa `01xx`, não confirmada em central real): confirme os identificadores no GDS2/Tech2 antes de usar
+no carro. No Modo Simulado a ECU do Cruze responde aos atuadores, as bobinas pedem Seed/Key e a SW4 recusa o serviço,
+para demonstrar os NRCs em sala de aula; a chave *Simular motor ligado* mostra a trava de RPM.
 
 ---
 

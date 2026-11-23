@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v2.1: Modo Flex, faixas esperadas por veículo, presets SW4/Cruze e Teste de Atuadores (UDS 2F). -->
+<resources>
+    <!-- Cadastro do veículo: presets e ficha -->
+    <string name="veiculo_preset_menu">Presets</string>
+    <string name="veiculo_preset_botao">Aplicar preset de veículo</string>
+    <string name="veiculo_preset_titulo">Preset de veículo</string>
+    <string name="veiculo_preset_aplicado">Preset aplicado: %1$s. Confira placa e km e salve.</string>
+    <string name="veiculo_faixas_titulo">Ficha técnica · Faixas esperadas</string>
+    <string name="veiculo_faixas_generico">Sem preset reconhecido: faixas genéricas a partir dos limites de alerta acima.</string>
+
+    <!-- Aba Oficina -->
+    <string name="oficina_card_atuadores">⚙️ Teste de Atuadores</string>
+    <string name="oficina_card_atuadores_desc">Bidirecional UDS 2F: bomba, eletroventilador, A/C, cânister, bicos e bobinas, com trava de motor parado.</string>
+
+    <!-- Tela do Teste de Atuadores -->
+    <string name="atuadores_titulo">Teste de Atuadores</string>
+    <string name="atuadores_aviso">Ignição ligada e motor DESLIGADO. Os itens críticos (bomba, A/C, bicos e bobinas) só são liberados com RPM = 0. O controle sempre volta para a central (2F … 00) ao fim de cada teste ou ao tocar em Parar.</string>
+    <string name="atuadores_preparando">Abrindo a sessão estendida (ATSH %1$s · 10 03)…</string>
+    <string name="atuadores_sessao_estendida">Sessão estendida 10 03 ativa · Tester Present 3E 00 a cada 2 s</string>
+    <string name="atuadores_sessao_recusada">A central recusou o 10 03 (%1$s). Os testes ainda são enviados e a central informa o que aceita.</string>
+    <string name="atuadores_sessao_sem_resposta">A central não respondeu ao 10 03 (%1$s). Confira a ignição e o endereço %2$s.</string>
+    <string name="atuadores_rpm_parado">Motor parado (0 rpm): itens críticos liberados</string>
+    <string name="atuadores_rpm_ligado">Motor ligado (%1$s rpm): itens críticos bloqueados</string>
+    <string name="atuadores_rpm_desconhecido">RPM não confirmado: itens críticos bloqueados até ler 0 rpm</string>
+    <string name="atuadores_simular_motor">Simular motor ligado (demonstra a trava de RPM)</string>
+    <string name="atuadores_etanol_simulado">Etanol no tanque simulado: %1$d%%</string>
+    <string name="atuadores_modo_didatico">Modo didático (simulado): a ECU do %1$s responde ao 2F. As bobinas exigem Seed/Key (7F 2F 33) e o SW4 recusa o serviço (7F 2F 11), para demonstrar os códigos NRC.</string>
+    <string name="atuadores_ativo">ATIVO · %1$s</string>
+    <string name="atuadores_parar">Parar e devolver o controle</string>
+    <string name="atuadores_mapeamento">Tabela: %1$s</string>
+    <string name="atuadores_critico">crítico · RPM 0</string>
+    <string name="atuadores_customizado_titulo">Comando customizado (UDS 2F)</string>
+    <string name="atuadores_customizado_dica">Formato: 2F DID controle estado (ex.: 2F 0101 03 01). O app sempre envia 2F DID 00 ao fim. Tratado como crítico.</string>
+    <string name="atuadores_campo_cabecalho">Cabeçalho</string>
+    <string name="atuadores_campo_comando">Comando 2F</string>
+    <string name="atuadores_campo_duracao">Duração (s)</string>
+    <string name="atuadores_enviar">Enviar</string>
+    <string name="atuadores_customizado_invalido">Comando inválido: use 2F + DID (4 hex) + controle (2 hex) + estado opcional.</string>
+    <string name="atuadores_resultado_titulo">Último resultado</string>
+    <string name="atuadores_historico_titulo">Histórico da sessão</string>
+    <string name="atuadores_ok">✅ %1$s: a central confirmou (%2$s).</string>
+    <string name="atuadores_recusado">⛔ %1$s: recusado pela central — %2$s.\n%3$s</string>
+    <string name="atuadores_bloqueado_ligado">🔒 %1$s: bloqueado — motor ligado (%2$s rpm). Desligue o motor e mantenha só a ignição ligada.</string>
+    <string name="atuadores_bloqueado_desconhecido">🔒 %1$s: bloqueado — não foi possível confirmar RPM = 0.</string>
+    <string name="atuadores_sem_resposta">⚠️ %1$s: sem resposta da central (%2$s).</string>
+    <string name="atuadores_falha">⚠️ %1$s: %2$s</string>
+    <string name="atuadores_interrompido">⏹ %1$s: interrompido; controle devolvido à central.</string>
+    <string name="atuadores_ocupado">Aguarde o teste em andamento terminar.</string>
+</resources>

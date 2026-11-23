@@ -36,8 +36,8 @@ data class Combustivel(val relacaoEstequiometrica: Double, val densidadeGL: Doub
     companion object {
         val GASOLINA_PURA = Combustivel(14.7, 740.0)
 
-        /** Etanol hidratado vendido na bomba (~7 % de água). */
-        val ETANOL_HIDRATADO = Combustivel(8.7, 809.0)
+        /** Etanol hidratado vendido na bomba (~7 % de água): referência `9,0:1` (v2.1, Modo Flex). */
+        val ETANOL_HIDRATADO = Combustivel(EstequiometriaFlex.AFR_ETANOL_E100, 809.0)
 
         val DIESEL = Combustivel(14.5, 835.0)
 
@@ -49,23 +49,19 @@ data class Combustivel(val relacaoEstequiometrica: Double, val densidadeGL: Doub
          */
         val DIESEL_COMMON_RAIL = Combustivel(27.0, 835.0)
 
-        /** Gasolina comum brasileira, com 27 % de etanol anidro. */
-        val GASOLINA_C: Combustivel = mistura(0.27)
+        /** Gasolina comum brasileira, com 27 % de etanol anidro: referência `13,2:1`. */
+        val GASOLINA_C: Combustivel = mistura(EstequiometriaFlex.ETANOL_GASOLINA_C / 100.0)
 
         /**
          * Mistura gasolina + etanol pela fração volumétrica de etanol (0..1), como a ECU informa no
-         * PID `0152`: a densidade se mistura por volume e a relação estequiométrica por massa.
+         * PID `0152`: a densidade se mistura por volume e a relação estequiométrica segue a curva de
+         * referência do Modo Flex ([EstequiometriaFlex.relacaoAf]: 14,7 → 13,2 (E27) → 9,0 (E100)).
          */
         fun mistura(fracaoEtanol: Double): Combustivel {
             val e = fracaoEtanol.coerceIn(0.0, 1.0)
-            val g = GASOLINA_PURA
-            val a = ETANOL_HIDRATADO
-            val massaEtanol = e * a.densidadeGL
-            val massaGasolina = (1 - e) * g.densidadeGL
-            val fracaoMassica = massaEtanol / (massaEtanol + massaGasolina)
             return Combustivel(
-                relacaoEstequiometrica = fracaoMassica * a.relacaoEstequiometrica + (1 - fracaoMassica) * g.relacaoEstequiometrica,
-                densidadeGL = massaEtanol + massaGasolina,
+                relacaoEstequiometrica = EstequiometriaFlex.relacaoAf(e * 100.0),
+                densidadeGL = e * ETANOL_HIDRATADO.densidadeGL + (1 - e) * GASOLINA_PURA.densidadeGL,
             )
         }
     }

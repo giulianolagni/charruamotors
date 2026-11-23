@@ -3,6 +3,11 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
+        android:id="@+id/acao_preset"
+        android:title="@string/veiculo_preset_menu"
+        app:showAsAction="ifRoom" />
+
+    <item
         android:id="@+id/acao_excluir"
         android:title="@string/botao_excluir"
         app:showAsAction="always" />

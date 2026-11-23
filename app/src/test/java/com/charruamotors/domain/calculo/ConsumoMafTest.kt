@@ -33,7 +33,7 @@ class ConsumoMafTest {
         val c = TelemetriaCalculada.consumoInstantaneo(dados(Pids.MAF to 2.5, Pids.VELOCIDADE to 0.0), gasolina)!!
         assertEquals(MetodoConsumo.MAF, c.metodo)
         assertEquals(litrosPorHora(2.5, Combustivel.GASOLINA_C), c.litrosPorHora, 1e-9)
-        assertEquals(0.91, c.litrosPorHora, 0.01) // marcha lenta típica: ~0,9 L/h
+        assertEquals(0.90, c.litrosPorHora, 0.01) // marcha lenta típica: ~0,9 L/h (E27 a 13,2:1)
         assertNull(c.kmPorLitro)
     }
 
@@ -43,7 +43,7 @@ class ConsumoMafTest {
         val lh = litrosPorHora(18.0, Combustivel.GASOLINA_C)
         assertEquals(lh, c.litrosPorHora, 1e-9)
         assertEquals(80.0 / lh, c.kmPorLitro!!, 1e-9)
-        assertEquals(12.2, c.kmPorLitro!!, 0.1) // cruzeiro de um carro 1.6 flex: ~12 km/L
+        assertEquals(12.36, c.kmPorLitro!!, 0.1) // cruzeiro de um carro 1.6 flex: ~12 km/L
     }
 
     @Test

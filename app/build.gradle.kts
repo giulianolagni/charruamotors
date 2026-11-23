@@ -22,8 +22,8 @@ android {
         applicationId = "com.charruamotors.pro"
         minSdk = 26
         targetSdk = 37
-        versionCode = 11
-        versionName = "1.8.0"
+        versionCode = 12
+        versionName = "1.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -130,4 +130,31 @@ val publicarApkDrive = pastasDrive.mapIndexed { i, pasta ->
 tasks.matching { it.name == "assembleRelease" }.configureEach {
     finalizedBy(publicarApkDist)
     publicarApkDrive.forEach { finalizedBy(it) }
+}
+
+/** App Bundle (Google Play): `bundleRelease` gera `dist/CharruaOBDPro-<versão>-release.aab` (e cópia no Drive). */
+val nomeAabRelease = "CharruaOBDPro-${android.defaultConfig.versionName}-release.aab"
+val aabRelease = layout.buildDirectory.file("outputs/bundle/release/app-release.aab")
+
+val publicarAabDist = tasks.register<Copy>("publicarAabDist") {
+    description = "Copia o AAB de release assinado para dist/"
+    from(aabRelease)
+    into(rootProject.layout.projectDirectory.dir("dist"))
+    rename(".*", nomeAabRelease)
+}
+
+val publicarAabDrive = pastasDrive.mapIndexed { i, pasta ->
+    tasks.register<Copy>("publicarAabDrive$i") {
+        description = "Copia o AAB de release assinado para $pasta, se a pasta existir"
+        val destino = pasta
+        onlyIf("a pasta do Google Drive existe") { destino.isDirectory }
+        from(aabRelease)
+        into(pasta)
+        rename(".*", nomeAabRelease)
+    }
+}
+
+tasks.matching { it.name == "bundleRelease" }.configureEach {
+    finalizedBy(publicarAabDist)
+    publicarAabDrive.forEach { finalizedBy(it) }
 }

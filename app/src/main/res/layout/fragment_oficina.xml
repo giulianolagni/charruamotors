@@ -81,6 +81,10 @@
             android:id="@+id/card_terminal"
             layout="@layout/item_card_oficina" />
 
+        <include
+            android:id="@+id/card_desempenho"
+            layout="@layout/card_desempenho" />
+
         <!-- Correção dos 4 bicos injetores (Toyota 1KD-FTV): verde/amarelo/vermelho por cilindro -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/card_bicos"

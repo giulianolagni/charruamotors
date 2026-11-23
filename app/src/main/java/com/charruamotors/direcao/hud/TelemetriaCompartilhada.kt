@@ -1,7 +1,9 @@
 package com.charruamotors.direcao.hud
 
 import com.charruamotors.direcao.painel.ConfigHud
+import com.charruamotors.direcao.desempenho.CronometroDesempenho
 import com.charruamotors.obd.DadosObd
+import com.charruamotors.obd.pid.Pids
 import com.charruamotors.sistema.unidades.ConversorUnidades
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +23,9 @@ class TelemetriaCompartilhada(
     private val conversor: Flow<ConversorUnidades> = flowOf(ConversorUnidades.PADRAO),
     /** Tamanho, sensores e estilo escolhidos na ativação do HUD. */
     private val configHud: Flow<ConfigHud> = flowOf(ConfigHud()),
+    /** Cronômetro 0–60/0–100 alimentado a cada instantâneo de velocidade. */
+    val cronometro: CronometroDesempenho = CronometroDesempenho(),
+    private val relogioMs: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
 
     private val _dados = MutableStateFlow<DadosObd?>(null)
@@ -42,6 +47,7 @@ class TelemetriaCompartilhada(
     fun publicar(dados: DadosObd?, conectado: Boolean) {
         _dados.value = dados
         _conectado.value = conectado
+        cronometro.amostrar(dados?.get(Pids.VELOCIDADE), relogioMs())
     }
 
     fun definirHudAtivo(ativo: Boolean) {

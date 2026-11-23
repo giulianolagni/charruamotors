@@ -116,4 +116,7 @@
     <string name="config_sistema_metrico_descricao">km/h, °C, kPa ou bar e km/L em todo o app e no HUD.</string>
     <string name="config_sistema_imperial_descricao">mph, °F, psi e MPG (galão americano) em todo o app e no HUD.</string>
     <string name="config_unidade_imperial">No sistema imperial a pressão é sempre em psi. Os logs continuam em kPa.</string>
+
+    <string name="desempenho_titulo">⏱ 0–100 km/h</string>
+    <string name="desempenho_dica">Dispara sozinho ao sair do lugar. Toque para zerar.</string>
 </resources>

@@ -5,8 +5,9 @@
 .DESCRIPTION
     Fluxo padrão de release (o APK nunca entra no Git):
       1. lê versionName/versionCode de app/build.gradle.kts;
-      2. roda `gradlew assembleRelease` (pule com -SemBuild), que gera
-         dist/CharruaOBDPro-<versao>-release.apk e copia para G:\Meu Drive\CharruaOBD se a pasta existir;
+      2. roda `gradlew assembleRelease bundleRelease` (pule com -SemBuild), que gera
+         dist/CharruaOBDPro-<versao>-release.apk e .aab (App Bundle da Play Store) e copia ambos
+         para G:\Meu Drive\CharruaOBD se a pasta existir;
       3. cria a release v<versao> no GitHub com o APK anexado e notas geradas dos commits
          (`gh release create ... --generate-notes`) ou, se a tag já tiver release, substitui o APK
          anexado (`gh release upload --clobber`).
@@ -44,6 +45,7 @@ if (-not $versao) { throw 'versionName não encontrado em app/build.gradle.kts' 
 $tag = "v$versao"
 $titulo = "Charrua OBD Pro v$versao"
 $apk = Join-Path $raiz "dist\CharruaOBDPro-$versao-release.apk"
+$aab = Join-Path $raiz "dist\CharruaOBDPro-$versao-release.aab"
 Write-Host "Release $tag (versionCode $versionCode)" -ForegroundColor Cyan
 
 # ------------------------------------------------------------------ GitHub CLI
@@ -60,16 +62,19 @@ if ($LASTEXITCODE -ne 0) { throw "GitHub CLI sem login. Rode 'gh auth login' e t
 
 # ------------------------------------------------------------------ build
 if (-not $SemBuild) {
-    Write-Host 'Gerando o APK de release (gradlew assembleRelease)...' -ForegroundColor Cyan
-    & (Join-Path $raiz 'gradlew.bat') assembleRelease
-    if ($LASTEXITCODE -ne 0) { throw 'assembleRelease falhou' }
+    Write-Host 'Gerando APK e AAB de release (gradlew assembleRelease bundleRelease)...' -ForegroundColor Cyan
+    & (Join-Path $raiz 'gradlew.bat') assembleRelease bundleRelease
+    if ($LASTEXITCODE -ne 0) { throw 'assembleRelease/bundleRelease falhou' }
 }
 if (-not (Test-Path $apk)) { throw "APK não encontrado: $apk (o release precisa do keystore.properties para ser assinado)" }
+
+if (-not (Test-Path $aab)) { Write-Warning "AAB não encontrado em $aab (rode ./gradlew bundleRelease); a release segue só com o APK." }
 
 # Cópia para o Google Drive (o Gradle já copia; aqui garante com -SemBuild).
 foreach ($drive in @('G:\Meu Drive\CharruaOBD', 'G:\My Drive\CharruaOBD')) {
     if (Test-Path $drive) {
         Copy-Item $apk $drive -Force
+        if (Test-Path $aab) { Copy-Item $aab $drive -Force }
         Write-Host "Copiado para $drive"
     }
 }

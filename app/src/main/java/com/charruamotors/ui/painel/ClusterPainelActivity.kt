@@ -68,6 +68,8 @@ class ClusterPainelActivity : AppCompatActivity() {
         carregarEscolhas()
         bolinhas.forEachIndexed { i, gauge -> gauge.setOnClickListener { trocarSensor(i) } }
 
+        binding.textoDesempenho.setOnClickListener { app.telemetriaCompartilhada.cronometro.reiniciar() }
+
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 dispensado = true // continua na horizontal: a aba Painel não deve reabrir o cluster
@@ -77,6 +79,12 @@ class ClusterPainelActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    combine(app.telemetriaCompartilhada.cronometro.estado, app.recordesDesempenho.recordes) { e, _ -> e }
+                        .collect { e ->
+                            binding.textoDesempenho.text = "0–100 · ${e.texto}${"\n"}${app.recordesDesempenho.recordeDe(app.chaveRecorde()).texto}"
+                        }
+                }
                 combine(app.telemetriaCompartilhada.dados, app.preferenciasApp.config.map { it.conversor }) { d, c -> d to c }
                     .collect { (d, c) ->
                         dados = d

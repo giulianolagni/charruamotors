@@ -15,6 +15,8 @@ import com.charruamotors.data.repository.ManutencaoRepository
 import com.charruamotors.data.repository.UsuarioRepository
 import com.charruamotors.data.repository.VeiculoRepository
 import com.charruamotors.data.session.SessaoManager
+import com.charruamotors.direcao.desempenho.CronometroDesempenho
+import com.charruamotors.direcao.desempenho.RecordesDesempenho
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
 import com.charruamotors.domain.calculo.CentralAlertas
 import com.charruamotors.domain.calculo.TipoAlertaProtecao
@@ -147,8 +149,18 @@ class CharruaMotorsApp : Application() {
         TelemetriaCompartilhada(
             conversor = preferenciasApp.config.map { it.conversor },
             configHud = preferenciasPainel.config.map { it.hud },
+            cronometro = CronometroDesempenho(
+                aoParcial060 = { t -> recordesDesempenho.registrar(chaveRecorde(), t, null) },
+                aoConcluir0100 = { t60, t100 -> recordesDesempenho.registrar(chaveRecorde(), t60, t100) },
+            ),
         )
     }
+
+    /** Melhores 0–60 e 0–100 por veículo. */
+    val recordesDesempenho: RecordesDesempenho by lazy { RecordesDesempenho(this) }
+
+    /** Veículo da sessão em curso (nome curto) ou o padrão, que identifica os recordes. */
+    fun chaveRecorde(): String = sessaoObd.estadoSessao.value.veiculo ?: RecordesDesempenho.CHAVE_PADRAO
 
     /** Alertas de proteção (água, ATF, alternador) com o aviso sonoro; os limites vêm do veículo ativo. */
     val centralAlertas: CentralAlertas by lazy { 

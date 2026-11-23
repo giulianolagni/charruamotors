@@ -33,6 +33,7 @@ import com.charruamotors.ui.oficina.falhas.DiagnosticoErrosActivity
 import com.charruamotors.ui.oficina.terminal.TerminalObdActivity
 import com.charruamotors.ui.util.definirTexto
 import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -72,11 +73,19 @@ class OficinaFragment : Fragment() {
                 abrirConectada { TerminalObdActivity.intent(requireContext(), veiculoId, TerminalObdActivity.ABA_TERMINAL) }
             }
             faixaConexao.setOnClickListener { irParaPainel() }
+            cardDesempenho.root.setOnClickListener { app.telemetriaCompartilhada.cronometro.reiniciar() }
         }
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { app.sessaoObd.estado.collect(::mostrarConexao) }
                 launch { app.sessaoObd.dados.collect { mostrarBicos(it) } }
+                launch {
+                    combine(app.telemetriaCompartilhada.cronometro.estado, app.recordesDesempenho.recordes) { e, _ -> e }
+                        .collect { e ->
+                            binding.cardDesempenho.textoDesempenhoEstado.text = e.texto
+                            binding.cardDesempenho.textoDesempenhoRecorde.text = app.recordesDesempenho.recordeDe(app.chaveRecorde()).texto
+                        }
+                }
             }
         }
     }

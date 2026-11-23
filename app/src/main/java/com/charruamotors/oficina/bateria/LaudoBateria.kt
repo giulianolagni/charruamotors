@@ -90,7 +90,7 @@ object LaudoBateria {
             appendLine("• Partida: não realizada")
         } else {
             appendLine("• Partida: vale de ${v(p.vMin)} (antes ${v(p.tensaoInicial)}) — ${rotulo(p.veredito)}")
-            appendLine("  Queda de ${segundos(p.duracaoQuedaMs)}; " + if (p.motorPegou) "motor pegou" else "motor não pegou no tempo do teste")
+            appendLine("  " + textoQueda(p.duracaoQuedaMs, p.motorPegou))
             if (p.lvResets > 0) {
                 appendLine(
                     "  O adaptador reiniciou por subtensão (LV RESET) ${p.lvResets}× durante a partida: " +
@@ -122,6 +122,15 @@ object LaudoBateria {
 
     /** "12,52 V". */
     fun v(volts: Double): String = String.format(localeBr, "%.2f V", volts)
+
+    /** Queda abaixo de 1 amostra (< 0,3 s) vira "Queda rápida"; senão a duração medida. */
+    internal fun textoQueda(duracaoMs: Long, motorPegou: Boolean): String {
+        val desfecho = if (motorPegou) "motor pegou" else "motor não pegou no tempo do teste"
+        val queda = if (duracaoMs < QUEDA_RAPIDA_MS) "Queda rápida (< 0,3 s)" else "Queda de ${segundos(duracaoMs)}"
+        return "$queda; $desfecho"
+    }
+
+    private const val QUEDA_RAPIDA_MS = 300L
 
     private fun segundos(ms: Long): String = String.format(localeBr, "%.1f s", ms / 1000.0)
 }

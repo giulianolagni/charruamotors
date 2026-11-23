@@ -66,7 +66,24 @@ object FormatadorHud {
             if (s == SensorPainel.RAIL && s.ler(valores) == null && SensorPainel.TENSAO !in escolhidos) SensorPainel.TENSAO else s
         }
 
+    /** Consumo do HUD: km/L em movimento; parado (ou sem velocidade), o consumo da ECU em L/h. */
+    private fun celulaConsumo(valores: ValoresSensores?): CelulaHud {
+        val litrosHora = valores?.get("015E")?.takeIf { it.isFinite() && it > 0 }
+        val velocidade = valores?.get(Pids.VELOCIDADE)?.takeIf { it.isFinite() }
+        val emMovimento = litrosHora != null && velocidade != null && velocidade >= 5
+        val sensor = SensorPainel.CONSUMO_KML
+        return when {
+            litrosHora == null -> CelulaHud(sensor, SEM_VALOR, sensor.rotuloHud, null)
+            emMovimento -> {
+                val kmL = (velocidade!! / litrosHora).coerceAtMost(SensorPainel.MAX_KM_L)
+                CelulaHud(sensor, kmL.comoNumero(1), "CONSUMO km/L", (kmL / 20).toFloat().coerceIn(0f, 1f))
+            }
+            else -> CelulaHud(sensor, litrosHora.comoNumero(1), "CONSUMO L/h", (litrosHora / 30).toFloat().coerceIn(0f, 1f))
+        }
+    }
+
     private fun celula(sensor: SensorPainel, valores: ValoresSensores?, conversor: ConversorUnidades): CelulaHud {
+        if (sensor == SensorPainel.CONSUMO_KML) return celulaConsumo(valores)
         val bruto = sensor.ler(valores)
         val exibicao = bruto?.let { sensor.exibir(it, conversor) }
         val escala = sensor.escala(conversor)

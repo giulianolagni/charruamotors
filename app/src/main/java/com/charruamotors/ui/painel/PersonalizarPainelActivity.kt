@@ -253,7 +253,6 @@ class PersonalizarPainelActivity : AppCompatActivity() {
             SensorPainel.RAIL to 95_000.0,
             SensorPainel.MAF to 32.0,
             SensorPainel.COMBUSTIVEL to 64.0,
-            SensorPainel.CONSUMO to 4.2,
             SensorPainel.CONSUMO_KML to 9.8,
             SensorPainel.TEMP_CAMBIO to 78.0,
             SensorPainel.MARCHA_ALAVANCA to 3.0,

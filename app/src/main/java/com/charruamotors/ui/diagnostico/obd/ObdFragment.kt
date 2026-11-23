@@ -564,6 +564,7 @@ class ObdFragment : Fragment() {
 
     /** Os mostradores escolhidos, com o valor já convertido para a unidade global. */
     private fun mostrarDados(dados: DadosObd?) {
+        com.charruamotors.direcao.painel.HistoricoSensores.registrar(dados)
         val alertas = app.centralAlertas.processar(dados)
         mostrarAlertas(alertas)
         val consumoKmL = viewModel.computador.value.consumo?.kmPorLitro

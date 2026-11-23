@@ -50,6 +50,10 @@ class VersaoSemanticaTest {
     fun `eh mais nova compara a tag remota com o versionName instalado`() {
         assertTrue(VersaoSemantica.ehMaisNova("v1.6", "1.5"))
         assertTrue(VersaoSemantica.ehMaisNova("v1.5.1", "1.5"))
+        assertTrue(VersaoSemantica.ehMaisNova("v1.5.2", "1.5.1"))
+        assertTrue(VersaoSemantica.ehMaisNova("v1.5.10", "1.5.9"))
+        assertTrue(VersaoSemantica.ehMaisNova("v1.6.0", "1.5.2"))
+        assertFalse(VersaoSemantica.ehMaisNova("v1.5.9", "1.5.10"))
         assertFalse(VersaoSemantica.ehMaisNova("v1.5", "1.5"))
         assertFalse(VersaoSemantica.ehMaisNova("v1.4", "1.5"))
         assertFalse(VersaoSemantica.ehMaisNova("latest", "1.5"))

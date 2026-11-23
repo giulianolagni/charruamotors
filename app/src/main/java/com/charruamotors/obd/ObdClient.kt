@@ -101,6 +101,12 @@ interface ObdClient {
      */
     fun registroComunicacao(): List<EntradaRegistro> = emptyList()
 
+    /**
+     * Passa a entregar cada nova entrada do registro de comunicação a [ouvinte] (null = parar),
+     * sem o limite do buffer circular: a sessão OBD grava assim o log bruto completo no `.txt`.
+     */
+    fun observarRegistro(ouvinte: ((EntradaRegistro) -> Unit)?) {}
+
     // ---------------------------------------------------------------- Ferramentas de Oficina
 
     /**

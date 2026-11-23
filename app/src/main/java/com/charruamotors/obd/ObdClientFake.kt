@@ -63,6 +63,21 @@ class ObdClientFake(
 
     override fun registroComunicacao(): List<EntradaRegistro> = registro.entradas()
 
+    override fun observarRegistro(ouvinte: ((EntradaRegistro) -> Unit)?) {
+        registro.ouvinte = ouvinte
+    }
+
+    /**
+     * Demonstração/testes: a ECU para de responder como se a ignição fosse desligada — o mesmo
+     * `Erro` que o cliente real publica depois de vários ciclos sem resposta, encerrando a telemetria.
+     */
+    fun simularIgnicaoDesligada() {
+        if (_estado.value != EstadoConexaoObd.Conectado) return
+        registro.evento("Conexão perdida: $MENSAGEM_ECU_MUDA")
+        _pidsSuportados.value = emptySet()
+        _estado.value = EstadoConexaoObd.Erro(MENSAGEM_ECU_MUDA)
+    }
+
     private val _sessaoManual = MutableStateFlow(false)
     override val sessaoManualAtiva: StateFlow<Boolean> = _sessaoManual.asStateFlow()
 
@@ -444,6 +459,8 @@ class ObdClientFake(
 
         /** Piso do ciclo da telemetria simulada (~10 atualizações/s, como um ELM327 rápido). */
         const val INTERVALO_MINIMO_SIMULADO_MS = 100L
+
+        const val MENSAGEM_ECU_MUDA = "A ECU parou de responder (NO DATA). A ignição foi desligada? (simulado)"
         private const val CHANCE_NOVO_ALVO_POR_S = 0.12
         private const val BORBOLETA_FECHADA = 8.0 // % de abertura da borboleta em marcha lenta
         private const val PRESSAO_BAROMETRICA = 95.0 // kPa (~600 m de altitude)

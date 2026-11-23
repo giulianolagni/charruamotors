@@ -39,6 +39,13 @@ class RegistroComunicacao(
     private val entradas = ArrayDeque<EntradaRegistro>(capacidade)
     private val trava = Any()
 
+    /**
+     * Recebe cada entrada nova, sem o limite do buffer circular: a sessão OBD usa para gravar o log
+     * bruto completo no relatório `.txt`. Chamado na thread de quem registrou (normalmente IO);
+     * falhas do ouvinte são ignoradas para nunca derrubar a comunicação.
+     */
+    @Volatile var ouvinte: ((EntradaRegistro) -> Unit)? = null
+
     fun comando(comando: String, resposta: String?, duracaoMs: Long, falha: String? = null) =
         adicionar(EntradaRegistro.Comando(relogio(), comando, resposta, duracaoMs, falha))
 
@@ -49,9 +56,12 @@ class RegistroComunicacao(
     /** Cópia das entradas, da mais antiga para a mais recente. */
     fun entradas(): List<EntradaRegistro> = synchronized(trava) { entradas.toList() }
 
-    private fun adicionar(entrada: EntradaRegistro) = synchronized(trava) {
-        if (entradas.size == capacidade) entradas.removeFirst()
-        entradas.addLast(entrada)
+    private fun adicionar(entrada: EntradaRegistro) {
+        synchronized(trava) {
+            if (entradas.size == capacidade) entradas.removeFirst()
+            entradas.addLast(entrada)
+        }
+        ouvinte?.let { runCatching { it(entrada) } }
     }
 
     companion object {
@@ -68,18 +78,25 @@ class RegistroComunicacao(
          * ```
          */
         fun formatar(entradas: List<EntradaRegistro>, fuso: java.util.TimeZone = java.util.TimeZone.getDefault()): String {
-            val hora = SimpleDateFormat("HH:mm:ss.SSS", Locale.ROOT).apply { timeZone = fuso }
-            return entradas.joinToString("\n") { e ->
-                val instante = hora.format(Date(e.instanteMs))
-                when (e) {
-                    is EntradaRegistro.Evento -> "$instante  ● ${e.texto}"
-                    is EntradaRegistro.Comando -> {
-                        val resultado = when {
-                            e.falha != null -> e.falha
-                            else -> "\"${visivel(e.resposta.orEmpty())}\""
-                        }
-                        "$instante  ${e.comando} → $resultado (${e.duracaoMs} ms)"
+            val hora = formatoHora(fuso)
+            return entradas.joinToString("\n") { formatarLinha(it, hora) }
+        }
+
+        /** Formato `HH:mm:ss.SSS` das linhas do registro (não é thread-safe: um por usuário). */
+        fun formatoHora(fuso: java.util.TimeZone = java.util.TimeZone.getDefault()): SimpleDateFormat =
+            SimpleDateFormat("HH:mm:ss.SSS", Locale.ROOT).apply { timeZone = fuso }
+
+        /** Uma linha do registro, no mesmo formato de [formatar]. */
+        fun formatarLinha(e: EntradaRegistro, hora: SimpleDateFormat): String {
+            val instante = hora.format(Date(e.instanteMs))
+            return when (e) {
+                is EntradaRegistro.Evento -> "$instante  ● ${e.texto}"
+                is EntradaRegistro.Comando -> {
+                    val resultado = when {
+                        e.falha != null -> e.falha
+                        else -> "\"${visivel(e.resposta.orEmpty())}\""
                     }
+                    "$instante  ${e.comando} → $resultado (${e.duracaoMs} ms)"
                 }
             }
         }

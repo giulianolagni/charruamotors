@@ -142,10 +142,16 @@ class ObdViewModel(
     /** Último instantâneo da telemetria da sessão. */
     val dados: StateFlow<DadosObd?> = sessao.dados
 
+    /** Mín/Máx de cada sensor desde que a sessão atual começou (zerados a cada nova conexão). */
+    private val extremosSessao = ExtremosSessao()
+
     /** Todos os PIDs suportados com o último valor conhecido (grade ao vivo; a fila lenta a atualiza aos poucos). */
     val sensores: StateFlow<List<LeituraSensor>> =
         combine(pidsSuportados, sessao.dados, sessao.perfil, sessao.infoConexao) { suportados, dados, perfil, conexao ->
-            sessao.definicoesSuportadas(suportados, conexao, perfil).map { LeituraSensor(it, dados?.get(it.comando)) }
+            sessao.definicoesSuportadas(suportados, conexao, perfil).map {
+                val valor = dados?.get(it.comando)
+                LeituraSensor(it, valor, extremosSessao.registrar(it.comando, valor))
+            }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // ------------------------------------------------------------------ telemetria derivada
@@ -214,6 +220,7 @@ class ObdViewModel(
             // drop(1): ignora o valor inicial, para não repetir um erro antigo ao reabrir a tela.
             estado.drop(1).collect { novo ->
                 if (novo is EstadoConexaoObd.Conectado) {
+                    extremosSessao.limpar()
                     iniciarViagem()
                     _eventos.send(EventoObd.Mensagem(R.string.obd_conectado))
                 } else {

@@ -53,6 +53,23 @@ class CambioA750fTest {
     }
 
     @Test
+    fun `21D9 do 7E1 com C D 00 01 e 2-3 e 03 00 e L`() {
+        assertEquals(Decodificadores.ALAVANCA_2_3, d9(0x00, 0x01), 0.0)
+        assertEquals("2/3", alavanca.rotulo(d9(0x00, 0x01)))
+        assertEquals(Decodificadores.ALAVANCA_L, d9(0x03, 0x00), 0.0)
+        assertEquals("L", alavanca.rotulo(d9(0x03, 0x00)))
+    }
+
+    @Test
+    fun `21D9 do 7E1 com qualquer outro par nao zero mostra M em vez de sem valor`() {
+        for ((c, d) in listOf(0x00 to 0x02, 0x02 to 0x00, 0x04 to 0x04, 0x01 to 0x01)) {
+            assertEquals("C=$c D=$d", Decodificadores.ALAVANCA_M, d9(c, d), 0.0)
+            assertEquals("M", alavanca.rotulo(d9(c, d)))
+        }
+        assertEquals("M", SensorPainel.MARCHA_ALAVANCA.texto(Decodificadores.ALAVANCA_M, conversor))
+    }
+
+    @Test
     fun `mostrador Alavanca prioriza o 7E1 21D9 sobre o 7E0 que sempre devolve P`() {
         val leitura = dados("TOYOTA_ALAVANCA" to Decodificadores.ALAVANCA_D, "TOYOTA_ALAVANCA_ECM" to 0.0)
         assertEquals("D", SensorPainel.MARCHA_ALAVANCA.texto(SensorPainel.MARCHA_ALAVANCA.ler(leitura), conversor))
@@ -103,8 +120,7 @@ class CambioA750fTest {
     fun `estimador troca o 0xFF do 2130 pela marcha estimada em D`() {
         val e = EstimadorCambioA750f()
         val saida = e.aplicar(
-            dados("TOYOTA_ALAVANCA" to Decodificadores.ALAVANCA_D, "TOYOTA_MARCHA" to 255.0, Pids.RPM to 2_200.0, Pids.VELOCIDADE to 110.0),
-            agoraMs = 0,
+            dados("TOYOTA_ALAVANCA" to Decodificadores.ALAVANCA_D, "TOYOTA_MARCHA" to 255.0, Pids.RPM to 2_200.0, Pids.VELOCIDADE to 110.0)
         )
         assertEquals(5.0, saida["TOYOTA_MARCHA"]!!, 0.0)
         assertEquals(IndicadorMarcha("5ª", "D"), ClusterPainel.indicadorMarcha(saida))
@@ -113,41 +129,49 @@ class CambioA750fTest {
     @Test
     fun `estimador sem 2130 no polling publica a marcha e em re mostra R`() {
         val e = EstimadorCambioA750f()
-        val d = e.aplicar(dados("TOYOTA_ALAVANCA" to 3.0, Pids.RPM to 1_700.0, Pids.VELOCIDADE to 25.0), agoraMs = 0)
+        val d = e.aplicar(dados("TOYOTA_ALAVANCA" to 3.0, Pids.RPM to 1_700.0, Pids.VELOCIDADE to 25.0))
         assertEquals(2.0, d["TOYOTA_MARCHA"]!!, 0.0) // 68
-        val r = e.aplicar(dados("TOYOTA_ALAVANCA" to 1.0, Pids.RPM to 1_000.0, Pids.VELOCIDADE to 3.0), agoraMs = 100)
+        val r = e.aplicar(dados("TOYOTA_ALAVANCA" to 1.0, Pids.RPM to 1_000.0, Pids.VELOCIDADE to 3.0))
         assertEquals("R", SensorPainel.MARCHA_ATUAL.texto(r["TOYOTA_MARCHA"], conversor))
         assertEquals(IndicadorMarcha("R"), ClusterPainel.indicadorMarcha(r))
     }
 
     @Test
-    fun `P-N vira P parado e N em movimento ou logo depois dele`() {
-        val e = EstimadorCambioA750f(memoriaMovimentoMs = 3_000)
+    fun `P-N segue P-N no mostrador e a marcha vira Parado ou N andando`() {
+        val e = EstimadorCambioA750f()
         val pn = Decodificadores.ALAVANCA_P_N
-        // Ligou parado: P e "Parado".
-        val parado = e.aplicar(dados("TOYOTA_ALAVANCA" to pn, Pids.RPM to 750.0, Pids.VELOCIDADE to 0.0), agoraMs = 0)
-        assertEquals(Decodificadores.ALAVANCA_P, parado["TOYOTA_ALAVANCA"]!!, 0.0)
+        val parado = e.aplicar(dados("TOYOTA_ALAVANCA" to pn, Pids.RPM to 750.0, Pids.VELOCIDADE to 0.0))
+        assertEquals(pn, parado["TOYOTA_ALAVANCA"]!!, 0.0)
         assertEquals("Parado", SensorPainel.MARCHA_ATUAL.texto(parado["TOYOTA_MARCHA"], conversor))
-        assertEquals(IndicadorMarcha("P"), ClusterPainel.indicadorMarcha(parado))
-        // Banguela a 40 km/h: N.
-        val andando = e.aplicar(dados("TOYOTA_ALAVANCA" to pn, Pids.RPM to 800.0, Pids.VELOCIDADE to 40.0), agoraMs = 10_000)
-        assertEquals(Decodificadores.ALAVANCA_N, andando["TOYOTA_ALAVANCA"]!!, 0.0)
-        assertEquals(IndicadorMarcha("N"), ClusterPainel.indicadorMarcha(andando))
-        // Acabou de parar: ainda N (movimento recente)...
-        val logoDepois = e.aplicar(dados("TOYOTA_ALAVANCA" to pn, Pids.VELOCIDADE to 0.0), agoraMs = 11_000)
-        assertEquals(Decodificadores.ALAVANCA_N, logoDepois["TOYOTA_ALAVANCA"]!!, 0.0)
-        assertEquals("Parado", SensorPainel.MARCHA_ATUAL.texto(logoDepois["TOYOTA_MARCHA"], conversor))
-        // ...e P depois da memória de movimento.
-        val depois = e.aplicar(dados("TOYOTA_ALAVANCA" to pn, Pids.VELOCIDADE to 0.0), agoraMs = 13_500)
-        assertEquals(Decodificadores.ALAVANCA_P, depois["TOYOTA_ALAVANCA"]!!, 0.0)
+        assertEquals(IndicadorMarcha("P/N"), ClusterPainel.indicadorMarcha(parado))
+        val andando = e.aplicar(dados("TOYOTA_ALAVANCA" to pn, Pids.RPM to 800.0, Pids.VELOCIDADE to 40.0))
+        assertEquals(pn, andando["TOYOTA_ALAVANCA"]!!, 0.0)
+        assertEquals(CambioA750f.MARCHA_NEUTRO.toDouble(), andando["TOYOTA_MARCHA"]!!, 0.0)
+    }
+
+    @Test
+    fun `2-3 e L andando calculam a marcha igual ao D e parados mostram Parado`() {
+        val e = EstimadorCambioA750f()
+        for (posicao in listOf(Decodificadores.ALAVANCA_2_3, Decodificadores.ALAVANCA_L)) {
+            val andando = e.aplicar(dados("TOYOTA_ALAVANCA" to posicao, Pids.RPM to 1_800.0, Pids.VELOCIDADE to 40.0)) // 45
+            assertEquals(3.0, andando["TOYOTA_MARCHA"]!!, 0.0)
+            val parado = e.aplicar(dados("TOYOTA_ALAVANCA" to posicao, Pids.RPM to 800.0, Pids.VELOCIDADE to 3.0))
+            assertEquals(CambioA750f.MARCHA_PARADO.toDouble(), parado["TOYOTA_MARCHA"]!!, 0.0)
+        }
+        assertEquals(IndicadorMarcha("3ª", "2/3"), ClusterPainel.indicadorMarcha(
+            e.aplicar(dados("TOYOTA_ALAVANCA" to Decodificadores.ALAVANCA_2_3, Pids.RPM to 1_800.0, Pids.VELOCIDADE to 40.0)),
+        ))
+        assertEquals(IndicadorMarcha("3ª", "L"), ClusterPainel.indicadorMarcha(
+            e.aplicar(dados("TOYOTA_ALAVANCA" to Decodificadores.ALAVANCA_L, Pids.RPM to 1_800.0, Pids.VELOCIDADE to 40.0)),
+        ))
     }
 
     @Test
     fun `estimador respeita marcha valida do 2130 e ignora veiculos sem a alavanca do 7E1`() {
         val e = EstimadorCambioA750f()
-        val valida = e.aplicar(dados("TOYOTA_ALAVANCA" to 3.0, "TOYOTA_MARCHA" to 4.0, Pids.RPM to 3_000.0, Pids.VELOCIDADE to 20.0), 0)
+        val valida = e.aplicar(dados("TOYOTA_ALAVANCA" to 3.0, "TOYOTA_MARCHA" to 4.0, Pids.RPM to 3_000.0, Pids.VELOCIDADE to 20.0))
         assertEquals(4.0, valida["TOYOTA_MARCHA"]!!, 0.0)
         val outro = dados(Pids.RPM to 2_000.0, Pids.VELOCIDADE to 60.0)
-        assertSame(outro, e.aplicar(outro, 0))
+        assertSame(outro, e.aplicar(outro))
     }
 }

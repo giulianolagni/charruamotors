@@ -7,29 +7,36 @@ package com.charruamotors.obd.pid
  */
 object Decodificadores {
 
-    /** Valor de [ALAVANCA_A750F] para cada posição (compatível com os rótulos P R N D 3 2 L e P/N). */
+    /** Valor de [ALAVANCA_A750F] para cada posição (compatível com os rótulos do mostrador Alavanca). */
     const val ALAVANCA_P = 0.0
     const val ALAVANCA_R = 1.0
     const val ALAVANCA_N = 2.0
     const val ALAVANCA_D = 3.0
 
-    /** `P` ou `N`: o `21D9` não distingue as duas; quem decide é a velocidade (ver `CambioA750f`). */
+    /** Posições `2/3` (`C = 00, D = 01`), manual/outra (`M`) e `L` (`C = 03, D = 00`) do A750F. */
+    const val ALAVANCA_2_3 = 4.0
+    const val ALAVANCA_M = 5.0
+    const val ALAVANCA_L = 6.0
+
+    /** `P` ou `N`: o `21D9` não distingue as duas (`C = 00, D = 00`); o mostrador exibe `P/N`. */
     const val ALAVANCA_P_N = 7.0
 
     /**
      * Alavanca do câmbio A750F pela resposta do `7E1` ao `21D9` (`0:61D9 A B C D ...`), lida nos
-     * bytes C e D (índices 2 e 3), como no log real da SW4 2013: `C = 04, D = 00` = R;
-     * `C = 00, D = 04` = D; `C = 00, D = 00` = P/N. O byte A não indica a alavanca (o `7E0 · 21D9`
-     * devolve sempre `00` nele). Qualquer outra combinação vira `NaN`, em vez de um rótulo chutado.
+     * bytes C e D (índices 2 e 3), como no log real da SW4 2013: `00 00` = P/N; `04 00` = R;
+     * `00 04` = D; `00 01` = 2/3; `03 00` = L. Qualquer outro par diferente de zero (ex.: `00 02`,
+     * `02 00`) é uma posição ainda não mapeada e vira [ALAVANCA_M], em vez de ficar sem valor.
      */
     private fun alavancaA750f(b: List<Int>): Double {
         val c = b[2] and 0xFF
         val d = b[3] and 0xFF
         return when {
+            c == 0x00 && d == 0x00 -> ALAVANCA_P_N
             c == 0x04 && d == 0x00 -> ALAVANCA_R
             c == 0x00 && d == 0x04 -> ALAVANCA_D
-            c == 0x00 && d == 0x00 -> ALAVANCA_P_N
-            else -> Double.NaN
+            c == 0x00 && d == 0x01 -> ALAVANCA_2_3
+            c == 0x03 && d == 0x00 -> ALAVANCA_L
+            else -> ALAVANCA_M
         }
     }
 

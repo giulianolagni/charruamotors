@@ -12,8 +12,8 @@ import com.charruamotors.obd.dtc.InfoDtc
 import com.charruamotors.obd.dtc.TipoDtc
 import com.charruamotors.obd.pid.DefinicaoPid
 
-/** Valor atual de um sensor suportado, para a grade de PIDs (null = sem resposta neste ciclo). */
-data class LeituraSensor(val definicao: DefinicaoPid, val valor: Double?)
+/** Valor atual de um sensor suportado, para a grade de PIDs (null = sem resposta neste ciclo) e seus Mín/Máx da sessão. */
+data class LeituraSensor(val definicao: DefinicaoPid, val valor: Double?, val extremos: Extremos? = null)
 
 /** Informações da ECU conectada: VIN (null = ainda lendo ou indisponível), PIDs detectados e perfil de montadora. */
 data class InfoEcu(

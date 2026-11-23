@@ -362,7 +362,6 @@ class SessaoObd(
             val veiculo = if (veiculoId > 0) runCatching { buscarVeiculo(veiculoId) }.getOrNull() else null
             marcaAtual = veiculo?.marca
             combustivelAtual = veiculo?.combustivel
-            estimadorCambio.reiniciar()
             if (config().gravarLogsAutomaticos) {
                 g = withContext(io) { criarGravador(dispositivo, veiculo, origem, gatilho, inicioMs) }
                 gravador = g
@@ -436,7 +435,7 @@ class SessaoObd(
     }
 
     private fun receberAmostra(daEcu: DadosObd, g: GravadorLogsSessao?) {
-        val dados = estimadorCambio.aplicar(comCalculados(comVelocidadeGps(daEcu), combustivelAtual), relogio())
+        val dados = estimadorCambio.aplicar(comCalculados(comVelocidadeGps(daEcu), combustivelAtual))
         _dados.value = dados
         _amostras.tryEmit(dados)
         telemetria.publicar(dados, conectado = true)

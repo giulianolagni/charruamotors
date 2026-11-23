@@ -64,7 +64,7 @@ class SensoresSw4Test {
         assertEquals("7E1 · 2130", catalogo["TOYOTA_MARCHA"]!!.rotuloComando)
         assertNull(catalogo["TOYOTA_MARCHA_ECM"]) // 7E0 2130 é contador de aquecimentos, não marcha
         assertEquals("7E0 · 2182", catalogo["TOYOTA_ATF_ECM"]!!.rotuloComando)
-        assertEquals(listOf("P", "R", "N", "D", "3", "2", "L"), (0..6).map { alavanca.rotulo(it.toDouble()) })
+        assertEquals(listOf("P", "R", "N", "D", "2/3", "M", "L", "P/N"), (0..7).map { alavanca.rotulo(it.toDouble()) })
         // Fallback pelo motor (7E0 · 21D9, 3 bytes): 00 41 A0 = P.
         val ecm = catalogo["TOYOTA_ALAVANCA_ECM"]!!
         assertEquals("P", ecm.rotulo((ObdParser.parsePid("61D90041A0\r\r", ecm) as RespostaObd.Ok).valor))

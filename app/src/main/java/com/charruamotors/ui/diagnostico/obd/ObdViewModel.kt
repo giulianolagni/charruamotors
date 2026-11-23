@@ -430,7 +430,7 @@ class ObdViewModel(
     }
 
     private suspend fun exportar(sessaoLog: SessaoLog): ArquivoExportado =
-        salvarCsv(GeradorCsv.nomeArquivo(sessaoLog.inicioMs)) { saida -> GeradorCsv.escrever(sessaoLog, saida) }
+        salvarCsv(GeradorCsv.nomeArquivo(sessaoLog.inicioMs, simulado = sessao.modo.value == ModoObd.SIMULADO)) { saida -> GeradorCsv.escrever(sessaoLog, saida) }
 
     // ------------------------------------------------------------------ leitura salva
 

@@ -1,8 +1,11 @@
 package com.charruamotors
 
+import android.app.Activity
 import android.app.Application
 import android.bluetooth.BluetoothManager
 import android.content.pm.PackageManager
+import android.os.Bundle
+import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.pm.PackageInfoCompat
 import com.charruamotors.data.local.AppDatabase
@@ -23,9 +26,11 @@ import com.charruamotors.obd.pid.CatalogoCascata
 import com.charruamotors.obd.pid.CatalogoEstendido
 import com.charruamotors.obd.pid.CatalogoPids
 import com.charruamotors.obd.sessao.DestinoLogsDownloads
+import com.charruamotors.obd.sessao.FerramentaManualObd
 import com.charruamotors.obd.sessao.ObdSessaoService
 import com.charruamotors.obd.sessao.OrigemSessao
 import com.charruamotors.obd.sessao.PreferenciasAutoConexao
+import com.charruamotors.obd.sessao.ProtecaoSessao
 import com.charruamotors.obd.sessao.SessaoObd
 import com.charruamotors.obd.sessao.VeiculoSessao
 import com.charruamotors.oficina.varredura.IdentificadorPids
@@ -37,6 +42,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -50,6 +56,21 @@ class CharruaMotorsApp : Application() {
         super.onCreate()
         // Tema escolhido nas Configurações (Seguir sistema / Claro / Escuro), antes da 1ª Activity.
         AppCompatDelegate.setDefaultNightMode(preferenciasApp.tema.modoNoturno)
+        registerActivityLifecycleCallbacks(rastreadorPrimeiroPlano)
+    }
+
+    /**
+     * Conta as Activities visíveis (`onStart`/`onStop`) para a [protecaoSessao] saber se o app está em
+     * primeiro plano e se há uma ferramenta manual aberta (Teste de Bateria, Terminal/Varredura, Diagnóstico de Erros).
+     */
+    private val rastreadorPrimeiroPlano = object : ActivityLifecycleCallbacks {
+        override fun onActivityStarted(activity: Activity) = protecaoSessao.activityIniciada(activity is FerramentaManualObd)
+        override fun onActivityStopped(activity: Activity) = protecaoSessao.activityParada(activity is FerramentaManualObd)
+        override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+        override fun onActivityResumed(activity: Activity) = Unit
+        override fun onActivityPaused(activity: Activity) = Unit
+        override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+        override fun onActivityDestroyed(activity: Activity) = Unit
     }
 
     val database: AppDatabase by lazy { AppDatabase.getInstance(this) }
@@ -187,6 +208,22 @@ class CharruaMotorsApp : Application() {
      * Sessão OBD2 única do app (conexão, polling e logs automáticos), compartilhada pela aba OBD2,
      * pelo HUD flutuante e pelo `ObdSessaoService` em primeiro plano. Ver [SessaoObd].
      */
+    val protecaoSessao: ProtecaoSessao by lazy {
+        val escopo = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        ProtecaoSessao(
+            escopo = escopo,
+            estadoSessao = { sessaoObd.estadoSessao.value },
+            encerrar = { motivo -> sessaoObd.desconectar(motivo) },
+            registrar = { texto ->
+                Log.i("ProtecaoSessao", texto)
+                sessaoObd.registrarEvento(texto)
+            },
+            assumir = { sessaoObd.assumir() },
+        ).also { protecao ->
+            escopo.launch { sessaoObd.estadoSessao.collect { if (!it.ativa) protecao.sessaoEncerrada() } }
+        }
+    }
+
     val sessaoObd: SessaoObd by lazy {
         SessaoObd(
             clientePorModo = ::obdClientDe,

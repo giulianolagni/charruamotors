@@ -1,5 +1,6 @@
 package com.charruamotors.ui.oficina.terminal
 
+import com.charruamotors.obd.sessao.FerramentaManualObd
 import android.content.Context
 import android.content.Intent
 import android.graphics.Typeface
@@ -55,7 +56,7 @@ import kotlinx.coroutines.launch
  * amigável de PIDs (cabeçalho, serviço e faixa, com presets Toyota): cada resposta é cruzada com o
  * catálogo do app em tempo real, com barra colorida, métricas e o filtro "o que o carro respondeu".
  */
-class TerminalObdActivity : AppCompatActivity() {
+class TerminalObdActivity : AppCompatActivity(), FerramentaManualObd {
 
     private lateinit var binding: ActivityTerminalObdBinding
     private val viewModel: TerminalObdViewModel by viewModels { TerminalObdViewModel.Factory }

@@ -68,14 +68,14 @@ class HistoricoFragment : Fragment() {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
                     viewModel.logsCsv.collect {
-                        adapterLogs.submitList(it)
+                        adapterLogs.definirArquivos(it)
                         binding.textoLogsVazio.isVisible = it.isEmpty()
                         binding.tituloLogs.definirTexto(getString(R.string.historico_logs_titulo_qtd, it.size))
                     }
                 }
                 launch {
                     viewModel.relatoriosViagem.collect {
-                        adapterViagens.submitList(it)
+                        adapterViagens.definirArquivos(it)
                         binding.textoViagensVazio.isVisible = it.isEmpty()
                         binding.tituloViagens.definirTexto(getString(R.string.historico_viagens_titulo_qtd, it.size))
                     }

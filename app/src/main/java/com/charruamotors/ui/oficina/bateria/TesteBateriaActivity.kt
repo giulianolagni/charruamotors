@@ -1,5 +1,6 @@
 package com.charruamotors.ui.oficina.bateria
 
+import com.charruamotors.obd.sessao.FerramentaManualObd
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -38,7 +39,7 @@ import kotlinx.coroutines.launch
  * em marcha lenta e com carga), com a tensão ao vivo em gráfico e o laudo resumido no fim.
  * A tela fica acesa durante o teste (o motorista está fora do carro olhando o celular).
  */
-class TesteBateriaActivity : AppCompatActivity() {
+class TesteBateriaActivity : AppCompatActivity(), FerramentaManualObd {
 
     private lateinit var binding: ActivityTesteBateriaBinding
     private val viewModel: TesteBateriaViewModel by viewModels { TesteBateriaViewModel.Factory }

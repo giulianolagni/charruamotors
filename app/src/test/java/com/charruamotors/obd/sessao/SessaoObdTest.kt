@@ -9,6 +9,7 @@ import com.charruamotors.obd.ObdClientFake
 import com.charruamotors.obd.dtc.CatalogoDtc
 import com.charruamotors.obd.log.DestinoMemoria
 import com.charruamotors.obd.log.GeradorCsv
+import com.charruamotors.obd.log.OrganizadorLogs
 import com.charruamotors.obd.pid.CatalogoTeste
 import com.charruamotors.oficina.replay.LeitorCsvLog
 import kotlinx.coroutines.CoroutineScope
@@ -58,9 +59,9 @@ class SessaoObdTest {
     @After
     fun cancelarEscopos() = escopos.forEach { it.cancel() }
 
-    private fun TestScope.novaSessao() = SessaoObd(
+    private fun TestScope.novaSessao(modo: ModoObd = ModoObd.SIMULADO) = SessaoObd(
         clientePorModo = { fake },
-        modoInicial = ModoObd.SIMULADO,
+        modoInicial = modo,
         catalogoPids = CatalogoTeste.padrao,
         catalogoDtc = CatalogoDtc.VAZIO,
         config = { config },
@@ -82,8 +83,38 @@ class SessaoObdTest {
     }
 
     @Test
+    fun `modo simulado sinaliza SIMULADO no nome dos arquivos e no cabecalho do txt`() = runTest {
+        val sessao = novaSessao(ModoObd.SIMULADO)
+        sessao.conectar(scanner, veiculoId = 7, origem = OrigemSessao.MANUAL)
+        avancar(5_000)
+        sessao.desconectar()
+        advanceUntilIdle()
+
+        val csv = destino.terminadoEm(".csv")
+        val txt = destino.terminadoEm(".txt")
+        assertEquals("CharruaOBD_SIMULADO_20261122_143005_Toyota_SW4.csv", csv.nome)
+        assertEquals("CharruaOBD_SIMULADO_20261122_143005_Toyota_SW4.txt", txt.nome)
+        assertTrue(txt.conteudo.lines().any { it.trimStart().startsWith("Modo") && it.endsWith(": SIMULADO") })
+        assertTrue(OrganizadorLogs.ehSimulado(csv.nome) && OrganizadorLogs.ehSimulado(txt.nome))
+    }
+
+    @Test
+    fun `sessao com o scanner real segue com o nome normal e Modo REAL`() = runTest {
+        val sessao = novaSessao(ModoObd.BLUETOOTH)
+        sessao.conectar(scanner, veiculoId = 7, origem = OrigemSessao.MANUAL)
+        avancar(5_000)
+        sessao.desconectar()
+        advanceUntilIdle()
+
+        val txt = destino.terminadoEm(".txt")
+        assertEquals("CharruaOBD_20261122_143005_Toyota_SW4.txt", txt.nome)
+        assertFalse(OrganizadorLogs.ehSimulado(txt.nome))
+        assertTrue(txt.conteudo.lines().any { it.trimStart().startsWith("Modo") && it.endsWith(": REAL") })
+    }
+
+    @Test
     fun `sessao manual conecta, grava CSV incremental e salva o txt ao desconectar`() = runTest {
-        val sessao = novaSessao()
+        val sessao = novaSessao(ModoObd.BLUETOOTH)
         assertTrue(sessao.conectar(scanner, veiculoId = 7, origem = OrigemSessao.MANUAL))
         assertEquals(listOf(OrigemSessao.MANUAL), ativacoes)
         assertTrue(sessao.estadoSessao.value.ativa)

@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.data.repository.DiagnosticoRepository
 import com.charruamotors.domain.model.LeituraObd
+import com.charruamotors.obd.log.OrganizadorLogs
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.oficina.replay.ArquivoLogCsv
 import com.charruamotors.ui.oficina.replay.RepositorioLogsCsv
@@ -36,10 +37,10 @@ class HistoricoViewModel(
     private val _carregando = MutableStateFlow(false)
     val carregando: StateFlow<Boolean> = _carregando.asStateFlow()
 
-    val logsCsv: StateFlow<List<ArquivoLogCsv>> = arquivos.map { lista -> lista.filterNot { it.texto } }
+    val logsCsv: StateFlow<List<ArquivoLogCsv>> = arquivos.map { lista -> OrganizadorLogs.ordenar(lista.filterNot { it.texto }) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val relatoriosViagem: StateFlow<List<ArquivoLogCsv>> = arquivos.map { lista -> lista.filter { it.texto } }
+    val relatoriosViagem: StateFlow<List<ArquivoLogCsv>> = arquivos.map { lista -> OrganizadorLogs.ordenar(lista.filter { it.texto }) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val leituras: StateFlow<List<LeituraObd>> = diagnostico.observarLeituras(veiculoId)

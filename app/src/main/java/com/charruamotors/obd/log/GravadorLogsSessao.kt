@@ -42,7 +42,7 @@ class GravadorLogsSessao(
     private val amostrasPorFlush: Int = AMOSTRAS_POR_FLUSH,
     private val limitePendentes: Int = LIMITE_PENDENTES,
 ) {
-    val nomeBase: String = RelatorioSessaoTxt.nomeBase(cabecalho.inicioMs, cabecalho.veiculoArquivo, zona)
+    val nomeBase: String = RelatorioSessaoTxt.nomeBase(cabecalho.inicioMs, cabecalho.veiculoArquivo, zona, cabecalho.simulado)
 
     private val trava = Any()
     private val hora = RegistroComunicacao.formatoHora(TimeZone.getTimeZone(zona))

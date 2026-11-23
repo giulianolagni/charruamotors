@@ -109,6 +109,7 @@ class GeradorCsvTest {
     @Test
     fun `nome do arquivo usa data e hora sem dois pontos`() {
         assertEquals("charrua_obd_2026-11-20_14-30-05.csv", GeradorCsv.nomeArquivo(inicio, zona))
+        assertEquals("charrua_obd_SIMULADO_2026-11-20_14-30-05.csv", GeradorCsv.nomeArquivo(inicio, zona, simulado = true))
     }
 
     // ---------------------------------------------------------------- integração com o DataLogger

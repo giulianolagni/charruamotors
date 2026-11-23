@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ações da Toolbar das abas principais: Personalizar Painel só aparece na aba Painel. -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/acao_personalizar_painel"
+        android:icon="@drawable/ic_personalizar"
+        android:title="@string/painel_personalizar_descricao"
+        app:iconTint="@color/branco"
+        app:showAsAction="always" />
+</menu>

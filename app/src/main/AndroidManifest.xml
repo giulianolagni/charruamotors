@@ -66,7 +66,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Activity 2: Dashboard / Home -->
+        <!-- Activity 2: Meus Veículos (tela inicial só sem veículo cadastrado; v1.5) -->
         <activity
             android:name=".ui.dashboard.DashboardActivity"
             android:exported="false" />
@@ -78,11 +78,10 @@
             android:parentActivityName=".ui.dashboard.DashboardActivity"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- Activity 4: Diagnóstico OBD2, Manutenções e Abastecimentos (abas) -->
+        <!-- Activity 4: tela principal com as 4 abas do veículo favorito e o menu lateral (v1.5) -->
         <activity
             android:name=".ui.diagnostico.DiagnosticoActivity"
             android:exported="false"
-            android:parentActivityName=".ui.dashboard.DashboardActivity"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- Ferramentas de Oficina (abertas pelo hub da aba OBD2) -->
@@ -110,19 +109,18 @@
             android:exported="false"
             android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
 
-        <!-- v1.3: Assistente de Primeira Abertura, Configurações e Checklist de Permissões (menu lateral) -->
+        <!-- v1.3: Assistente de Primeira Abertura, Configurações e Checklist de Permissões (menu lateral).
+             Sem parentActivityName: o Voltar retorna para a tela/aba de onde foram abertas. -->
         <activity
             android:name=".ui.assistente.AssistenteActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".ui.configuracoes.ConfiguracoesActivity"
-            android:exported="false"
-            android:parentActivityName=".ui.dashboard.DashboardActivity" />
+            android:exported="false" />
         <activity
             android:name=".ui.permissoes.ChecklistPermissoesActivity"
-            android:exported="false"
-            android:parentActivityName=".ui.dashboard.DashboardActivity" />
+            android:exported="false" />
 
         <!-- Mini-player: o Acesso a Notificações libera a leitura das sessões de mídia
              (Spotify, YouTube Music...). Nenhuma notificação é lida. -->

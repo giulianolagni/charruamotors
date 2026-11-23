@@ -14,13 +14,22 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.databinding.ActivityLoginBinding
+import com.charruamotors.sistema.navegacao.DestinoInicial
+import com.charruamotors.sistema.navegacao.VeiculoFavorito
+import com.charruamotors.ui.assistente.AssistenteActivity
 import com.charruamotors.ui.dashboard.DashboardActivity
+import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.util.aplicarInsetsDoSistema
 import com.charruamotors.ui.util.mensagem
 import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/** Activity 1 — Login (simulado, sem backend). É a Activity inicial do app. */
+/**
+ * Activity 1 — Login (simulado, sem backend). É a Activity inicial do app e decide a primeira
+ * tela ([VeiculoFavorito.destinoInicial]): com o login feito e algum veículo cadastrado, entra
+ * direto nas 4 abas do veículo favorito (aba Painel); sem veículo, em Meus Veículos.
+ */
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
@@ -30,9 +39,9 @@ class LoginActivity : AppCompatActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        // Sessão já iniciada anteriormente: pula o login e vai direto ao Dashboard.
+        // Sessão já iniciada anteriormente: pula o login e vai direto ao veículo favorito.
         if ((application as CharruaMotorsApp).sessao.estaLogado) {
-            abrirDashboard()
+            abrirInicio()
             return
         }
 
@@ -84,7 +93,7 @@ class LoginActivity : AppCompatActivity() {
                 layoutEmail.error = estado.erroEmail?.mensagem(this@LoginActivity)
                 layoutSenha.error = estado.erroSenha?.mensagem(this@LoginActivity)
             }
-            EstadoLogin.Sucesso -> abrirDashboard()
+            EstadoLogin.Sucesso -> abrirInicio()
             EstadoLogin.Ocioso, EstadoLogin.Carregando -> Unit
         }
     }
@@ -96,9 +105,41 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    /** finish() remove o Login da pilha: o botão voltar no Dashboard fecha o app. */
-    private fun abrirDashboard() {
-        startActivity(Intent(this, DashboardActivity::class.java))
-        finish()
+    /**
+     * Abre a primeira tela e tira o Login da pilha (o Voltar na tela principal fecha o app). Na
+     * primeira abertura após o login, o Assistente Inicial entra por cima dela.
+     */
+    private fun abrirInicio() {
+        if (abrindo) return
+        abrindo = true
+        val app = application as CharruaMotorsApp
+        lifecycleScope.launch {
+            val veiculos = app.veiculoRepository.observarTodos().first()
+            val prefs = app.preferenciasAutoConexao
+            val principal: Intent = when (val destino = VeiculoFavorito.destinoInicial(app.sessao.estaLogado, veiculos.map { it.id }, prefs.config.value.veiculoId)) {
+                is DestinoInicial.Painel -> {
+                    // Favorito vazio ou de um veículo apagado: grava o efetivo (a caixa-preta usa o mesmo).
+                    if (destino.gravarFavorito) {
+                        veiculos.firstOrNull { it.id == destino.veiculoId }?.let { prefs.vincularVeiculo(it.id, it.descricao) }
+                    }
+                    DiagnosticoActivity.intent(this@LoginActivity, destino.veiculoId)
+                }
+                DestinoInicial.MeusVeiculos -> DashboardActivity.intentRaiz(this@LoginActivity)
+                DestinoInicial.Login -> {
+                    abrindo = false
+                    return@launch
+                }
+            }
+            val pilha = if (app.preferenciasApp.deveMostrarAssistente) {
+                arrayOf(principal, AssistenteActivity.intent(this@LoginActivity))
+            } else {
+                arrayOf(principal)
+            }
+            startActivities(pilha)
+            finish()
+        }
     }
+
+    /** Evita abrir a tela principal duas vezes (estado de sucesso reemitido ao voltar ao STARTED). */
+    private var abrindo = false
 }

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.5: abertura direta no veículo favorito, menu lateral persistente, card de conexão
+     inteligente e Personalizar Painel 2.0. -->
+<resources>
+    <!-- Toolbar das 4 abas: veículo ativo -->
+    <string name="veiculo_seletor_descricao">Veículo ativo. Toque para trocar de veículo</string>
+    <string name="veiculo_toolbar_favorito">%1$s · ★ Favorito</string>
+    <string name="veiculos_seletor_titulo">Trocar de veículo</string>
+    <string name="veiculos_seletor_item_favorito">★ %1$s (%2$s)</string>
+    <string name="veiculos_seletor_item">%1$s (%2$s)</string>
+    <string name="veiculos_gerenciar">Meus Veículos (favorito e cadastro)…</string>
+
+    <!-- Meus Veículos -->
+    <string name="veiculos_titulo">Meus Veículos</string>
+    <string name="veiculos_dica_favorito">★ = favorito: o app abre direto nele, já no Painel.</string>
+    <string name="veiculos_marcar_favorito">Marcar %1$s como favorito</string>
+    <string name="veiculos_e_favorito">%1$s é o veículo favorito</string>
+    <string name="veiculos_favorito_definido">★ %1$s agora é o favorito: o app abre direto nele</string>
+    <string name="botao_abrir_painel">Abrir Painel</string>
+
+    <!-- Painel: card de conexão inteligente -->
+    <string name="conexao_titulo">Conectar ao carro</string>
+    <string name="conexao_dica">Escolha como começar: o carro real ou o modo simulado</string>
+    <string name="conexao_carro">Conectar no Carro (Bluetooth)</string>
+    <string name="conexao_simulado">Modo Simulado</string>
+    <string name="conexao_adaptador">Adaptador: %1$s</string>
+    <string name="conexao_adaptador_nenhum">Adaptador: automático</string>
+    <string name="conexao_simular_falha">Simular falha</string>
+    <string name="conexao_trocar_adaptador">Trocar o adaptador Bluetooth pareado</string>
+    <string name="conexao_escolher_adaptador">Adaptador OBD2 do carro</string>
+
+    <!-- Personalizar Painel 2.0 -->
+    <string name="personalizar_ocultar">Remover do Painel</string>
+    <string name="personalizar_ocultar_bloco">Remover %1$s do Painel</string>
+    <string name="personalizar_todos_removidos">Todos os blocos foram removidos: o Painel mostra só a conexão. Adicione de volta abaixo.</string>
+    <string name="personalizar_removidos">Blocos removidos (+ Adicionar de volta)</string>
+    <string name="personalizar_adicionar_de_volta">+ %1$s</string>
+    <string name="personalizar_adicionar_de_volta_descricao">Adicionar %1$s de volta ao Painel</string>
+    <string name="personalizar_botoes_navegacao">Botões da Navegação</string>
+    <string name="personalizar_mostradores_qtd">Mostradores (%1$d de %2$d)</string>
+    <string name="personalizar_adicionar_mostrador">Adicionar mostrador</string>
+    <string name="personalizar_estilo_todos">Aplicar estilo a todos</string>
+    <string name="personalizar_remover_item">Remover</string>
+    <string name="personalizar_remover_mostrador">Remover mostrador</string>
+    <string name="personalizar_remover_nome">Remover %1$s</string>
+    <string name="hud_config_ordem">Ordem no HUD: arraste pela alça (≡).</string>
+</resources>

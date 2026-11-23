@@ -8,6 +8,7 @@
     <color name="texto_primario">#E4E6EA</color>
     <color name="texto_secundario">#A9B0B9</color>
     <color name="status_ok">#66BB6A</color>
+    <color name="favorito">#FFCA28</color>
     <color name="status_pendente">#EF5350</color>
     <color name="status_espera">#8A9099</color>
     <color name="varredura_identificado">#66BB6A</color>

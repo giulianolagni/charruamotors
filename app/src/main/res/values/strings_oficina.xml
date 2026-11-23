@@ -108,5 +108,5 @@
     <string name="varredura_vazia">Escolha um preset ou configure cabeçalho, serviço e faixa e toque em Iniciar. Os PIDs que responderem aparecem aqui com os bytes brutos.</string>
     <string name="varredura_aviso">Só leitura: os serviços 01, 21 e 22 não alteram a ECU. Ignição ligada, motor desligado ou em marcha lenta.</string>
     <string name="varredura_nrc">7F %1$s %2$s · %3$s</string>
-    <string name="varredura_dados">%1$d bytes de dados</string>
+    <string name="varredura_dados">%1$d B de dados</string>
 </resources>

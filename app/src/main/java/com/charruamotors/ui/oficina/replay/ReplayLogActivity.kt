@@ -155,7 +155,8 @@ class ReplayLogActivity : AppCompatActivity() {
     private fun montarChips(aberto: LogAberto, selecionados: List<Int>) {
         val grupo = binding.grupoSensores
         grupo.removeAllViews()
-        for (coluna in aberto.log.colunasComDados) {
+        val ordem = selecionados + aberto.log.colunasComDados.filter { it !in selecionados }
+        for (coluna in ordem) {
             val posicao = selecionados.indexOf(coluna)
             val chip = Chip(this).apply {
                 text = aberto.log.colunas[coluna].rotulo

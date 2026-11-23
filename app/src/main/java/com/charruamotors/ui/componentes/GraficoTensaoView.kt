@@ -178,7 +178,8 @@ class GraficoTensaoView @JvmOverloads constructor(
         pincelRotulo.color = corAlerta
         pincelRotulo.textAlign = Paint.Align.LEFT
         val texto = context.getString(R.string.bateria_grafico_vale, String.format(locale, "%.1f V", valeMin))
-        canvas.drawText(texto, esquerda + 4 * densidade, (yy + pincelRotulo.textSize + 3 * densidade).coerceAtMost(base - 2 * densidade), pincelRotulo)
+        // Acima da linha do vale: abaixo dela o rótulo ficava riscado pela referência de 10,0 V.
+        canvas.drawText(texto, esquerda + 4 * densidade, (yy - 4 * densidade).coerceAtLeast(topo + pincelRotulo.textSize), pincelRotulo)
     }
 
     companion object {

@@ -81,8 +81,9 @@
                 tools:text="182" />
 
             <TextView
+                android:id="@+id/rotulo_hud_map"
                 style="@style/HudRotulo"
-                android:text="@string/hud_rotulo_map" />
+                android:text="@string/hud_rotulo_map_padrao" />
         </LinearLayout>
     </LinearLayout>
 

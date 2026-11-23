@@ -2,6 +2,7 @@ package com.charruamotors.direcao.hud
 
 import com.charruamotors.obd.ValoresSensores
 import com.charruamotors.obd.pid.Pids
+import com.charruamotors.sistema.unidades.UnidadePressao
 import com.charruamotors.ui.util.comoNumero
 
 /** O 4º mostrador do HUD: pressão do rail (diesel common-rail) ou, sem ela, a tensão da bateria. */
@@ -11,8 +12,10 @@ enum class TipoQuartoValor { RAIL, TENSAO }
 data class PainelHud(
     val conectado: Boolean,
     val rpm: String,
-    /** Pressão do coletor (MAP/turbo), em kPa. */
+    /** Pressão do coletor (MAP/turbo), na [unidadeMap] escolhida. */
     val map: String,
+    /** `kPa`, `bar` ou `psi` (rótulo `TURBO/MAP bar`). */
+    val unidadeMap: String = UnidadePressao.PADRAO.simbolo,
     /** Temperatura do líquido de arrefecimento, em °C. */
     val temperatura: String,
     val tipoQuarto: TipoQuartoValor,
@@ -32,14 +35,15 @@ object FormatadorHud {
     /** O PID 0123 vem em kPa; no rail se lê em bar (1 bar = 100 kPa). */
     private const val KPA_POR_BAR = 100.0
 
-    fun montar(dados: ValoresSensores?, conectado: Boolean): PainelHud {
+    fun montar(dados: ValoresSensores?, conectado: Boolean, unidade: UnidadePressao = UnidadePressao.PADRAO): PainelHud {
         val valores = dados.takeIf { conectado }
         val temperatura = valores?.get(Pids.TEMPERATURA_MOTOR)
         val rail = valores?.get(Pids.PRESSAO_RAIL)
         return PainelHud(
             conectado = conectado,
             rpm = formatar(valores?.get(Pids.RPM), 0),
-            map = formatar(valores?.get(Pids.PRESSAO_COLETOR), 0),
+            map = formatar(unidade.deKpa(valores?.get(Pids.PRESSAO_COLETOR)), unidade.casasDecimais),
+            unidadeMap = unidade.simbolo,
             temperatura = formatar(temperatura, 0),
             tipoQuarto = if (rail != null) TipoQuartoValor.RAIL else TipoQuartoValor.TENSAO,
             quarto = if (rail != null) formatar(rail / KPA_POR_BAR, 0) else formatar(valores?.get(Pids.TENSAO_BATERIA), 1),

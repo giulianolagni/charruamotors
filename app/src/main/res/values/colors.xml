@@ -31,4 +31,10 @@
     <color name="veredito_ruim">#B3261E</color>
     <color name="terminal_fundo">#0B0F14</color>
     <color name="terminal_texto">#C8E6C9</color>
+
+    <!-- v1.3: bolinhas de status (menu lateral, checklist de permissões, assistente) -->
+    <color name="status_ok">#2E7D32</color>
+    <color name="status_pendente">#C62828</color>
+    <color name="status_espera">#9E9E9E</color>
+    <color name="branco_secundario">#CCFFFFFF</color>
 </resources>

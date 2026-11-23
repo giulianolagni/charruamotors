@@ -37,6 +37,9 @@ class PreferenciasAutoConexao(context: Context) {
         atualizar { it.copy(veiculoId = id, veiculoDescricao = descricao) }
     }
 
+    /** Restauração do backup: troca a configuração inteira pela do arquivo. */
+    fun restaurar(config: ConfigAutoConexao) = atualizar { config }
+
     @Synchronized
     private fun atualizar(transformar: (ConfigAutoConexao) -> ConfigAutoConexao) {
         val nova = transformar(_config.value)

@@ -345,7 +345,8 @@ Toque em “Novo abastecimento” para começar.</string>
     <string name="hud_status_desconectado">○ SEM CONEXÃO OBD</string>
     <string name="hud_status_alerta">▲ MOTOR QUENTE</string>
     <string name="hud_rotulo_rpm">RPM</string>
-    <string name="hud_rotulo_map">TURBO/MAP kPa</string>
+    <string name="hud_rotulo_map">TURBO/MAP %1$s</string>
+    <string name="hud_rotulo_map_padrao">TURBO/MAP kPa</string>
     <string name="hud_rotulo_temperatura">MOTOR °C</string>
     <string name="hud_rotulo_rail">RAIL bar</string>
     <string name="hud_rotulo_tensao">BATERIA V</string>

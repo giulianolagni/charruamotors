@@ -94,8 +94,8 @@ object ClusterPainel {
         }
     }
 
-    /** Com a alavanca nestes estados a marcha engatada não é mostrada (o `2130` não vale em P/R/N). */
-    private val ALAVANCAS_SEM_MARCHA = setOf("P", "R", "N")
+    /** Com a alavanca nestes estados a marcha engatada não é mostrada (só vale em D/3/2/L). */
+    private val ALAVANCAS_SEM_MARCHA = setOf("P", "R", "N", "P/N")
 
     const val OLEO_ALTA_C = 130.0
     const val BATERIA_BAIXA_V = 12.0

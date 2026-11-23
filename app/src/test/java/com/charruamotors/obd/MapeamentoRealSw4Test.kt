@@ -41,19 +41,20 @@ class MapeamentoRealSw4Test {
     // ---------------------------------------------------------------- 7E1 · 21D9: alavanca + ATF
 
     @Test
-    fun `21D9 no 7E1 decodifica a alavanca em P R e D`() {
-        val p = d9(0x10, 0x00, 0x00, 0x00, 0x42, 0xE0, 0, 0, 0, 0, 0)
+    fun `21D9 no 7E1 decodifica a alavanca pelos bytes C e D em P-N R e D`() {
+        val pn = d9(0x00, 0x00, 0x00, 0x00, 0x42, 0xE0, 0, 0, 0, 0, 0)
         val r = d9(0x00, 0x00, 0x04, 0x00, 0x42, 0xE0, 0, 0, 0, 0, 0)
         val d = d9(0x00, 0x00, 0x00, 0x04, 0x42, 0xE0, 0, 0, 0, 0, 0)
         val alavanca = catalogo["TOYOTA_ALAVANCA"]!!
-        assertEquals("P", alavanca.rotulo(valor("TOYOTA_ALAVANCA", p)))
+        assertEquals("P/N", alavanca.rotulo(valor("TOYOTA_ALAVANCA", pn)))
         assertEquals("R", alavanca.rotulo(valor("TOYOTA_ALAVANCA", r)))
         assertEquals("D", alavanca.rotulo(valor("TOYOTA_ALAVANCA", d)))
         // Sem espaços no ELM327 com ATS0 ou com espaços: o mesmo resultado.
         assertEquals("D", alavanca.rotulo(valor("TOYOTA_ALAVANCA", "61 D9 00 00 00 04 42 E0 00 00 00 00 00\r\r")))
-        // P tem prioridade sobre os bits (b0 == 0x10); estado não mapeado (ex.: N) não vira rótulo chutado.
-        assertEquals("P", alavanca.rotulo(valor("TOYOTA_ALAVANCA", d9(0x10, 0, 0x04, 0x04, 0x42, 0xE0, 0, 0, 0, 0, 0))))
-        assertTrue(ObdParser.parsePid(d9(0, 0, 0, 0, 0x42, 0xE0, 0, 0, 0, 0, 0), alavanca) is RespostaObd.Invalido)
+        // O byte A não decide a alavanca (C/D 00 00 segue P/N com A = 0x10).
+        assertEquals("P/N", alavanca.rotulo(valor("TOYOTA_ALAVANCA", d9(0x10, 0, 0, 0, 0x42, 0xE0, 0, 0, 0, 0, 0))))
+        // Combinação não mapeada (C e D ao mesmo tempo) não vira rótulo chutado.
+        assertTrue(ObdParser.parsePid(d9(0, 0, 0x04, 0x04, 0x42, 0xE0, 0, 0, 0, 0, 0), alavanca) is RespostaObd.Invalido)
     }
 
     @Test
@@ -210,7 +211,8 @@ class MapeamentoRealSw4Test {
         assertFalse(t.enviados.any { it == "ATSH7B0" || it == "ATSH7C0" })
         assertEquals(230 / 512.0, dados["TOYOTA_INJ1"]!!, 1e-9)
         assertEquals(26.0, dados["TOYOTA_ATF_CAMBIO"]!!, 0.01)
-        assertEquals("P", SensorPainel.MARCHA_ALAVANCA.texto(SensorPainel.MARCHA_ALAVANCA.ler(dados), conversor))
+        // C/D 00 00 = P/N no cliente; a sessão (EstimadorCambioA750f) decide P ou N pela velocidade.
+        assertEquals("P/N", SensorPainel.MARCHA_ALAVANCA.texto(SensorPainel.MARCHA_ALAVANCA.ler(dados), conversor))
         assertEquals("N/D", SensorPainel.TRACAO_4X4.texto(SensorPainel.TRACAO_4X4.ler(dados), conversor))
         assertNull(dados["TOYOTA_VSC"])
     }

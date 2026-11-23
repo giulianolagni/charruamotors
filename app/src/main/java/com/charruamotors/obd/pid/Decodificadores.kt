@@ -7,21 +7,30 @@ package com.charruamotors.obd.pid
  */
 object Decodificadores {
 
-    /** Valor de [ALAVANCA_A750F] para cada posição (compatível com os rótulos P R N D 3 2 L). */
+    /** Valor de [ALAVANCA_A750F] para cada posição (compatível com os rótulos P R N D 3 2 L e P/N). */
     const val ALAVANCA_P = 0.0
     const val ALAVANCA_R = 1.0
+    const val ALAVANCA_N = 2.0
     const val ALAVANCA_D = 3.0
 
+    /** `P` ou `N`: o `21D9` não distingue as duas; quem decide é a velocidade (ver `CambioA750f`). */
+    const val ALAVANCA_P_N = 7.0
+
     /**
-     * Alavanca do câmbio A750F, resposta do `7E1` ao `21D9` (`61 D9 b0 b1 b2 b3 ...`): `b0 == 0x10` = P;
-     * bit 2 de `b2` = R; bit 2 de `b3` = D. Qualquer outro estado (N etc.) não foi mapeado nas capturas
-     * e vira `NaN`, em vez de um rótulo chutado.
+     * Alavanca do câmbio A750F pela resposta do `7E1` ao `21D9` (`0:61D9 A B C D ...`), lida nos
+     * bytes C e D (índices 2 e 3), como no log real da SW4 2013: `C = 04, D = 00` = R;
+     * `C = 00, D = 04` = D; `C = 00, D = 00` = P/N. O byte A não indica a alavanca (o `7E0 · 21D9`
+     * devolve sempre `00` nele). Qualquer outra combinação vira `NaN`, em vez de um rótulo chutado.
      */
-    private fun alavancaA750f(b: List<Int>): Double = when {
-        b[0] and 0xFF == 0x10 -> ALAVANCA_P
-        b[2] and 0x04 != 0 -> ALAVANCA_R
-        b[3] and 0x04 != 0 -> ALAVANCA_D
-        else -> Double.NaN
+    private fun alavancaA750f(b: List<Int>): Double {
+        val c = b[2] and 0xFF
+        val d = b[3] and 0xFF
+        return when {
+            c == 0x04 && d == 0x00 -> ALAVANCA_R
+            c == 0x00 && d == 0x04 -> ALAVANCA_D
+            c == 0x00 && d == 0x00 -> ALAVANCA_P_N
+            else -> Double.NaN
+        }
     }
 
     /** Correção do bico injetor [n] (1..4) do `7E0 · 21AD`: `signed short` big-endian ÷ 512 (mm³/st). */

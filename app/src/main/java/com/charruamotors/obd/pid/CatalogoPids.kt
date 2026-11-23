@@ -120,6 +120,24 @@ data class DefinicaoPid(
             )
         }
 
+        /**
+         * Coluna de log da marcha da A750F estimada pelo app (`TOYOTA_MARCHA`, razão rpm/velocidade),
+         * quando o `7E1 · 2130` fica fora do polling por devolver `0xFF` fixo (SW4 2013).
+         */
+        val MARCHA_ESTIMADA_A750F: DefinicaoPid by lazy {
+            DefinicaoPid(
+                comando = "TOYOTA_MARCHA",
+                nome = "Marcha engatada (estimada pela razão RPM/velocidade)",
+                unidade = "",
+                bytes = 0,
+                formula = Formula.compilar("0"),
+                min = 0.0,
+                max = 255.0,
+                rotulos = mapOf(0 to "N", 1 to "1ª", 2 to "2ª", 3 to "3ª", 4 to "4ª", 5 to "5ª", 254 to "R", 255 to "Parado"),
+                doAparelho = true,
+            )
+        }
+
         /** Coluna de log da velocidade pelo GPS do celular ([Pids.VELOCIDADE_GPS]), quando ativa nas Configurações. */
         val VELOCIDADE_GPS: DefinicaoPid by lazy {
             DefinicaoPid(

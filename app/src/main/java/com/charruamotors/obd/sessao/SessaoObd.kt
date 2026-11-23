@@ -4,8 +4,10 @@ import com.charruamotors.direcao.hud.TelemetriaCompartilhada
 import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.calculo.EstequiometriaFlex
 import com.charruamotors.domain.calculo.EstimadorCambioA750f
+import com.charruamotors.domain.calculo.EstimadorCambioGm6T
 import com.charruamotors.domain.calculo.ParametrosMotor
 import com.charruamotors.domain.faixas.FaixasVeiculo
+import com.charruamotors.domain.faixas.PresetVeiculo
 import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.Veiculo
@@ -229,6 +231,9 @@ class SessaoObd(
     /** Alavanca P/N → P ou N e marcha estimada da A750F (SW4), com a memória do último movimento. */
     private val estimadorCambio = EstimadorCambioA750f()
 
+    /** Marcha 1ª–6ª estimada do câmbio GM 6T35/6T40 (Cruze) pela razão rpm/velocidade. */
+    private val estimadorCambioGm = EstimadorCambioGm6T()
+
     // ------------------------------------------------------------------ modo
 
     /** Só troca de modo sem sessão ativa e com o scanner desconectado. */
@@ -342,6 +347,7 @@ class SessaoObd(
         val temLambda = (Pids.COMANDOS_LAMBDA_MEDIDO + Pids.LAMBDA_COMANDADO).any { it in suportados }
         if (temLambda && combustivelAtual != TipoCombustivel.DIESEL) add(DefinicaoPid.RELACAO_AF_REAL)
         if (CambioA750f.CHAVE_ALAVANCA in suportados && CambioA750f.CHAVE_MARCHA !in suportados) add(DefinicaoPid.MARCHA_ESTIMADA_A750F)
+        else if (PresetVeiculo.marcaGm(marcaAtual) && CambioA750f.CHAVE_MARCHA !in suportados) add(DefinicaoPid.MARCHA_ESTIMADA_A750F)
     }
 
     // ------------------------------------------------------------------ execução
@@ -435,7 +441,8 @@ class SessaoObd(
     }
 
     private fun receberAmostra(daEcu: DadosObd, g: GravadorLogsSessao?) {
-        val dados = estimadorCambio.aplicar(comCalculados(comVelocidadeGps(daEcu), combustivelAtual))
+        val base = comCalculados(comVelocidadeGps(daEcu), combustivelAtual)
+        val dados = if (PresetVeiculo.marcaGm(marcaAtual)) estimadorCambioGm.aplicar(base) else estimadorCambio.aplicar(base)
         _dados.value = dados
         _amostras.tryEmit(dados)
         telemetria.publicar(dados, conectado = true)

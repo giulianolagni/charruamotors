@@ -191,6 +191,12 @@ data class ConfigPainel(
         return copy(mostradores = mostradores.mapIndexed { i, m -> if (i == posicao) m.copy(estilo = estilo) else m })
     }
 
+    /** Layout rápido: troca os relógios por [sensores] (sem repetir), no estilo do primeiro relógio atual. */
+    fun aplicarLayout(sensores: List<SensorPainel>): ConfigPainel {
+        val estilo = mostradores.firstOrNull()?.estilo ?: EstiloMostrador.ESPORTIVO
+        return copy(mostradores = OrdemPainel.normalizarMostradores(sensores.distinct().map { Mostrador(it, estilo) }))
+    }
+
     /** "Aplicar estilo a todos". */
     fun aplicarEstiloATodos(estilo: EstiloMostrador): ConfigPainel = copy(mostradores = mostradores.map { it.copy(estilo = estilo) })
 
@@ -229,6 +235,16 @@ data class ConfigPainel(
         )
         val MOSTRADORES_PADRAO = listOf(SensorPainel.RPM, SensorPainel.VELOCIDADE, SensorPainel.TURBO, SensorPainel.TEMP_MOTOR)
             .map { Mostrador(it) }
+
+        /** Layout rápido "Padrão": RPM, Velocidade, Turbo/MAP e Temp. Água. */
+        val LAYOUT_PADRAO = MOSTRADORES_PADRAO.map { it.sensor }
+
+        /** Layout rápido "Turbo Flex (Cruze)": motor turbo a gasolina/etanol com câmbio automático de 6 marchas. */
+        val LAYOUT_TURBO_FLEX = listOf(
+            SensorPainel.RPM, SensorPainel.VELOCIDADE, SensorPainel.TURBO, SensorPainel.RELACAO_AF,
+            SensorPainel.ETANOL, SensorPainel.SONDA_LAMBDA, SensorPainel.RAIL, SensorPainel.TEMP_MOTOR,
+            SensorPainel.TEMP_CAMBIO, SensorPainel.MARCHA_ATUAL,
+        )
     }
 }
 

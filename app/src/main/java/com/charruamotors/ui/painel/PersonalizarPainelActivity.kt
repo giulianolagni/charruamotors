@@ -153,6 +153,8 @@ class PersonalizarPainelActivity : AppCompatActivity() {
         )
         botaoAdicionarMostrador.setOnClickListener { prefs.atualizar { it.adicionarMostrador() } }
         botaoEstiloTodos.setOnClickListener { escolherEstiloParaTodos() }
+        botaoLayoutPadrao.setOnClickListener { prefs.atualizar { it.aplicarLayout(ConfigPainel.LAYOUT_PADRAO) } }
+        botaoLayoutTurboFlex.setOnClickListener { prefs.atualizar { it.aplicarLayout(ConfigPainel.LAYOUT_TURBO_FLEX) } }
     }
 
     /** "Aplicar estilo a todos": padroniza os relógios num estilo só. */
@@ -261,6 +263,9 @@ class PersonalizarPainelActivity : AppCompatActivity() {
             SensorPainel.TEMP_CAMBIO to 78.0,
             SensorPainel.MARCHA_ALAVANCA to 3.0,
             SensorPainel.MARCHA_ATUAL to 4.0,
+            SensorPainel.RELACAO_AF to 14.7,
+            SensorPainel.ETANOL to 27.0,
+            SensorPainel.SONDA_LAMBDA to 1.0,
             SensorPainel.TRACAO_4X4 to 0.0,
             SensorPainel.VSC to 0.0,
         )

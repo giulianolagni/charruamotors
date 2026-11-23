@@ -133,7 +133,7 @@ data class DefinicaoPid(
                 formula = Formula.compilar("0"),
                 min = 0.0,
                 max = 255.0,
-                rotulos = mapOf(0 to "N", 1 to "1ª", 2 to "2ª", 3 to "3ª", 4 to "4ª", 5 to "5ª", 254 to "R", 255 to "Parado"),
+                rotulos = mapOf(0 to "N", 1 to "1ª", 2 to "2ª", 3 to "3ª", 4 to "4ª", 5 to "5ª", 6 to "6ª", 254 to "R", 255 to "Parado"),
                 doAparelho = true,
             )
         }

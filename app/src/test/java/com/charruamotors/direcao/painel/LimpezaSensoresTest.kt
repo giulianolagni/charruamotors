@@ -16,7 +16,7 @@ class LimpezaSensoresTest {
         assertEquals("Temp. Água (°C)", SensorPainel.TEMP_MOTOR.titulo)
         assertEquals("Pressão Rail (bar)", SensorPainel.RAIL.titulo)
         assertEquals("Alavanca (P/R/D)", SensorPainel.MARCHA_ALAVANCA.titulo)
-        assertEquals("Marcha (1ª–5ª)", SensorPainel.MARCHA_ATUAL.titulo)
+        assertEquals("Marcha (1ª–6ª)", SensorPainel.MARCHA_ATUAL.titulo)
         assertEquals(1, titulos.count { it.startsWith("Consumo") })
     }
 

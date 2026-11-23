@@ -474,7 +474,7 @@ cadastro. As faixas aparecem na ficha do veículo (cadastro → *Ficha técnica 
 mostrador que sair delas (o RPM de marcha lenta só vale parado e sem acelerar; a tensão, só com o motor ligado) e
 entram no relatório `.txt` da sessão (lido mín.–máx. e % das leituras fora). Preset **Toyota Hilux SW4 3.0 D-4D 2013
 (1KD-FTV)**: lenta 650–750 rpm, máx. seguro 4.200 rpm, água 80–98 °C, ATF 60–105 °C, bateria/alternador 13,4–14,6 V,
-Common Rail 280–1.800 bar (lenta 280–380 bar), turbo (MAP) 95–215 kPa e bicos #1–#4 entre −3,0 e +3,0 mm³/st.
+Common Rail 280–1.800 bar (lenta 280–600 bar), turbo (MAP) 95–215 kPa e bicos #1–#4 entre −3,0 e +3,0 mm³/st.
 
 **Perfil Chevrolet / GM e Cruze 1.4 Turbo Flex 2018 (LE2)**. Preset com `ATSP6` (ISO 15765-4 CAN 11 bits 500 kbps),
 ECU do motor `7E0` e TCM `7E1`. O motor usa o OBD2 padrão (RPM, velocidade ECU + GPS, MAP/turbo, MAF, temperaturas,

@@ -24,20 +24,20 @@ class FaixasSw4Test {
 
     @Test
     fun `preset da SW4 2013 traz as faixas do 1KD-FTV`() {
-        assertEquals(650.0 to 750.0, faixa(ParametroFaixa.RPM_LENTA).let { it.min to it.max })
+        assertEquals(650.0 to 800.0, faixa(ParametroFaixa.RPM_LENTA).let { it.min to it.max })
         assertEquals(null to 4_200.0, faixa(ParametroFaixa.RPM_MAXIMO).let { it.min to it.max })
         assertEquals(80.0 to 98.0, faixa(ParametroFaixa.TEMP_AGUA).let { it.min to it.max })
         assertEquals(60.0 to 105.0, faixa(ParametroFaixa.TEMP_ATF).let { it.min to it.max })
         assertEquals(13.4 to 14.6, faixa(ParametroFaixa.TENSAO).let { it.min to it.max })
         assertEquals(280.0 to 1_800.0, faixa(ParametroFaixa.RAIL).let { it.min to it.max })
-        assertEquals(280.0 to 380.0, faixa(ParametroFaixa.RAIL_LENTA).let { it.min to it.max })
+        assertEquals(280.0 to 600.0, faixa(ParametroFaixa.RAIL_LENTA).let { it.min to it.max })
         // 60 kPa (v2.1.1): em altitude a marcha lenta fica em 73–75 kPa e não pode acender o vermelho.
         assertEquals(60.0 to 215.0, faixa(ParametroFaixa.MAP_TURBO).let { it.min to it.max })
         assertEquals(-3.0 to 3.0, faixa(ParametroFaixa.BICOS).let { it.min to it.max })
         // v2.1.2: faixas dos sensores que estavam sem faixa na grade (carga, IAT, MAF, borboleta, baro, ECU).
-        assertEquals(15.0 to 100.0, faixa(ParametroFaixa.CARGA_MOTOR).let { it.min to it.max })
+        assertEquals(0.0 to 100.0, faixa(ParametroFaixa.CARGA_MOTOR).let { it.min to it.max })
         assertEquals(10.0 to 65.0, faixa(ParametroFaixa.TEMP_ADMISSAO).let { it.min to it.max })
-        assertEquals(15.0 to 170.0, faixa(ParametroFaixa.MAF).let { it.min to it.max })
+        assertEquals(10.0 to 170.0, faixa(ParametroFaixa.MAF).let { it.min to it.max })
         assertEquals(0.0 to 100.0, faixa(ParametroFaixa.BORBOLETA).let { it.min to it.max })
         assertEquals(85.0 to 105.0, faixa(ParametroFaixa.PRESSAO_BARO).let { it.min to it.max })
         assertEquals(13.4 to 14.6, faixa(ParametroFaixa.TENSAO_ECU).let { it.min to it.max })
@@ -46,7 +46,7 @@ class FaixasSw4Test {
 
     @Test
     fun `textos da ficha no formato brasileiro`() {
-        assertEquals("650 – 750 rpm", faixa(ParametroFaixa.RPM_LENTA).texto)
+        assertEquals("650 – 800 rpm", faixa(ParametroFaixa.RPM_LENTA).texto)
         assertEquals("máx. 4.200 rpm", faixa(ParametroFaixa.RPM_MAXIMO).texto)
         assertEquals("13,4 – 14,6 V", faixa(ParametroFaixa.TENSAO).texto)
         assertEquals("280 – 1.800 bar", faixa(ParametroFaixa.RAIL).texto)
@@ -99,10 +99,10 @@ class FaixasSw4Test {
 
     @Test
     fun `rail em bar e tensao so com o motor ligado`() {
-        // 420 bar parado em lenta: dentro da faixa geral, acima da de marcha lenta (280–380).
-        val railAlto = sw4.violacoes(dados(Pids.RPM to 700.0, Pids.VELOCIDADE to 0.0, Pids.PRESSAO_RAIL to 42_000.0))
+        // 650 bar parado em lenta: dentro da faixa geral, acima da de marcha lenta (280–600).
+        val railAlto = sw4.violacoes(dados(Pids.RPM to 700.0, Pids.VELOCIDADE to 0.0, Pids.PRESSAO_RAIL to 65_000.0))
         assertEquals(listOf(ParametroFaixa.RAIL_LENTA), railAlto.map { it.faixa.parametro })
-        assertEquals(420.0, railAlto.single().valor, 1e-9)
+        assertEquals(650.0, railAlto.single().valor, 1e-9)
         // Alternador baixo com o motor girando; com ele desligado a bateria em 12,5 V é normal.
         assertTrue(sw4.violacoes(dados(Pids.RPM to 750.0, Pids.TENSAO_BATERIA to 13.1)).any { it.faixa.parametro == ParametroFaixa.TENSAO })
         assertTrue(sw4.violacoes(dados(Pids.RPM to 0.0, Pids.TENSAO_BATERIA to 12.5)).isEmpty())

@@ -9,7 +9,7 @@
     <string name="caixa_trocar">Trocar</string>
     <string name="caixa_vinculos">Scanner OBD2: %1$s · Veículo: %2$s</string>
     <string name="caixa_scanner_nenhum">o próximo conectado</string>
-    <string name="caixa_veiculo_nenhum">nenhum (abra a aba OBD2 de um veículo)</string>
+    <string name="caixa_veiculo_nenhum">nenhum (abra o Painel de um veículo)</string>
     <string name="caixa_liberar_bateria">Liberar bateria do app (Sem restrições)</string>
     <string name="caixa_bateria_erro">Abra Configurações → Apps → Charrua OBD Pro → Bateria → Sem restrições</string>
     <string name="caixa_status_inativa">Sem sessão ativa. Com a auto-conexão ligada, a sessão começa sozinha quando o celular conectar ao Bluetooth do carro; os logs .txt e .csv vão para Downloads/CharruaOBD.</string>

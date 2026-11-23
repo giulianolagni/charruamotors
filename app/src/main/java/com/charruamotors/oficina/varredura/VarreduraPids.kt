@@ -200,6 +200,8 @@ object RelatorioVarredura {
         veiculo: String? = null,
         protocolo: String? = null,
         duracaoMs: Long? = null,
+        /** Cruzamento com o catálogo (varredura amigável): acrescenta o nome e o valor dos identificados. */
+        identificacoes: List<IdentificacaoPid> = emptyList(),
     ): String = buildString {
         val c = resultado.config
         appendLine("VARREDURA DE PIDs — Charrua OBD Pro")
@@ -220,9 +222,19 @@ object RelatorioVarredura {
             appendLine("Nenhum identificador respondeu positivamente.")
         } else {
             appendLine("PIDs que responderam (bytes brutos; dados = após o eco do serviço/identificador):")
+            val porComando = identificacoes.associateBy { it.comando }
             for (r in positivas) {
                 val dados = r.dados(c.digitos)
-                appendLine("${r.comando} → ${r.bytesHex}  [${dados.size} byte${if (dados.size == 1) "" else "s"} de dados]")
+                append("${r.comando} → ${r.bytesHex}  [${dados.size} byte${if (dados.size == 1) "" else "s"} de dados]")
+                porComando[r.comando]?.takeIf { it.status == StatusIdentificacao.IDENTIFICADO }?.let { id ->
+                    append("  = ${id.conhecido?.nome}")
+                    if (id.valorTexto.isNotEmpty()) append(": ${id.valorTexto}")
+                }
+                appendLine()
+            }
+            if (identificacoes.isNotEmpty()) {
+                val m = MetricasVarredura.de(identificacoes, resultado.total)
+                appendLine("Identificados no catálogo: ${m.identificados} · desconhecidos (candidatos a mapear): ${m.desconhecidos}")
             }
         }
         val nrcs = resultado.resultados.filter { it.tipo == TipoRespostaPid.NEGATIVA }.groupingBy { it.nrc }.eachCount()

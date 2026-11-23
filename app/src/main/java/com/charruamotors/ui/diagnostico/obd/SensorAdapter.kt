@@ -7,26 +7,25 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.charruamotors.R
 import com.charruamotors.databinding.ItemSensorBinding
-import com.charruamotors.sistema.unidades.UnidadePressao
+import com.charruamotors.sistema.unidades.ConversorUnidades
 import com.charruamotors.ui.util.comoNumero
 
 /**
- * Grade com todos os PIDs suportados pela ECU e o valor ao vivo de cada um. Os PIDs de pressão
- * (unidade `kPa` no catálogo: MAP/turbo, rail, combustível, barométrica) aparecem na unidade
- * escolhida nas Configurações.
+ * Lista rápida / grade com os PIDs suportados pela ECU e o valor ao vivo de cada um, nas unidades
+ * globais das Configurações (métrico ou imperial; pressões em kPa/bar/psi).
  */
 class SensorAdapter : ListAdapter<LeituraSensor, SensorAdapter.ViewHolder>(Diff) {
 
-    private var unidadePressao: UnidadePressao = UnidadePressao.PADRAO
+    private var conversor: ConversorUnidades = ConversorUnidades.PADRAO
 
-    fun definirUnidadePressao(unidade: UnidadePressao) {
-        if (unidade == unidadePressao) return
-        unidadePressao = unidade
+    fun definirConversor(novo: ConversorUnidades) {
+        if (novo == conversor) return
+        conversor = novo
         notifyItemRangeChanged(0, itemCount, PAYLOAD_VALOR)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder =
-        ViewHolder(ItemSensorBinding.inflate(LayoutInflater.from(parent.context), parent, false)) { unidadePressao }
+        ViewHolder(ItemSensorBinding.inflate(LayoutInflater.from(parent.context), parent, false)) { conversor }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) = holder.bind(getItem(position))
 
@@ -37,7 +36,7 @@ class SensorAdapter : ListAdapter<LeituraSensor, SensorAdapter.ViewHolder>(Diff)
 
     class ViewHolder(
         private val binding: ItemSensorBinding,
-        private val unidadePressao: () -> UnidadePressao,
+        private val conversor: () -> ConversorUnidades,
     ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(leitura: LeituraSensor) {
             binding.textoNome.text = leitura.definicao.nome
@@ -48,13 +47,9 @@ class SensorAdapter : ListAdapter<LeituraSensor, SensorAdapter.ViewHolder>(Diff)
         fun bindValor(leitura: LeituraSensor) {
             val contexto = binding.root.context
             val def = leitura.definicao
-            val pressao = unidadePressao().takeIf { UnidadePressao.ehPressao(def.unidade) }
             binding.textoValor.text = leitura.valor?.let { valor ->
-                if (pressao != null) {
-                    contexto.getString(R.string.obd_valor_unidade, pressao.deKpa(valor).comoNumero(pressao.casasPara(def.casasDecimais)), pressao.simbolo)
-                } else {
-                    contexto.getString(R.string.obd_valor_unidade, valor.comoNumero(def.casasDecimais), def.unidade)
-                }
+                val v = conversor().converter(valor, def.unidade, def.casasDecimais)
+                contexto.getString(R.string.obd_valor_unidade, v.valor.comoNumero(v.casas), v.unidade)
             } ?: contexto.getString(R.string.valor_indisponivel)
             binding.root.contentDescription = "${def.nome}: ${binding.textoValor.text}"
         }

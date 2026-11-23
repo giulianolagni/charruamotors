@@ -1,6 +1,7 @@
 package com.charruamotors.sistema.unidades
 
 import com.charruamotors.direcao.hud.FormatadorHud
+import com.charruamotors.direcao.painel.SensorPainel
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.pid.Pids
 import org.junit.Assert.assertEquals
@@ -76,17 +77,16 @@ class UnidadePressaoTest {
     @Test
     fun `HUD mostra o turbo na unidade escolhida`() {
         val dados = DadosObd(mapOf(Pids.PRESSAO_COLETOR to 182.0))
-        assertEquals("182", FormatadorHud.montar(dados, conectado = true).map)
-        assertEquals("kPa", FormatadorHud.montar(dados, conectado = true).unidadeMap)
+        fun turbo(unidade: UnidadePressao, conectado: Boolean = true) =
+            FormatadorHud.montar(dados, conectado, conversor = ConversorUnidades(SistemaUnidades.METRICO, unidade))
+                .celula(SensorPainel.TURBO)!!
 
-        val bar = FormatadorHud.montar(dados, conectado = true, unidade = UnidadePressao.BAR)
-        assertEquals("1,82", bar.map)
-        assertEquals("bar", bar.unidadeMap)
-
-        val psi = FormatadorHud.montar(dados, conectado = true, unidade = UnidadePressao.PSI)
-        assertEquals("26,4", psi.map)
-        assertEquals("psi", psi.unidadeMap)
-
-        assertEquals(FormatadorHud.SEM_VALOR, FormatadorHud.montar(dados, conectado = false, unidade = UnidadePressao.BAR).map)
+        assertEquals("182", FormatadorHud.montar(dados, conectado = true).celula(SensorPainel.TURBO)!!.valor)
+        assertEquals("TURBO/MAP kPa", turbo(UnidadePressao.KPA).rotulo)
+        assertEquals("1,82", turbo(UnidadePressao.BAR).valor)
+        assertEquals("TURBO/MAP bar", turbo(UnidadePressao.BAR).rotulo)
+        assertEquals("26,4", turbo(UnidadePressao.PSI).valor)
+        assertEquals("TURBO/MAP psi", turbo(UnidadePressao.PSI).rotulo)
+        assertEquals(FormatadorHud.SEM_VALOR, turbo(UnidadePressao.BAR, conectado = false).valor)
     }
 }

@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aba Oficina: ferramentas de diagnóstico em cards grandes (bateria, DTCs, varredura e terminal). -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/margem_tela">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/oficina_aba_titulo"
+            android:textAppearance="?attr/textAppearanceTitleLarge" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_minimo"
+            android:text="@string/oficina_aba_descricao"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="@color/texto_secundario" />
+
+        <!-- Status da conexão: as ferramentas usam o scanner do Painel -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/faixa_conexao"
+            style="@style/Widget.Material3.CardView.Filled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_medio"
+            android:clickable="true"
+            android:focusable="true"
+            app:cardCornerRadius="20dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:minHeight="44dp"
+                android:orientation="horizontal"
+                android:paddingHorizontal="@dimen/espaco_medio">
+
+                <View
+                    android:id="@+id/ponto_conexao"
+                    android:layout_width="10dp"
+                    android:layout_height="10dp"
+                    android:background="@drawable/ponto_status"
+                    android:backgroundTint="@color/status_espera" />
+
+                <TextView
+                    android:id="@+id/texto_conexao"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/espaco_pequeno"
+                    android:layout_weight="1"
+                    android:textAppearance="?attr/textAppearanceLabelLarge"
+                    tools:text="Scanner desconectado · toque para conectar no Painel" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <include
+            android:id="@+id/card_bateria"
+            layout="@layout/item_card_oficina" />
+
+        <include
+            android:id="@+id/card_falhas"
+            layout="@layout/item_card_oficina" />
+
+        <include
+            android:id="@+id/card_varredura"
+            layout="@layout/item_card_oficina" />
+
+        <include
+            android:id="@+id/card_terminal"
+            layout="@layout/item_card_oficina" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_medio"
+            android:text="@string/oficina_descricao"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="@color/texto_secundario" />
+    </LinearLayout>
+</ScrollView>

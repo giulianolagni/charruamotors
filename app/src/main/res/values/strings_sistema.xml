@@ -29,7 +29,7 @@
     <string name="oficina_menu_bateria">Teste de Bateria e Alternador</string>
     <string name="oficina_menu_terminal">Terminal ELM327 e Varredura de PIDs</string>
     <string name="oficina_menu_replay">Replay de logs CSV</string>
-    <string name="oficina_menu_requer_conexao">Conecte o scanner na aba OBD2 para usar esta ferramenta</string>
+    <string name="oficina_menu_requer_conexao">Conecte o scanner na aba Painel para usar esta ferramenta</string>
 
     <!-- Sair -->
     <string name="sair_titulo">Sair da conta?</string>
@@ -107,7 +107,7 @@
     <string name="permissao_bateria">Bateria \"Sem restrições\"</string>
     <string name="permissao_bateria_descricao">Evita que o Android/Samsung bloqueie a sessão automática em segundo plano.</string>
     <string name="permissao_acesso_notificacoes">Acesso a Notificações (Spotify)</string>
-    <string name="permissao_acesso_notificacoes_descricao">Mini-player de música na aba OBD2. Nenhuma notificação é lida.</string>
+    <string name="permissao_acesso_notificacoes_descricao">Mini-player de música na aba Painel. Nenhuma notificação é lida.</string>
     <string name="permissao_sobrepor">Sobrepor a outros apps (HUD)</string>
     <string name="permissao_sobrepor_descricao">Painel flutuante com RPM, turbo e temperatura sobre o Waze.</string>
     <string name="permissao_bloqueada">Permissão bloqueada: libere em Configurações → Apps → Charrua OBD Pro → Permissões</string>
@@ -138,7 +138,7 @@
     <string name="assistente_3_descricao">A sessão automática usa este veículo no cabeçalho e no nome dos logs.</string>
     <string name="assistente_3_sem_veiculos">Nenhum veículo cadastrado ainda. Depois de cadastrar, escolha o padrão em Configurações.</string>
     <string name="assistente_4_titulo">Recursos de direção (opcional)</string>
-    <string name="assistente_4_descricao">Mini-player do Spotify na aba OBD2 e HUD flutuante sobre o Waze. Dá para ativar depois pelo Checklist de Permissões.</string>
+    <string name="assistente_4_descricao">Mini-player do Spotify na aba Painel e HUD flutuante sobre o Waze. Dá para ativar depois pelo Checklist de Permissões.</string>
     <string name="assistente_dispositivo">%1$s\n%2$s</string>
 
     <!-- Aba OBD2: faixa da caixa-preta -->

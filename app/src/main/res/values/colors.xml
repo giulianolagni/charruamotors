@@ -37,4 +37,13 @@
     <color name="status_pendente">#C62828</color>
     <color name="status_espera">#9E9E9E</color>
     <color name="branco_secundario">#CCFFFFFF</color>
+
+    <!-- v1.4: card do Terminal na aba Oficina e a barra colorida da varredura -->
+    <color name="terminal_card">#263238</color>
+    <color name="varredura_identificado">#2E7D32</color>
+    <color name="varredura_desconhecido">#1565C0</color>
+    <color name="varredura_ignorado">#9E9E9E</color>
+    <color name="varredura_trilho">#1F000000</color>
+    <color name="terminal_traducao">#80DEEA</color>
+    <color name="terminal_descricao">#90A4AE</color>
 </resources>

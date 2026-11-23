@@ -16,16 +16,12 @@ import com.charruamotors.domain.calculo.Cronometro0a100
 import com.charruamotors.domain.calculo.ParametrosMotor
 import com.charruamotors.domain.calculo.TelemetriaCalculada
 import com.charruamotors.domain.model.EstadoConexaoObd
-import com.charruamotors.domain.model.LeituraObd
 import com.charruamotors.domain.model.Veiculo
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.DispositivoObd
-import com.charruamotors.obd.DtcLido
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
 import com.charruamotors.obd.ObdClientFake
-import com.charruamotors.obd.dtc.CatalogoDtc
-import com.charruamotors.obd.dtc.TipoDtc
 import com.charruamotors.obd.log.DataLogger
 import com.charruamotors.obd.log.GeradorCsv
 import com.charruamotors.obd.log.LogsSessaoSalvos
@@ -57,7 +53,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -85,12 +80,12 @@ sealed interface EventoObd {
  * `ObdSessaoService`): ao abrir a tela com uma sessão já ativa — por exemplo, a automática
  * iniciada pelo Bluetooth do carro com o celular no bolso —, o ViewModel só a assume, ao vivo,
  * sem abrir outro socket. Aqui fica o que é da tela: computador de bordo, cronômetro 0–100 km/h,
- * gráfico ao vivo, Data Logger CSV manual, leitura completa de falhas (modos 03, 07, 0A e 02) e as
- * preferências da caixa-preta.
+ * gráfico ao vivo, Data Logger CSV manual e as preferências da caixa-preta. A leitura de falhas
+ * fica na Oficina (`DiagnosticoErrosViewModel`) e o histórico de leituras na aba Histórico.
  *
  * @param sessao sessão OBD compartilhada (cliente do modo atual, estado e telemetria)
  * @param preferencias auto-conexão, logs automáticos e vínculos de scanner/veículo (null = padrão, sem persistir)
- * @param veiculo veículo do diagnóstico: marca (tabela de DTCs), modelo (cilindrada) e combustível
+ * @param veiculo veículo do diagnóstico: modelo (cilindrada) e combustível
  * @param salvarCsv grava um arquivo (nome + escrita em streaming) e devolve onde ficou
  */
 class ObdViewModel(
@@ -100,7 +95,6 @@ class ObdViewModel(
     private val clientePorModo: (ModoObd) -> ObdClient,
     private val repository: DiagnosticoRepository,
     private val catalogoPids: CatalogoPids,
-    private val catalogoDtc: CatalogoDtc,
     private val veiculo: suspend () -> Veiculo?,
     private val salvarCsv: suspend (String, (Writer) -> Unit) -> ArquivoExportado,
     private val relogio: () -> Long = System::currentTimeMillis,
@@ -121,11 +115,6 @@ class ObdViewModel(
 
     /** Preferências da caixa-preta. */
     val configAuto: StateFlow<ConfigAutoConexao> = preferencias?.config ?: MutableStateFlow(ConfigAutoConexao())
-
-    /** Últimas leituras salvas no histórico do veículo (a lista completa pode ser grande). */
-    val historicoLeituras: StateFlow<List<LeituraObd>> = repository.observarLeituras(veiculoId)
-        .map { it.take(MAX_HISTORICO) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Demonstração: o [ObdClientFake] (modo simulado) falha ao conectar, mostrando o estado Erro. */
     private val clienteSimulado: ObdClientFake? get() = clientePorModo(ModoObd.SIMULADO) as? ObdClientFake
@@ -177,14 +166,6 @@ class ObdViewModel(
             InfoEcu(vin, lido, pids.count { it in catalogoPids }, perfil, conexao)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InfoEcu())
 
-    /** Falhas lidas por categoria + Freeze Frame; null = ainda não lidas nesta conexão. */
-    private val _diagnostico = MutableStateFlow<ResultadoDiagnostico?>(null)
-    val diagnostico: StateFlow<ResultadoDiagnostico?> = _diagnostico.asStateFlow()
-
-    private val _ocupado = MutableStateFlow(false)
-    /** true enquanto lê/limpa DTCs (desabilita os botões). */
-    val ocupado: StateFlow<Boolean> = _ocupado.asStateFlow()
-
     private val logger = DataLogger()
     private val _estadoLog = MutableStateFlow(EstadoLog())
     val estadoLog: StateFlow<EstadoLog> = _estadoLog.asStateFlow()
@@ -205,9 +186,6 @@ class ObdViewModel(
     /** Veículo do diagnóstico, carregado uma vez (marca, modelo e combustível). */
     private val dadosVeiculo = viewModelScope.async { runCatching { veiculo() }.getOrNull() }
 
-    /** Marca do veículo (carregada uma vez) para a tabela de DTCs do fabricante. */
-    private var marca: String? = null
-
     /** Cilindrada e combustível para o consumo; padrão até o veículo carregar. */
     private var parametrosMotor = ParametrosMotor()
 
@@ -220,7 +198,6 @@ class ObdViewModel(
                     iniciarViagem()
                     _eventos.send(EventoObd.Mensagem(R.string.obd_conectado))
                 } else {
-                    _diagnostico.value = null
                     if (cronometro0a100.armado) _cronometro.value = CronometroUi(cronometro0a100.desarmar(), cronometro0a100.melhorTempoMs)
                     // Conexão caiu durante a gravação: salva o que já foi coletado.
                     if (logger.gravando) pararLog()
@@ -232,7 +209,6 @@ class ObdViewModel(
         if (estado.value is EstadoConexaoObd.Conectado) iniciarViagem()
         viewModelScope.launch {
             val v = dadosVeiculo.await()
-            marca = v?.marca
             parametrosMotor = ParametrosMotor.deVeiculo(v?.modelo, v?.tipoCombustivel)
             _computador.value = _computador.value.copy(motor = parametrosMotor)
             // Último veículo aberto na aba OBD2 = veículo da sessão automática do carro.
@@ -431,9 +407,9 @@ class ObdViewModel(
     private suspend fun exportar(sessaoLog: SessaoLog): ArquivoExportado =
         salvarCsv(GeradorCsv.nomeArquivo(sessaoLog.inicioMs)) { saida -> GeradorCsv.escrever(sessaoLog, saida) }
 
-    // ------------------------------------------------------------------ histórico e DTCs
+    // ------------------------------------------------------------------ leitura salva
 
-    /** Salva a última leitura recebida no histórico do veículo. */
+    /** Salva a última leitura recebida no histórico do veículo (aba Histórico → Viagens). */
     fun salvarLeitura() {
         val atual = dados.value
         if (atual == null) {
@@ -443,84 +419,6 @@ class ObdViewModel(
         viewModelScope.launch {
             repository.salvarLeitura(atual.paraLeitura(veiculoId))
             _eventos.send(EventoObd.Mensagem(R.string.obd_leitura_salva))
-        }
-    }
-
-    /**
-     * Diagnóstico completo: confirmados (03), pendentes (07), permanentes (0A) e Freeze Frame (02).
-     * Os confirmados viram o conjunto de códigos ativos do veículo no histórico (os anteriores são
-     * marcados como limpos). Só a falha do modo 03 aborta; os demais modos são opcionais na ECU.
-     */
-    fun lerCodigos() {
-        if (_ocupado.value) return
-        viewModelScope.launch {
-            _ocupado.value = true
-            try {
-                lerDiagnostico(anunciar = true)
-            } finally {
-                _ocupado.value = false
-            }
-        }
-    }
-
-    private suspend fun lerDiagnostico(anunciar: Boolean) {
-        val confirmados = cliente.lerCodigosFalha().getOrElse {
-            _eventos.send(EventoObd.Texto(it.message ?: ""))
-            return
-        }
-        val pendentes = cliente.lerCodigosPendentes().getOrNull()
-        val permanentes = cliente.lerCodigosPermanentes().getOrNull()
-        val freezeFrame = cliente.lerFreezeFrame().getOrNull()
-
-        val exibicaoConfirmados = confirmados.map { exibir(TipoDtc.CONFIRMADO, it) }
-        repository.marcarCodigosComoLimpos(veiculoId)
-        exibicaoConfirmados.forEach { dtc ->
-            repository.salvarCodigo(DtcLido(dtc.codigo, dtc.info.titulo).paraCodigoFalha(veiculoId))
-        }
-        val resultado = ResultadoDiagnostico(
-            confirmados = exibicaoConfirmados,
-            pendentes = pendentes?.map { exibir(TipoDtc.PENDENTE, it) },
-            permanentes = permanentes?.map { exibir(TipoDtc.PERMANENTE, it) },
-            freezeFrame = freezeFrame,
-            infoFreezeFrame = freezeFrame?.dtc?.let { catalogoDtc.descrever(it, marca) },
-        )
-        _diagnostico.value = resultado
-        // A leitura da tela também vale para o relatório .txt da sessão.
-        sessao.registrarDtcs(
-            confirmados = resultado.confirmados.map(::paraDtcLido),
-            pendentes = resultado.pendentes?.map(::paraDtcLido),
-            permanentes = resultado.permanentes?.map(::paraDtcLido),
-        )
-        if (anunciar) {
-            _eventos.send(
-                EventoObd.Mensagem(if (resultado.total == 0) R.string.obd_sem_codigos else R.string.obd_codigos_lidos),
-            )
-        }
-    }
-
-    private fun exibir(tipo: TipoDtc, dtc: DtcLido) = DtcExibicao(tipo, catalogoDtc.descrever(dtc.codigo, marca))
-
-    private fun paraDtcLido(dtc: DtcExibicao) = DtcLido(dtc.codigo, dtc.info.titulo)
-
-    /**
-     * Limpa os códigos na ECU (modo 04) e relê tudo: pendentes e Freeze Frame somem, mas os
-     * permanentes continuam até a própria ECU validar o reparo. A UI deve pedir confirmação antes.
-     */
-    fun limparCodigos() {
-        if (_ocupado.value) return
-        viewModelScope.launch {
-            _ocupado.value = true
-            try {
-                cliente.limparCodigosFalha()
-                    .onSuccess {
-                        repository.marcarCodigosComoLimpos(veiculoId)
-                        _eventos.send(EventoObd.Mensagem(R.string.obd_codigos_limpos))
-                        lerDiagnostico(anunciar = false)
-                    }
-                    .onFailure { _eventos.send(EventoObd.Texto(it.message ?: "")) }
-            } finally {
-                _ocupado.value = false
-            }
         }
     }
 
@@ -541,8 +439,6 @@ class ObdViewModel(
     }
 
     companion object {
-        private const val MAX_HISTORICO = 10
-
         /** Nome de adaptador ELM327/OBD2 (o S24 costuma ter fones, relógio e carro pareados). */
         fun pareceScannerObd(dispositivo: DispositivoObd): Boolean = EscolhaScanner.pareceScannerObd(dispositivo)
 
@@ -565,7 +461,6 @@ class ObdViewModel(
                     clientePorModo = app::obdClientDe,
                     repository = app.diagnosticoRepository,
                     catalogoPids = app.catalogoPids,
-                    catalogoDtc = app.catalogoDtc,
                     veiculo = { app.veiculoRepository.buscarPorId(veiculoId) },
                     salvarCsv = { nome, escrever -> app.exportadorCsv.salvar(nome, escrever) },
                 )

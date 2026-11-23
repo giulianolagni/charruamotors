@@ -26,6 +26,7 @@ Disciplina: Desenvolvimento Mobile II. Professor: Jaqson.
 - [Direção: Spotify, Waze e Modo HUD (v1.1)](#direção-spotify-waze-e-modo-hud-v11)
 - [Pacote Oficina (v1.2)](#pacote-oficina-v12)
 - [Menu lateral, Configurações e Assistente (v1.3)](#menu-lateral-configurações-e-assistente-v13)
+- [Abas, personalização do Painel e unidades globais (v1.4)](#abas-personalização-do-painel-e-unidades-globais-v14)
 - [Regras de negócio e cálculos](#regras-de-negócio-e-cálculos)
 - [Arquitetura e stack](#arquitetura-e-stack)
 - [Como executar](#como-executar)
@@ -81,13 +82,14 @@ O app tem quatro Activities, todas com o mesmo tema Material 3 e a mesma Toolbar
 
 Campos: marca, modelo, ano, placa, cor, km atual, tipo de combustível e capacidade do tanque.
 
-### 4. Diagnóstico e histórico (`DiagnosticoActivity`)
+### 4. Tela do veículo (`DiagnosticoActivity`)
 
-Três abas com `TabLayout` + `ViewPager2`, cada uma um Fragment:
+Desde a v1.4, quatro abas na navegação inferior (`BottomNavigationView` + `ViewPager2` sem deslizar), cada uma um Fragment:
 
-- **Diagnóstico OBD2:** escolha entre scanner simulado e Bluetooth real, seleção do dispositivo pareado, conexão, dados em tempo real a cada 1 s (RPM, velocidade, temperatura do motor, carga do motor e tensão da bateria), gravação da leitura no histórico, leitura dos códigos de falha (modo `03`) com descrição em português e limpeza (modo `04`) com confirmação.
+- **Painel:** direção e mostradores — blocos reordenáveis (Músicas, Navegação e Marcadores), conexão com o scanner simulado ou Bluetooth real, gráfico ao vivo, computador de bordo, cronômetro 0–100, lista rápida de sensores, gravação da leitura e informações da ECU.
+- **Oficina:** cards grandes para Teste de Bateria, Diagnóstico de Erros (DTCs), Varredura de PIDs e Terminal ELM327.
 - **Manutenções:** histórico com edição e exclusão. O cadastro abre em BottomSheet: tipo de serviço, data, km, custo, oficina, descrição e lista dinâmica de peças trocadas (nome, quantidade e valor). No topo da lista aparece a previsão das próximas manutenções.
-- **Abastecimentos:** histórico com edição e exclusão. O cadastro abre em BottomSheet: data, km, litros, valor, combustível e tanque cheio. No topo da lista ficam o consumo médio e o custo por km.
+- **Histórico:** abastecimentos (consumo médio, custo por km e CRUD em BottomSheet), logs CSV/TXT salvos e o diário de viagens.
 
 ---
 
@@ -296,6 +298,64 @@ referências entre tabelas), mostra um resumo para confirmar e troca tudo numa �
 
 ---
 
+## Abas, personalização do Painel e unidades globais (v1.4)
+
+**Quatro abas na navegação inferior.** A tela do veículo virou Painel · Oficina · Manutenções · Histórico. O
+Painel fica só com o que se usa dirigindo; as ferramentas de diagnóstico ganharam a aba Oficina e os registros
+foram reunidos no Histórico.
+
+**Personalizar Painel (`PersonalizarPainelActivity`, botão no topo da aba Painel).** Tudo é salvo na hora em
+`PreferenciasPainel` (arquivo `painel`) e a aba se redesenha sozinha:
+
+- *ordem do topo* por arrastar e soltar (`ItemTouchHelper`, pela alça): Músicas (Spotify), Navegação (atalhos do
+  Waze e Modo HUD) e Marcadores (sensores);
+- *estilo dos mostradores* do `GaugeView`, com prévia ao vivo: **Esportivo** (ponteiro em arco), **Digital
+  Moderno** (números grandes e anel de progresso) e **Fita/Off-road** (barra linear, mais baixa que larga);
+- *os 4 relógios principais*: qualquer um dos 14 sensores de `SensorPainel` (RPM, velocidade, turbo, temperaturas
+  do motor/admissão/óleo, carga, borboleta, acelerador, bateria, common rail, MAF, tanque e consumo), cada um com a
+  escala da unidade de exibição; escolher um sensor que já está em outro relógio troca os dois;
+- *lista rápida*: os PIDs que aparecem na grade (nenhum marcado = todos os suportados; "Ver todos" no Painel);
+- *HUD flutuante* e "Restaurar padrão".
+
+**HUD flutuante customizável.** Ao tocar em Modo HUD, uma tela de ativação pergunta o tamanho — *Minimizado* (só
+RPM e Turbo, painel mais estreito) ou *Expandido* (até 4 sensores fixados) — e o estilo: Números, Números grandes
+ou Com barra (fração da escala). `FormatadorHud` monta as células (lógica pura) e o `HudFlutuanteService` as cria
+dinamicamente. O Rail sem leitura cai para a tensão da bateria e o alerta vermelho continua acima de 105 °C.
+
+**Aba Oficina (`OficinaFragment`).** Cards grandes e ilustrados, com o status do scanner no topo:
+🔋 Teste de Bateria (guiado, com laudo), 🔍 Diagnóstico de Erros (`DiagnosticoErrosActivity`: confirmadas,
+pendentes, permanentes, Freeze Frame e limpeza com confirmação), 📡 Varredura de PIDs e 💻 Terminal ELM327.
+
+**Varredura amigável.** `IdentificadorPids` cruza cada resposta com os três catálogos do app — PIDs padrão do modo
+01, espelhos dos modos 21/22 da cascata (`210C` = RPM no `7E0`) e perfis de montadora (`2182` = ATF no `7E1`) — e
+decodifica o valor pela fórmula do catálogo, já na unidade global. A lista mostra, em tempo real,
+`Identificado: Rotação do motor (PID 210C) · 850 rpm`, `Desconhecido (PID 21D4 - resposta: 61D4...)` ou
+`Sem resposta`, com uma barra colorida (`BarraVarreduraView`: identificados, desconhecidos, ignorados e o que
+falta), as métricas `X sensores encontrados · Y identificados · Z ignorados` e o filtro rápido
+**"Ver apenas o que a SW4 respondeu"** (o modelo do veículo). O relatório inclui o nome e o valor dos identificados.
+
+**Terminal didático.** Área de ajuda com sugestões (`Consulte a bateria com ATRV`, `Altere o foco com ATSH 7E0`,
+`Leia o RPM com 210C`), atalhos de um toque (`ATRV`, `ATDP`, `ATSH 7E0`, `ATSH 7E1`, `210C`, `0902`, `010C`, `03`,
+`ATSH 7DF`) e, para cada linha do log, a descrição do comando e a resposta traduzida ao lado do hex bruto
+(`TradutorTerminal`: tensão com diagnóstico, protocolo, foco do `ATSH`, VIN, falhas, PIDs padrão e de montadora no
+contexto do `ATSH` ativo, erros do ELM327 e respostas negativas `7F`). O botão **Laudo** (`LaudoTerminal`) gera o
+resumo da sessão, as leituras traduzidas e o log bruto para copiar/compartilhar.
+
+**Histórico (`HistoricoFragment`).** Abastecimentos, Logs (CSV do Data Logger e da caixa-preta, abertos direto no
+replay; toque longo compartilha) e Viagens (relatórios `.txt` de cada sessão da caixa-preta e as leituras salvas).
+
+**Unidades globais (Configurações → Aparência e Painel).** Métrico (km/h, °C, kPa ou bar, km/L) ou Imperial (mph,
+°F, psi, MPG do galão americano, milhas e galões). `ConversorUnidades` (puro) converte pela unidade do catálogo e é
+aplicado na hora nos mostradores e suas escalas, na lista rápida, no computador de bordo, no cronômetro, no Freeze
+Frame, nas leituras salvas, na varredura, no Terminal e no HUD. No imperial a pressão é sempre psi; logs `.csv`/`.txt`
+e o banco continuam no SI do OBD2.
+
+**Ícone 1.4.** Espora gaúcha cromada integrada com um plug OBD2 de 16 pinos, arco de LEDs azuis (como um
+conta-giros) e silhueta off-road sobre fibra de carbono, em adaptive icon com camada monocromática (ícones temáticos
+do Android 13+). É desenhado por código: `docs/icone/IconeCharrua.java` (Java2D) gera todas as densidades.
+
+---
+
 ## Regras de negócio e cálculos
 
 Validações e cálculos ficam na camada de domínio (`domain/`), sem dependência do Android, e são cobertos por testes unitários. A UI apenas exibe os resultados.
@@ -414,31 +474,35 @@ app/src/main/java/com/charruamotors/
 ├── direcao/                 # Card de direção (v1.1):
 │   ├── midia/               #   ControladorMidia, MidiaNotificacaoService, EstadoMidia (lógica pura)
 │   ├── waze/                #   AtalhosWaze (deep links, puro) e AbridorWaze
-│   └── hud/                 #   HudFlutuanteService, FormatadorHud/PainelHud, TelemetriaCompartilhada
+│   ├── hud/                 #   HudFlutuanteService, FormatadorHud/PainelHud, TelemetriaCompartilhada
+│   └── painel/              #   v1.4: ConfigPainel, SensorPainel, OrdemPainel e PreferenciasPainel
 ├── obd/                     # ObdClient, Elm327BluetoothClient, ObdClientFake (+ EcuSimulada), ObdParser
 ├── sistema/                 # v1.3, lógica pura: StatusCaixaPreta e PreSelecaoAssistente,
 │   ├── preferencias/        #   PreferenciasApp (tema, unidade, flag do assistente), TemaApp
-│   ├── unidades/            #   UnidadePressao (kPa → bar / psi, escala do mostrador)
+│   ├── unidades/            #   UnidadePressao e ConversorUnidades (métrico ↔ imperial)
 │   ├── permissoes/          #   ChecklistPermissoes (regras por versão) e LeitorPermissoes
 │   └── backup/              #   BackupJson (serialização/validação) e BackupRepository (SAF)
 ├── oficina/                 # Pacote Oficina (v1.2), lógica pura:
 │   ├── bateria/             #   TesteBateria (máquina de estados), ClassificadorBateria, LaudoBateria
 │   ├── replay/              #   LeitorCsvLog, AnaliseReplay (estatísticas, normalização, zoom/arraste)
-│   ├── varredura/           #   VarreduraPids (faixas, classificação, execução), RelatorioVarredura
-│   └── terminal/            #   FormatadorTerminal (log com latência)
+│   ├── varredura/           #   VarreduraPids, RelatorioVarredura e IdentificadorPids (varredura amigável)
+│   └── terminal/            #   FormatadorTerminal, TradutorTerminal e LaudoTerminal
 └── ui/
     ├── login/               # LoginActivity + LoginViewModel
     ├── dashboard/           # DashboardActivity, VeiculoAdapter, DashboardViewModel
     ├── veiculo/             # VeiculoFormActivity + VeiculoFormViewModel
-    ├── diagnostico/         # DiagnosticoActivity, PagerAdapter e as abas:
-    │   ├── obd/             #   ObdFragment, ObdViewModel, CodigoFalhaAdapter
+    ├── diagnostico/         # DiagnosticoActivity (navegação inferior), PagerAdapter e as abas:
+    │   ├── obd/             #   Painel: ObdFragment, ObdViewModel, SensorAdapter
+    │   ├── oficina/         #   OficinaFragment (cards das ferramentas)
     │   ├── manutencoes/     #   ManutencoesFragment, ManutencaoSheet, adapter, ViewModel
-    │   └── abastecimentos/  #   AbastecimentosFragment, AbastecimentoSheet, adapter, ViewModel
-    ├── oficina/             # Telas do Pacote Oficina: bateria/, replay/ e terminal/
+    │   ├── historico/       #   HistoricoFragment e HistoricoViewModel
+    │   └── abastecimentos/  #   AbastecimentosFragment (dentro do Histórico), AbastecimentoSheet, ViewModel
+    ├── painel/              # PersonalizarPainelActivity e EditorConfigHud
+    ├── oficina/             # Telas da Oficina: bateria/, falhas/, replay/ e terminal/
     ├── assistente/          # AssistenteActivity (Assistente de Primeira Abertura)
     ├── configuracoes/       # ConfiguracoesActivity e DialogosCaixaPreta
     ├── permissoes/          # ChecklistPermissoesActivity, PainelPermissoes, SolicitadorPermissoes
-    ├── componentes/         # GaugeView, TelemetriaChartView, GraficoTensaoView, LogReplayChartView
+    ├── componentes/         # GaugeView (3 estilos), BarraVarreduraView, TelemetriaChartView, GraficoTensaoView, LogReplayChartView
     └── util/                # Formatadores, insets, seletor de data, permissões Bluetooth, rótulos
 ```
 
@@ -446,13 +510,14 @@ Recursos em `app/src/main/res`:
 
 - `layout/`: telas, itens de lista e BottomSheets;
 - `values/`: `strings*.xml`, `colors.xml`, `dimens.xml` e `themes.xml` (DayNight); `values-night/`: cores do tema escuro;
-- `menu/`: menu lateral do Dashboard e menus das Toolbars.
+- `menu/`: menu lateral do Dashboard, navegação inferior (`menu_abas`) e menus das Toolbars;
+- `mipmap-*`: ícone adaptativo (fundo, frente e monocromático) e versões legadas, gerados por `docs/icone/IconeCharrua.java`.
 
 ---
 
 ## Testes unitários
 
-São **564 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./gradlew test`. Alguns destaques:
+São **610 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./gradlew test`. Alguns destaques:
 
 | Classe de teste | Testes | O que cobre |
 |---|---:|---|
@@ -465,7 +530,11 @@ São **564 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./g
 | `ValidadorManutencaoTest` | 5 | Data, km mínima e custo |
 | `ValidadorPecaTest` | 5 | Nome, quantidade e valor das peças |
 | `EstadoMidiaTest` | 11 | Escolha do player (prioridade do Spotify), estados de reprodução e textos do mini-player |
-| `PainelHudTest` | 7 | Formatação do HUD (RPM, MAP, temperatura, rail em bar ou tensão), alerta acima de 105 °C e polling com o HUD |
+| `PainelHudTest` | 10 | HUD minimizado/expandido, sensores fixados (até 4, sem repetir), estilo com barra, rail ou tensão, imperial, alerta acima de 105 °C e a ponte de telemetria |
+| `ConversorUnidadesTest` | 11 | Métrico ↔ imperial de velocidade, temperatura, pressão, consumo (MPG), distância, volume e vazão; escalas dos mostradores e persistência |
+| `ConfigPainelTest` | 10 | Ordem do Painel (arrastar e soltar, normalização), troca de relógios, lista rápida e persistência das preferências do Painel e do HUD |
+| `IdentificadorPidsTest` | 11 | Varredura amigável com os catálogos reais: `210C`/`2123` identificados, desconhecidos, ignorados, perfil Toyota, imperial, métricas e relatório |
+| `TradutorTerminalTest` | 10 | Atalhos e dicas, descrição dos comandos, tradução das respostas (bateria, VIN, PIDs, `7F`, erros), cabeçalho ativo e o laudo do Terminal |
 | `AtalhosWazeTest` | 5 | Deep links do Waze (posto, oficina), codificação da busca e fallback para a Play Store |
 | `ConvertersTest` | 3 | Conversão de `LocalDate`/`LocalDateTime` para o Room |
 | `TesteBateriaTest` | 19 | Faixas de repouso/partida/alternador, máquina de estados das 3 etapas, `LV RESET` na partida, partida não detectada e laudo |

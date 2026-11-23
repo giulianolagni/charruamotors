@@ -7,8 +7,8 @@
     <string name="oficina_replay">Visualizador de Logs (CSV e TXT)</string>
     <string name="oficina_terminal">Terminal ELM327 e Varredura de PIDs</string>
     <string name="oficina_requer_conexao">Conecte o scanner para usar o teste de bateria e o terminal.</string>
-    <string name="oficina_sem_conexao">Scanner não conectado. Conecte-o na aba OBD2 e abra a ferramenta de novo.</string>
-    <string name="oficina_conexao_perdida">A conexão com o scanner caiu. Volte à aba OBD2 e reconecte.</string>
+    <string name="oficina_sem_conexao">Scanner não conectado. Conecte-o na aba Painel e abra a ferramenta de novo.</string>
+    <string name="oficina_conexao_perdida">A conexão com o scanner caiu. Volte à aba Painel e reconecte.</string>
     <string name="oficina_copiar">Copiar</string>
     <string name="oficina_compartilhar">Compartilhar</string>
     <string name="oficina_copiado">Copiado para a área de transferência</string>
@@ -61,7 +61,7 @@
     <!-- Ferramenta 2: Visualizador de Logs CSV (Replay) -->
     <string name="replay_titulo">Visualizador de Logs</string>
     <string name="replay_lista_titulo">Logs em Downloads/CharruaOBD</string>
-    <string name="replay_lista_vazia">Nenhum log encontrado. Conecte ao scanner com os logs automáticos ligados, grave um na aba OBD2 (Gravar Log CSV) ou toque em Abrir outro CSV.</string>
+    <string name="replay_lista_vazia">Nenhum log encontrado. Conecte ao scanner com os logs automáticos ligados, grave um no Painel (Gravar Log CSV) ou toque em Abrir outro CSV.</string>
     <string name="replay_abrir_outro">Abrir outro CSV</string>
     <string name="replay_atualizar">Atualizar lista</string>
     <string name="replay_carregando">Carregando…</string>

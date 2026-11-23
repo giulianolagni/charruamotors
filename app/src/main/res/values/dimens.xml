@@ -20,4 +20,9 @@
     <!-- Ferramentas de Oficina -->
     <dimen name="altura_grafico_tensao">220dp</dimen>
     <dimen name="texto_tensao_ao_vivo">44sp</dimen>
+
+    <!-- v1.4: cards da aba Oficina e barra da varredura -->
+    <dimen name="altura_card_oficina">112dp</dimen>
+    <dimen name="icone_card_oficina">64dp</dimen>
+    <dimen name="altura_barra_varredura">14dp</dimen>
 </resources>

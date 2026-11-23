@@ -13,6 +13,7 @@ import com.charruamotors.data.repository.UsuarioRepository
 import com.charruamotors.data.repository.VeiculoRepository
 import com.charruamotors.data.session.SessaoManager
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
+import com.charruamotors.direcao.painel.PreferenciasPainel
 import com.charruamotors.obd.Elm327BluetoothClient
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
@@ -27,6 +28,7 @@ import com.charruamotors.obd.sessao.OrigemSessao
 import com.charruamotors.obd.sessao.PreferenciasAutoConexao
 import com.charruamotors.obd.sessao.SessaoObd
 import com.charruamotors.obd.sessao.VeiculoSessao
+import com.charruamotors.oficina.varredura.IdentificadorPids
 import com.charruamotors.sistema.backup.BackupRepository
 import com.charruamotors.sistema.preferencias.PreferenciasApp
 import com.charruamotors.ui.util.ExportadorCsv
@@ -118,7 +120,10 @@ class CharruaMotorsApp : Application() {
      */
     val telemetriaCompartilhada: TelemetriaCompartilhada by lazy {
         // lazy: as preferências precisam do Context, que só existe depois da construção do Application.
-        TelemetriaCompartilhada(unidadePressao = preferenciasApp.config.map { it.unidadePressao })
+        TelemetriaCompartilhada(
+            conversor = preferenciasApp.config.map { it.conversor },
+            configHud = preferenciasPainel.config.map { it.hud },
+        )
     }
 
     /** Salva os logs CSV do Data Logger em Downloads. */
@@ -151,10 +156,16 @@ class CharruaMotorsApp : Application() {
 
     // ---------------------------------------------------------------- sistema & app
 
-    /** Tema, unidade de pressão e a flag do Assistente de Primeira Abertura. */
+    /** Tema, unidade de pressão, unidades globais e a flag do Assistente de Primeira Abertura. */
     val preferenciasApp: PreferenciasApp by lazy { PreferenciasApp(this) }
 
-    /** `1.3 (4)`, lido do pacote instalado (o build não gera BuildConfig). */
+    /** Personalização da aba Painel (ordem, estilo dos mostradores, sensores) e do HUD flutuante. */
+    val preferenciasPainel: PreferenciasPainel by lazy { PreferenciasPainel(this) }
+
+    /** Cruza as respostas da varredura e do Terminal com os três catálogos de PIDs do app. */
+    val identificadorPids: IdentificadorPids by lazy { IdentificadorPids.de(catalogoPids, catalogoEstendido, catalogoCascata) }
+
+    /** `1.4 (5)`, lido do pacote instalado (o build não gera BuildConfig). */
     val versaoApp: String by lazy {
         runCatching {
             val info = packageManager.getPackageInfo(packageName, 0)

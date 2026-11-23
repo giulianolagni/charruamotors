@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Aba Painel: blocos reordenáveis (Músicas, Navegação e Marcadores) escolhidos em
+     "Personalizar Painel", conexão do scanner, gráfico, computador de bordo, 0–100, lista rápida
+     de sensores e as informações da ECU. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -13,23 +16,54 @@
         android:orientation="vertical"
         android:padding="@dimen/margem_tela">
 
-        <!-- Direção: mini-player (Spotify / YouTube Music), atalhos do Waze e Modo HUD -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/card_direcao"
-            style="@style/Widget.Material3.CardView.Outlined"
+        <!-- Cabeçalho com o atalho para a personalização -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="@dimen/espaco_medio"
-            app:cardCornerRadius="@dimen/raio_card">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-            <LinearLayout
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/painel_titulo"
+                android:textAppearance="?attr/textAppearanceTitleLarge" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_personalizar_painel"
+                style="@style/Widget.Material3.Button.TonalButton.Icon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/painel_personalizar_descricao"
+                android:text="@string/painel_personalizar"
+                app:icon="@drawable/ic_personalizar" />
+        </LinearLayout>
+
+        <!-- Blocos reordenáveis: o ObdFragment reposiciona os filhos conforme a ordem escolhida -->
+        <LinearLayout
+            android:id="@+id/container_secoes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Músicas: mini-player (Spotify / YouTube Music) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_musica"
+                style="@style/Widget.Material3.CardView.Outlined"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingStart="@dimen/espaco_medio"
-                android:paddingTop="@dimen/espaco_pequeno"
-                android:paddingEnd="@dimen/espaco_pequeno"
-                android:paddingBottom="@dimen/espaco_pequeno">
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                app:cardCornerRadius="@dimen/raio_card">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingStart="@dimen/espaco_medio"
+                    android:paddingTop="@dimen/espaco_pequeno"
+                    android:paddingEnd="@dimen/espaco_pequeno"
+                    android:paddingBottom="@dimen/espaco_pequeno">
 
                 <!-- Mini-player: só aparece com um player ativo -->
                 <LinearLayout
@@ -149,6 +183,25 @@
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="@color/texto_secundario" />
                 </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Navegação: atalhos do Waze e Modo HUD -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_navegacao"
+                style="@style/Widget.Material3.CardView.Outlined"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                app:cardCornerRadius="@dimen/raio_card">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingStart="@dimen/espaco_medio"
+                    android:paddingEnd="@dimen/espaco_pequeno"
+                    android:paddingBottom="@dimen/espaco_pequeno">
 
                 <!-- Atalhos do Waze -->
                 <LinearLayout
@@ -203,14 +256,75 @@
                     android:layout_marginEnd="@dimen/espaco_pequeno"
                     android:text="@string/hud_ativar"
                     app:icon="@drawable/ic_hud" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Marcadores: os 4 mostradores escolhidos, no estilo escolhido -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_marcadores"
+                style="@style/Widget.Material3.CardView.Elevated"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                app:cardCornerRadius="@dimen/raio_card">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/espaco_pequeno">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:baselineAligned="false"
+                        android:orientation="horizontal">
+
+                    <com.charruamotors.ui.componentes.GaugeView
+                        android:id="@+id/gauge_1"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:padding="@dimen/espaco_minimo" />
+
+                    <com.charruamotors.ui.componentes.GaugeView
+                        android:id="@+id/gauge_2"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:padding="@dimen/espaco_minimo" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:baselineAligned="false"
+                        android:orientation="horizontal">
+
+                    <com.charruamotors.ui.componentes.GaugeView
+                        android:id="@+id/gauge_3"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:padding="@dimen/espaco_minimo" />
+
+                    <com.charruamotors.ui.componentes.GaugeView
+                        android:id="@+id/gauge_4"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:padding="@dimen/espaco_minimo" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
 
         <!-- Scanner: modo, dispositivo, conexão e Data Logger -->
         <com.google.android.material.card.MaterialCardView
             style="@style/Widget.Material3.CardView.Filled"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_medio"
             app:cardCornerRadius="@dimen/raio_card">
 
             <LinearLayout
@@ -379,171 +493,6 @@
                     android:contentDescription="@null"
                     android:src="@drawable/ic_configuracoes"
                     app:tint="@color/texto_secundario" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Hub "Ferramentas de Oficina": bateria/alternador, replay de logs CSV e terminal/varredura.
-             Bateria e terminal pausam o polling (sessão manual) e exigem o scanner conectado. -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/card_oficina"
-            style="@style/Widget.Material3.CardView.Outlined"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/espaco_medio"
-            app:cardCornerRadius="@dimen/raio_card">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="@dimen/espaco_medio">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:drawablePadding="@dimen/espaco_pequeno"
-                    android:gravity="center_vertical"
-                    android:text="@string/oficina_titulo"
-                    android:textAppearance="?attr/textAppearanceTitleMedium"
-                    app:drawableStartCompat="@drawable/ic_oficina"
-                    app:drawableTint="?attr/colorPrimary" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/espaco_minimo"
-                    android:text="@string/oficina_descricao"
-                    android:textAppearance="?attr/textAppearanceBodySmall"
-                    android:textColor="@color/texto_secundario" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/botao_oficina_bateria"
-                    style="@style/Widget.Material3.Button.TonalButton.Icon"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/espaco_pequeno"
-                    android:gravity="start|center_vertical"
-                    android:text="@string/oficina_bateria"
-                    app:icon="@drawable/ic_bateria" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/botao_oficina_replay"
-                    style="@style/Widget.Material3.Button.TonalButton.Icon"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start|center_vertical"
-                    android:text="@string/oficina_replay"
-                    app:icon="@drawable/ic_grafico" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/botao_oficina_terminal"
-                    style="@style/Widget.Material3.Button.TonalButton.Icon"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="start|center_vertical"
-                    android:text="@string/oficina_terminal"
-                    app:icon="@drawable/ic_terminal" />
-
-                <TextView
-                    android:id="@+id/texto_oficina_requer_conexao"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/oficina_requer_conexao"
-                    android:textAppearance="?attr/textAppearanceBodySmall"
-                    android:textColor="@color/texto_secundario" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Painel de telemetria: mostradores principais -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/espaco_grande"
-            android:text="@string/obd_tempo_real"
-            android:textAppearance="?attr/textAppearanceTitleLarge" />
-
-        <com.google.android.material.card.MaterialCardView
-            style="@style/Widget.Material3.CardView.Elevated"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/espaco_pequeno"
-            app:cardCornerRadius="@dimen/raio_card">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="@dimen/espaco_pequeno">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:baselineAligned="false"
-                    android:orientation="horizontal">
-
-                    <com.charruamotors.ui.componentes.GaugeView
-                        android:id="@+id/gauge_rpm"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:padding="@dimen/espaco_minimo"
-                        app:gaugeDivisoes="8"
-                        app:gaugeDivisorRotulos="1000"
-                        app:gaugeMax="8000"
-                        app:gaugeMin="0"
-                        app:gaugeSubdivisoes="5"
-                        app:gaugeTitulo="@string/obd_rpm"
-                        app:gaugeUnidade="@string/unidade_rpm"
-                        app:gaugeZonaVermelha="6500" />
-
-                    <com.charruamotors.ui.componentes.GaugeView
-                        android:id="@+id/gauge_velocidade"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:padding="@dimen/espaco_minimo"
-                        app:gaugeDivisoes="6"
-                        app:gaugeMax="240"
-                        app:gaugeMin="0"
-                        app:gaugeSubdivisoes="4"
-                        app:gaugeTitulo="@string/obd_velocidade"
-                        app:gaugeUnidade="@string/unidade_kmh" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:baselineAligned="false"
-                    android:orientation="horizontal">
-
-                    <com.charruamotors.ui.componentes.GaugeView
-                        android:id="@+id/gauge_map"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:padding="@dimen/espaco_minimo"
-                        app:gaugeDivisoes="5"
-                        app:gaugeMax="250"
-                        app:gaugeMin="0"
-                        app:gaugeSubdivisoes="5"
-                        app:gaugeTitulo="@string/obd_map"
-                        app:gaugeUnidade="@string/unidade_kpa"
-                        app:gaugeZonaVermelha="200" />
-
-                    <com.charruamotors.ui.componentes.GaugeView
-                        android:id="@+id/gauge_temperatura"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:padding="@dimen/espaco_minimo"
-                        app:gaugeDivisoes="9"
-                        app:gaugeMax="130"
-                        app:gaugeMin="40"
-                        app:gaugeSubdivisoes="2"
-                        app:gaugeTitulo="@string/obd_temperatura"
-                        app:gaugeUnidade="@string/unidade_celsius"
-                        app:gaugeZonaVermelha="110" />
-                </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -759,15 +708,31 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Grade com todos os PIDs suportados pela ECU -->
-        <TextView
-            android:id="@+id/titulo_sensores"
-            android:layout_width="wrap_content"
+        <!-- Lista rápida: os sensores escolhidos em "Personalizar Painel" (vazia = todos os suportados) -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/espaco_grande"
-            android:text="@string/obd_sensores_titulo"
-            android:textAppearance="?attr/textAppearanceTitleMedium" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
+            <TextView
+                android:id="@+id/titulo_sensores"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/obd_sensores_titulo"
+                android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_ver_todos_sensores"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                tools:text="Ver todos (28)"
+                tools:visibility="visible" />
+        </LinearLayout>
         <TextView
             android:id="@+id/texto_sensores_vazio"
             android:layout_width="match_parent"
@@ -796,38 +761,12 @@
             android:layout_marginTop="@dimen/espaco_medio"
             android:text="@string/obd_salvar_leitura" />
 
-        <!-- Histórico das leituras salvas -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/espaco_grande"
-            android:text="@string/obd_historico_titulo"
-            android:textAppearance="?attr/textAppearanceTitleLarge" />
-
-        <TextView
-            android:id="@+id/texto_historico_vazio"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingVertical="@dimen/espaco_pequeno"
-            android:text="@string/obd_historico_vazio"
-            android:textAppearance="?attr/textAppearanceBodyMedium"
-            android:textColor="@color/texto_secundario" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/lista_historico_leituras"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:nestedScrollingEnabled="false"
-            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-            tools:itemCount="3"
-            tools:listitem="@layout/item_leitura_historico" />
-
         <!-- Diagnóstico avançado -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/espaco_grande"
-            android:text="@string/obd_diagnostico_titulo"
+            android:text="@string/obd_ecu_secao"
             android:textAppearance="?attr/textAppearanceTitleLarge" />
 
         <!-- Informações da ECU -->
@@ -925,191 +864,14 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Códigos de falha por categoria -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/espaco_medio"
-            android:text="@string/obd_codigos_falha"
-            android:textAppearance="?attr/textAppearanceTitleMedium" />
-
-        <LinearLayout
+        <!-- Atalho: a leitura e a limpeza de falhas ficam na aba Oficina -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/botao_abrir_falhas"
+            style="@style/Widget.Material3.Button.TonalButton.Icon"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/espaco_pequeno"
-            android:orientation="horizontal">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/botao_ler_codigos"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="@dimen/espaco_pequeno"
-                android:layout_weight="1"
-                android:text="@string/obd_ler_codigos" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/botao_limpar_codigos"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/obd_limpar_codigos" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/texto_codigos_vazio"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:padding="@dimen/espaco_medio"
-            android:text="@string/obd_codigos_nao_lidos"
-            android:textAppearance="?attr/textAppearanceBodyMedium"
-            android:textColor="@color/texto_secundario" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/lista_codigos"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:nestedScrollingEnabled="false"
-            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-            tools:itemCount="3"
-            tools:listitem="@layout/item_codigo_falha" />
-
-        <!-- Quadro congelado (Freeze Frame, modo 02) -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/card_freeze_frame"
-            style="@style/Widget.Material3.CardView.Elevated"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/espaco_medio"
-            android:visibility="gone"
-            app:cardCornerRadius="@dimen/raio_card"
-            tools:visibility="visible">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="@dimen/espaco_medio">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/obd_ff_titulo"
-                    android:textAppearance="?attr/textAppearanceTitleMedium" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/obd_ff_subtitulo"
-                    android:textAppearance="?attr/textAppearanceBodySmall"
-                    android:textColor="@color/texto_secundario" />
-
-                <TextView
-                    android:id="@+id/texto_ff_vazio"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/espaco_pequeno"
-                    android:textAppearance="?attr/textAppearanceBodyMedium"
-                    android:textColor="@color/texto_secundario"
-                    tools:text="Nenhum quadro congelado armazenado." />
-
-                <LinearLayout
-                    android:id="@+id/grupo_ff_dados"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:id="@+id/texto_ff_dtc"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/espaco_pequeno"
-                        android:textAppearance="?attr/textAppearanceTitleLarge"
-                        android:textColor="@color/erro"
-                        tools:text="P0300" />
-
-                    <TextView
-                        android:id="@+id/texto_ff_descricao"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:textAppearance="?attr/textAppearanceBodyMedium"
-                        tools:text="Falhas de ignição aleatórias ou em múltiplos cilindros" />
-
-                    <GridLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/espaco_medio"
-                        android:columnCount="2"
-                        android:useDefaultMargins="false">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_columnWeight="1"
-                            android:text="@string/obd_rpm"
-                            android:textAppearance="?attr/textAppearanceLabelMedium"
-                            android:textColor="@color/texto_secundario" />
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_columnWeight="1"
-                            android:text="@string/obd_velocidade"
-                            android:textAppearance="?attr/textAppearanceLabelMedium"
-                            android:textColor="@color/texto_secundario" />
-
-                        <TextView
-                            android:id="@+id/valor_ff_rpm"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_columnWeight="1"
-                            android:textAppearance="?attr/textAppearanceTitleMedium"
-                            tools:text="2.350 rpm" />
-
-                        <TextView
-                            android:id="@+id/valor_ff_velocidade"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_columnWeight="1"
-                            android:textAppearance="?attr/textAppearanceTitleMedium"
-                            tools:text="62 km/h" />
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_columnWeight="1"
-                            android:layout_marginTop="@dimen/espaco_pequeno"
-                            android:text="@string/obd_temperatura"
-                            android:textAppearance="?attr/textAppearanceLabelMedium"
-                            android:textColor="@color/texto_secundario" />
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_columnWeight="1"
-                            android:layout_marginTop="@dimen/espaco_pequeno"
-                            android:text="@string/obd_carga"
-                            android:textAppearance="?attr/textAppearanceLabelMedium"
-                            android:textColor="@color/texto_secundario" />
-
-                        <TextView
-                            android:id="@+id/valor_ff_temperatura"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_columnWeight="1"
-                            android:textAppearance="?attr/textAppearanceTitleMedium"
-                            tools:text="97 °C" />
-
-                        <TextView
-                            android:id="@+id/valor_ff_carga"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_columnWeight="1"
-                            android:textAppearance="?attr/textAppearanceTitleMedium"
-                            tools:text="78,4 %" />
-                    </GridLayout>
-                </LinearLayout>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+            android:text="@string/painel_abrir_falhas"
+            app:icon="@drawable/ic_falha" />
     </LinearLayout>
 </ScrollView>

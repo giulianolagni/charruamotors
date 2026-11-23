@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Navegação inferior da tela do veículo (v1.4): Painel, Oficina, Manutenções e Histórico. -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/aba_painel"
+        android:icon="@drawable/ic_painel"
+        android:title="@string/aba_painel" />
+    <item
+        android:id="@+id/aba_oficina"
+        android:icon="@drawable/ic_oficina"
+        android:title="@string/aba_oficina" />
+    <item
+        android:id="@+id/aba_manutencoes"
+        android:icon="@drawable/ic_manutencao"
+        android:title="@string/aba_manutencoes" />
+    <item
+        android:id="@+id/aba_historico"
+        android:icon="@drawable/ic_historico"
+        android:title="@string/aba_historico" />
+</menu>

@@ -81,6 +81,9 @@ class ReplayLogActivity : AppCompatActivity() {
         binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         onBackPressedDispatcher.addCallback(this, voltarParaLista)
 
+        // Aberto pela aba Histórico com um arquivo escolhido: já vai direto para ele.
+        if (savedInstanceState == null) arquivoDoIntent()?.let(viewModel::abrir)
+
         binding.listaArquivos.adapter = adapter
         binding.botaoAbrirOutro.setOnClickListener {
             runCatching { abrirDocumento.launch(TIPOS_CSV) }.onFailure { mensagem(it.message ?: "") }
@@ -273,7 +276,8 @@ class ReplayLogActivity : AppCompatActivity() {
         }
     }
 
-    private class ArquivoAdapter(
+    /** Lista de logs salvos (também usada na aba Histórico). */
+    internal class ArquivoAdapter(
         private val aoAbrir: (ArquivoLogCsv) -> Unit,
         private val aoCompartilhar: (ArquivoLogCsv) -> Unit,
     ) :
@@ -305,6 +309,16 @@ class ReplayLogActivity : AppCompatActivity() {
         }
     }
 
+    private fun arquivoDoIntent(): ArquivoLogCsv? {
+        val uri = intent.getStringExtra(EXTRA_URI)?.let(android.net.Uri::parse) ?: return null
+        return ArquivoLogCsv(
+            uri = uri,
+            nome = intent.getStringExtra(EXTRA_NOME) ?: uri.lastPathSegment.orEmpty(),
+            tamanhoBytes = intent.getLongExtra(EXTRA_TAMANHO, 0),
+            modificadoMs = intent.getLongExtra(EXTRA_MODIFICADO, 0),
+        )
+    }
+
     companion object {
         /** Alguns gerenciadores de arquivos marcam o CSV como texto genérico ou binário. */
         private val TIPOS_CSV = arrayOf(
@@ -312,6 +326,18 @@ class ReplayLogActivity : AppCompatActivity() {
             "application/vnd.ms-excel", "application/octet-stream",
         )
 
+        private const val EXTRA_URI = "extra_uri"
+        private const val EXTRA_NOME = "extra_nome"
+        private const val EXTRA_TAMANHO = "extra_tamanho"
+        private const val EXTRA_MODIFICADO = "extra_modificado"
+
         fun intent(context: Context): Intent = Intent(context, ReplayLogActivity::class.java)
+
+        /** Abre direto um log da lista (CSV no replay; `.txt` no diálogo do relatório). */
+        fun intent(context: Context, arquivo: ArquivoLogCsv): Intent = intent(context)
+            .putExtra(EXTRA_URI, arquivo.uri.toString())
+            .putExtra(EXTRA_NOME, arquivo.nome)
+            .putExtra(EXTRA_TAMANHO, arquivo.tamanhoBytes)
+            .putExtra(EXTRA_MODIFICADO, arquivo.modificadoMs)
     }
 }

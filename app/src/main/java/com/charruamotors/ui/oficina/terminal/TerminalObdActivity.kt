@@ -2,7 +2,12 @@ package com.charruamotors.ui.oficina.terminal
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Typeface
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -15,6 +20,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -27,8 +33,10 @@ import com.charruamotors.databinding.ItemResultadoPidBinding
 import com.charruamotors.obd.ObdParser
 import com.charruamotors.oficina.terminal.EntradaTerminal
 import com.charruamotors.oficina.terminal.FormatadorTerminal
+import com.charruamotors.oficina.terminal.TradutorTerminal
+import com.charruamotors.oficina.varredura.IdentificacaoPid
+import com.charruamotors.oficina.varredura.StatusIdentificacao
 import com.charruamotors.oficina.varredura.TipoRespostaPid
-import com.charruamotors.oficina.varredura.ResultadoPid
 import com.charruamotors.oficina.varredura.VarreduraPids
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.util.TextoCompartilhavel
@@ -41,8 +49,10 @@ import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.launch
 
 /**
- * Ferramenta 3 — Terminal Manual ELM327 (comandos brutos, atalhos e log com latência) e Varredura
- * Automática de PIDs (cabeçalho, serviço e faixa, com presets Toyota), sobre a conexão ativa.
+ * Oficina — Terminal ELM327 didático (ajuda com sugestões, atalhos de um toque, descrição de cada
+ * comando e a resposta traduzida ao lado do hex bruto, com laudo para compartilhar) e Varredura
+ * amigável de PIDs (cabeçalho, serviço e faixa, com presets Toyota): cada resposta é cruzada com o
+ * catálogo do app em tempo real, com barra colorida, métricas e o filtro "o que o carro respondeu".
  */
 class TerminalObdActivity : AppCompatActivity() {
 
@@ -64,7 +74,7 @@ class TerminalObdActivity : AppCompatActivity() {
             override fun onTabUnselected(aba: TabLayout.Tab) = Unit
             override fun onTabReselected(aba: TabLayout.Tab) = Unit
         })
-        val abaInicial = savedInstanceState?.getInt(ESTADO_ABA) ?: 0
+        val abaInicial = savedInstanceState?.getInt(ESTADO_ABA) ?: intent.getIntExtra(EXTRA_ABA, ABA_TERMINAL)
         binding.abas.getTabAt(abaInicial)?.select()
         mostrarAba(abaInicial)
 
@@ -86,11 +96,19 @@ class TerminalObdActivity : AppCompatActivity() {
     // ---------------------------------------------------------------- terminal
 
     private fun configurarTerminal() = with(binding) {
-        for (atalho in ATALHOS) {
+        textoDicas.text = TradutorTerminal.DICAS.joinToString("\n") { "• $it" }
+        botaoOcultarAjuda.setOnClickListener {
+            textoDicas.isVisible = !textoDicas.isVisible
+            botaoOcultarAjuda.setText(if (textoDicas.isVisible) R.string.terminal_ajuda_ocultar else R.string.terminal_ajuda_mostrar)
+        }
+        for (atalho in TradutorTerminal.ATALHOS) {
             grupoAtalhos.addView(Chip(this@TerminalObdActivity).apply {
-                text = atalho
-                typeface = android.graphics.Typeface.MONOSPACE
-                setOnClickListener { viewModel.enviar(atalho) }
+                text = getString(R.string.terminal_atalho, atalho.comando, atalho.titulo)
+                contentDescription = getString(R.string.terminal_atalho_descricao, atalho.comando, atalho.descricao)
+                setOnClickListener {
+                    mostrarDescricao(atalho.comando)
+                    viewModel.enviar(atalho.comando)
+                }
             })
         }
         botaoEnviar.setOnClickListener { enviarDigitado() }
@@ -102,10 +120,28 @@ class TerminalObdActivity : AppCompatActivity() {
                 false
             }
         }
+        campoComando.doAfterTextChanged { texto -> if (!texto.isNullOrBlank()) mostrarDescricao(texto.toString()) }
         botaoLimparLog.setOnClickListener { viewModel.limparLog() }
         botaoCopiarLog.setOnClickListener {
             viewModel.textoLog()?.let { TextoCompartilhavel.copiar(this@TerminalObdActivity, getString(R.string.terminal_log_assunto), it) }
         }
+        botaoLaudoTerminal.setOnClickListener {
+            lifecycleScope.launch {
+                val laudo = viewModel.laudo()
+                if (laudo == null) {
+                    mensagem(getString(R.string.terminal_laudo_vazio))
+                } else {
+                    TextoCompartilhavel.mostrarDialogo(this@TerminalObdActivity, getString(R.string.terminal_laudo_titulo), laudo)
+                }
+            }
+        }
+    }
+
+    /** "ATRV: Lê a tensão da bateria" abaixo dos atalhos (some quando o app não conhece o comando). */
+    private fun mostrarDescricao(comando: String) = with(binding) {
+        val descricao = viewModel.tradutor.descrever(comando)
+        textoDescricaoComando.isVisible = descricao != null
+        textoDescricaoComando.text = descricao?.let { getString(R.string.terminal_descricao_comando, comando.trim().uppercase(), it) }
     }
 
     private fun enviarDigitado() {
@@ -115,8 +151,38 @@ class TerminalObdActivity : AppCompatActivity() {
         binding.campoComando.setText("")
     }
 
+    /**
+     * Log como num terminal: cada comando com o hex bruto e a latência, a descrição do comando (cinza)
+     * e a resposta traduzida (ciano), no contexto do `ATSH` em vigor naquele momento.
+     */
     private fun mostrarLog(entradas: List<EntradaTerminal>) = with(binding) {
-        textoLog.definirTexto(if (entradas.isEmpty()) getString(R.string.terminal_log_vazio) else FormatadorTerminal.formatar(entradas))
+        if (entradas.isEmpty()) {
+            textoLog.definirTexto(getString(R.string.terminal_log_vazio))
+            return@with
+        }
+        val corDescricao = ContextCompat.getColor(this@TerminalObdActivity, R.color.terminal_descricao)
+        val corTraducao = ContextCompat.getColor(this@TerminalObdActivity, R.color.terminal_traducao)
+        val conversor = viewModel.conversor()
+        val texto = SpannableStringBuilder()
+        entradas.forEachIndexed { i, entrada ->
+            if (i > 0) texto.append('\n')
+            texto.append(FormatadorTerminal.formatar(entrada))
+            viewModel.tradutor.descrever(entrada.comando)?.let { descricao ->
+                texto.append('\n')
+                val inicio = texto.length
+                texto.append(RECUO_LOG).append("↳ ").append(descricao)
+                texto.setSpan(ForegroundColorSpan(corDescricao), inicio, texto.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            val cabecalho = viewModel.tradutor.cabecalhoAtivo(entradas.subList(0, i))
+            viewModel.tradutor.traduzir(entrada, cabecalho, conversor)?.let { traducao ->
+                texto.append('\n')
+                val inicio = texto.length
+                texto.append(RECUO_LOG).append("→ ").append(traducao)
+                texto.setSpan(ForegroundColorSpan(corTraducao), inicio, texto.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                texto.setSpan(StyleSpan(Typeface.BOLD), inicio, texto.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+        textoLog.text = texto
         // Acompanha o fim do log, como um terminal.
         rolagemLog.post { rolagemLog.fullScroll(View.FOCUS_DOWN) }
     }
@@ -143,7 +209,11 @@ class TerminalObdActivity : AppCompatActivity() {
 
         listaResultados.adapter = adapterResultados
         listaResultados.itemAnimator = null
-        switchMostrarTudo.setOnCheckedChangeListener { _, marcado -> viewModel.definirMostrarTudo(marcado) }
+        chipSoRespondeu.text = getString(R.string.varredura_filtro_carro)
+        chipSoRespondeu.setOnCheckedChangeListener { _, marcado -> viewModel.definirMostrarTudo(!marcado) }
+        lifecycleScope.launch {
+            viewModel.modeloVeiculo()?.let { chipSoRespondeu.text = getString(R.string.varredura_filtro_modelo, it) }
+        }
         botaoVarredura.setOnClickListener {
             if (viewModel.varredura.value.rodando) {
                 viewModel.pararVarredura()
@@ -183,13 +253,17 @@ class TerminalObdActivity : AppCompatActivity() {
         listOf(layoutPreset, layoutCabecalho, layoutServico).forEach { it.isEnabled = !estado.rodando }
         campoInicio.isEnabled = !estado.rodando
         campoFim.isEnabled = !estado.rodando
-        if (switchMostrarTudo.isChecked != estado.mostrarTudo) switchMostrarTudo.isChecked = estado.mostrarTudo
+        if (chipSoRespondeu.isChecked == estado.mostrarTudo) chipSoRespondeu.isChecked = !estado.mostrarTudo
 
         val progresso = estado.progresso
-        progressoVarredura.isInvisible = !estado.rodando
-        if (progresso != null && progresso.total > 0) {
-            progressoVarredura.setProgressCompat(progresso.feitos * 100 / progresso.total, true)
-        }
+        val metricas = estado.metricas
+        barraVarredura.isInvisible = estado.config == null
+        barraVarredura.metricas = metricas
+        textoMetricas.isVisible = estado.config != null
+        textoMetricas.definirTexto(
+            resources.getQuantityString(R.plurals.varredura_encontrados, metricas.encontrados, metricas.encontrados) + " · " +
+                getString(R.string.varredura_metricas, metricas.identificados, metricas.ignorados),
+        )
         val final = estado.final
         textoProgresso.definirTexto(when {
             estado.rodando && progresso != null ->
@@ -244,7 +318,8 @@ class TerminalObdActivity : AppCompatActivity() {
         if (texto.isNotBlank()) Snackbar.make(binding.root, texto, Snackbar.LENGTH_LONG).show()
     }
 
-    private class ResultadoAdapter : ListAdapter<ResultadoPid, ResultadoAdapter.Item>(Diferenca) {
+    /** Lista ao vivo da varredura amigável: status, valor decodificado, origem, latência e o hex bruto. */
+    private class ResultadoAdapter : ListAdapter<IdentificacaoPid, ResultadoAdapter.Item>(Diferenca) {
 
         class Item(val binding: ItemResultadoPidBinding) : RecyclerView.ViewHolder(binding.root)
 
@@ -252,9 +327,13 @@ class TerminalObdActivity : AppCompatActivity() {
             Item(ItemResultadoPidBinding.inflate(LayoutInflater.from(parent.context), parent, false))
 
         override fun onBindViewHolder(holder: Item, position: Int) {
-            val r = getItem(position)
+            val id = getItem(position)
+            val r = id.resultado
             val contexto = holder.itemView.context
             val b = holder.binding
+            b.textoStatus.text = id.descricao
+            b.textoValor.text = id.valorTexto
+            b.textoValor.isVisible = id.valorTexto.isNotEmpty()
             b.textoComando.text = r.comando
             val digitos = if (r.comando.startsWith("22")) 4 else 2
             val tipo = when (r.tipo) {
@@ -265,27 +344,37 @@ class TerminalObdActivity : AppCompatActivity() {
                 TipoRespostaPid.SEM_DADOS -> "NO DATA"
                 TipoRespostaPid.ERRO -> r.erro ?: "?"
             }
-            b.textoTipo.text = "$tipo · ${r.latenciaMs} ms"
+            b.textoTipo.text = listOfNotNull(id.conhecido?.origem, tipo, "${r.latenciaMs} ms").joinToString(" · ")
             b.textoBytes.isVisible = r.respondeu
             b.textoBytes.text = r.bytesHex
-            b.textoComando.setTextColor(
-                ContextCompat.getColor(contexto, if (r.respondeu) R.color.azul_primario else R.color.texto_secundario),
+            val cor = when (id.status) {
+                StatusIdentificacao.IDENTIFICADO -> R.color.varredura_identificado
+                StatusIdentificacao.DESCONHECIDO -> R.color.varredura_desconhecido
+                StatusIdentificacao.IGNORADO -> R.color.varredura_ignorado
+            }
+            b.marcaStatus.setBackgroundColor(ContextCompat.getColor(contexto, cor))
+            b.textoStatus.setTextColor(
+                if (id.status == StatusIdentificacao.IGNORADO) ContextCompat.getColor(contexto, R.color.texto_secundario) else b.textoComando.currentTextColor,
             )
         }
 
-        private object Diferenca : DiffUtil.ItemCallback<ResultadoPid>() {
-            override fun areItemsTheSame(a: ResultadoPid, b: ResultadoPid) = a.comando == b.comando
-            override fun areContentsTheSame(a: ResultadoPid, b: ResultadoPid) = a == b
+        private object Diferenca : DiffUtil.ItemCallback<IdentificacaoPid>() {
+            override fun areItemsTheSame(a: IdentificacaoPid, b: IdentificacaoPid) = a.comando == b.comando
+            override fun areContentsTheSame(a: IdentificacaoPid, b: IdentificacaoPid) = a == b
         }
     }
 
     companion object {
         private const val ESTADO_ABA = "aba"
+        private const val EXTRA_ABA = "extra_aba_terminal"
+        private const val RECUO_LOG = "              "
 
-        /** Atalhos do terminal: protocolo, tensão e os cabeçalhos do motor/câmbio/funcional, mais exemplos de leitura. */
-        val ATALHOS = listOf("ATDP", "ATRV", "ATSH 7E0", "ATSH 7E1", "ATSH 7DF", "ATI", "0100", "2101", "13")
+        const val ABA_TERMINAL = 0
+        const val ABA_VARREDURA = 1
 
-        fun intent(context: Context, veiculoId: Long): Intent =
-            Intent(context, TerminalObdActivity::class.java).putExtra(DiagnosticoActivity.EXTRA_VEICULO_ID, veiculoId)
+        fun intent(context: Context, veiculoId: Long, aba: Int = ABA_TERMINAL): Intent =
+            Intent(context, TerminalObdActivity::class.java)
+                .putExtra(DiagnosticoActivity.EXTRA_VEICULO_ID, veiculoId)
+                .putExtra(EXTRA_ABA, aba)
     }
 }

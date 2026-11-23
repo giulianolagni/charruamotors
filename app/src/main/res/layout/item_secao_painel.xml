@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bloco reordenável do topo do Painel (Personalizar Painel): arraste pela alça. -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    style="@style/Widget.Material3.CardView.Outlined"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/espaco_pequeno"
+    app:cardCornerRadius="@dimen/raio_card">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:minHeight="64dp"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/espaco_medio"
+        android:paddingEnd="@dimen/espaco_pequeno">
+
+        <TextView
+            android:id="@+id/texto_posicao"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="@drawable/ponto_status"
+            android:backgroundTint="@color/azul_primario"
+            android:gravity="center"
+            android:textAppearance="?attr/textAppearanceLabelLarge"
+            android:textColor="@color/branco"
+            tools:text="1" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/espaco_medio"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/texto_titulo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceTitleSmall"
+                tools:text="Músicas (Spotify)" />
+
+            <TextView
+                android:id="@+id/texto_descricao"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="@color/texto_secundario"
+                tools:text="Mini-player do Spotify / YouTube Music" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/alca_arrastar"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/personalizar_arrastar"
+            android:padding="12dp"
+            android:src="@drawable/ic_arrastar"
+            app:tint="@color/texto_secundario" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

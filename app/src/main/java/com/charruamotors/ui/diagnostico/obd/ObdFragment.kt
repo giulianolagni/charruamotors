@@ -31,6 +31,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
+import com.charruamotors.databinding.DialogAtivarHudBinding
 import com.charruamotors.databinding.DialogRegistroComunicacaoBinding
 import com.charruamotors.databinding.FragmentObdBinding
 import com.charruamotors.direcao.hud.HudFlutuanteService
@@ -39,11 +40,17 @@ import com.charruamotors.direcao.midia.ControladorMidia
 import com.charruamotors.direcao.midia.EstadoMidia
 import com.charruamotors.direcao.waze.AbridorWaze
 import com.charruamotors.direcao.waze.AcaoWaze
+import com.charruamotors.direcao.painel.ConfigPainel
+import com.charruamotors.direcao.painel.SecaoPainel
+import com.charruamotors.sistema.unidades.ConversorUnidades
+import com.charruamotors.ui.componentes.GaugeView
+import com.charruamotors.ui.oficina.falhas.DiagnosticoErrosActivity
+import com.charruamotors.ui.painel.EditorConfigHud
+import com.charruamotors.ui.painel.PersonalizarPainelActivity
 import com.charruamotors.domain.calculo.EstadoCronometro
 import com.charruamotors.domain.calculo.MetodoConsumo
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.EstadoConexaoObd
-import com.charruamotors.domain.model.LeituraObd
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.obd.DispositivoObd
 import com.charruamotors.obd.InfoConexao
@@ -57,18 +64,12 @@ import com.charruamotors.obd.sessao.EstadoSessao
 import com.charruamotors.obd.sessao.FaseSessao
 import com.charruamotors.obd.sessao.SessaoObd
 import com.charruamotors.sistema.StatusCaixaPreta
-import com.charruamotors.sistema.unidades.UnidadePressao
-import com.charruamotors.ui.componentes.EscalaGauge
 import com.charruamotors.ui.configuracoes.ConfiguracoesActivity
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
-import com.charruamotors.ui.oficina.bateria.TesteBateriaActivity
 import com.charruamotors.ui.oficina.replay.ReplayLogActivity
-import com.charruamotors.ui.oficina.terminal.TerminalObdActivity
 import com.charruamotors.ui.util.ArquivoExportado
 import com.charruamotors.ui.util.ExportadorCsv
 import com.charruamotors.ui.util.PermissoesBluetooth
-import com.charruamotors.ui.util.comoDecimal
-import com.charruamotors.ui.util.comoMilhar
 import com.charruamotors.ui.util.comoNumero
 import com.charruamotors.ui.util.definirTexto
 import com.charruamotors.ui.util.rotulo
@@ -78,11 +79,11 @@ import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 
 /**
- * Aba 1 — Scanner OBD2: card de direção (mini-player do Spotify/YouTube Music, atalhos do Waze e
- * Modo HUD flutuante), conexão, hub "Ferramentas de Oficina" (teste de bateria e alternador,
- * replay de logs CSV, terminal ELM327 e varredura de PIDs), painel de telemetria (mostradores, gráfico ao vivo, computador
- * de bordo, cronômetro 0–100 km/h e grade de todos os PIDs suportados, inclusive os da
- * montadora), Data Logger CSV e diagnóstico completo (VIN, falhas por categoria, Freeze Frame).
+ * Aba Painel: blocos reordenáveis no topo (Músicas — mini-player do Spotify/YouTube Music;
+ * Navegação — atalhos do Waze e Modo HUD flutuante; Marcadores — os 4 mostradores no estilo
+ * escolhido), conexão do scanner, gráfico ao vivo, computador de bordo, cronômetro 0–100, lista
+ * rápida de sensores, Data Logger CSV e as informações da ECU. Ordem, estilo, sensores e HUD vêm
+ * de "Personalizar Painel"; tudo é exibido nas unidades globais (métrico/imperial).
  */
 class ObdFragment : Fragment() {
 
@@ -91,9 +92,7 @@ class ObdFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val viewModel: ObdViewModel by viewModels { ObdViewModel.Factory }
-    private val adapterCodigos = DiagnosticoDtcAdapter()
     private val adapterSensores = SensorAdapter()
-    private val adapterHistorico = LeituraObdAdapter()
 
     /** Ação que aguarda a concessão das permissões / ligar o Bluetooth. */
     private var acaoPendente: (() -> Unit)? = null
@@ -110,8 +109,17 @@ class ObdFragment : Fragment() {
     private val telemetriaHud: TelemetriaCompartilhada
         get() = app.telemetriaCompartilhada
 
-    /** Unidade do Turbo/MAP escolhida nas Configurações (kPa, bar ou psi). */
-    private var unidadePressao: UnidadePressao = UnidadePressao.PADRAO
+    /** Unidades globais (métrico/imperial) e de pressão escolhidas nas Configurações. */
+    private var conversor: ConversorUnidades = ConversorUnidades.PADRAO
+
+    /** Ordem, estilo, os 4 mostradores e a lista rápida (Personalizar Painel). */
+    private var configPainel: ConfigPainel = ConfigPainel()
+
+    /** "Ver todos": ignora a lista rápida e mostra todos os sensores suportados. */
+    private var mostrarTodosSensores = false
+
+    private val gauges: List<GaugeView>
+        get() = listOf(binding.gauge1, binding.gauge2, binding.gauge3, binding.gauge4)
 
     /** A permissão de notificação (opcional, só para ver o "Fechar HUD" na gaveta) já foi pedida? */
     private var notificacaoPerguntada = false
@@ -162,12 +170,10 @@ class ObdFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.listaCodigos.adapter = adapterCodigos
         binding.listaSensores.layoutManager = GridLayoutManager(requireContext(), colunasDaGrade())
         binding.listaSensores.adapter = adapterSensores
         // A grade muda a cada ciclo de polling: sem animação de "change" para não piscar.
         binding.listaSensores.itemAnimator = null
-        binding.listaHistoricoLeituras.adapter = adapterHistorico
         controladorMidia = ControladorMidia(requireContext())
         configurarAcoes()
         configurarDirecao()
@@ -196,10 +202,15 @@ class ObdFragment : Fragment() {
         botaoGravarLog.setOnClickListener { viewModel.alternarLog() }
         botaoArmarCronometro.setOnClickListener { viewModel.alternarCronometro() }
         botaoZerarViagem.setOnClickListener { viewModel.zerarViagem() }
-        botaoLerCodigos.setOnClickListener { viewModel.lerCodigos() }
-        botaoLimparCodigos.setOnClickListener { confirmarLimpezaCodigos() }
         botaoRegistroComunicacao.setOnClickListener { mostrarRegistroComunicacao() }
-        configurarOficina()
+        botaoPersonalizarPainel.setOnClickListener { startActivity(PersonalizarPainelActivity.intent(requireContext())) }
+        botaoVerTodosSensores.setOnClickListener {
+            mostrarTodosSensores = !mostrarTodosSensores
+            mostrarSensores(viewModel.sensores.value)
+        }
+        botaoAbrirFalhas.setOnClickListener {
+            startActivity(DiagnosticoErrosActivity.intent(requireContext(), requireArguments().getLong(DiagnosticoActivity.EXTRA_VEICULO_ID)))
+        }
         configurarCaixaPreta()
     }
 
@@ -238,32 +249,6 @@ class ObdFragment : Fragment() {
             .show()
     }
 
-    // ------------------------------------------------------------------ Ferramentas de Oficina
-
-    /**
-     * Hub "Ferramentas de Oficina". Cada ferramenta abre numa tela própria: na bateria e no
-     * terminal, a sessão manual do cliente suspende o polling da sessão compartilhada (e do HUD);
-     * ao voltar, o cliente restaura o `ATSH` e o polling retoma, sem fechar o socket Bluetooth.
-     */
-    private fun configurarOficina() = with(binding) {
-        val veiculoId = requireArguments().getLong(DiagnosticoActivity.EXTRA_VEICULO_ID)
-        botaoOficinaBateria.setOnClickListener {
-            abrirFerramentaConectada { TesteBateriaActivity.intent(requireContext(), veiculoId) }
-        }
-        botaoOficinaReplay.setOnClickListener { startActivity(ReplayLogActivity.intent(requireContext())) }
-        botaoOficinaTerminal.setOnClickListener {
-            abrirFerramentaConectada { TerminalObdActivity.intent(requireContext(), veiculoId) }
-        }
-    }
-
-    private fun abrirFerramentaConectada(intent: () -> Intent) {
-        if (viewModel.estado.value !is EstadoConexaoObd.Conectado) {
-            mostrarMensagem(getString(R.string.oficina_requer_conexao))
-            return
-        }
-        startActivity(intent())
-    }
-
     // ------------------------------------------------------------------ direção: música, Waze e HUD
 
     private fun configurarDirecao() = with(binding) {
@@ -278,7 +263,7 @@ class ObdFragment : Fragment() {
         botaoWazePosto.setOnClickListener { abrirWaze(AcaoWaze.POSTO) }
         botaoWazeOficina.setOnClickListener { abrirWaze(AcaoWaze.OFICINA) }
         botaoHud.setOnClickListener {
-            if (telemetriaHud.hudAtivo.value) HudFlutuanteService.parar(requireContext()) else ativarHud()
+            if (telemetriaHud.hudAtivo.value) HudFlutuanteService.parar(requireContext()) else escolherHud()
         }
     }
 
@@ -294,6 +279,25 @@ class ObdFragment : Fragment() {
                 .setData(Uri.fromParts("package", requireContext().packageName, null))
             runCatching { startActivity(detalhes) }
         }
+    }
+
+    /**
+     * Tela de ativação do HUD: Minimizado (RPM e Turbo) ou Expandido (até 4 sensores), quais dados
+     * fixar e o estilo de texto/gráficos. A escolha fica salva para a próxima vez.
+     */
+    private fun escolherHud() {
+        val conteudo = DialogAtivarHudBinding.inflate(layoutInflater)
+        val editor = EditorConfigHud(conteudo.configHud, app.preferenciasPainel.config.value.hud)
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.hud_config_titulo)
+            .setIcon(R.drawable.ic_hud)
+            .setView(conteudo.root)
+            .setNegativeButton(R.string.botao_cancelar, null)
+            .setPositiveButton(R.string.hud_config_ativar) { _, _ ->
+                app.preferenciasPainel.definirHud(editor.config)
+                ativarHud()
+            }
+            .show()
     }
 
     /**
@@ -440,15 +444,6 @@ class ObdFragment : Fragment() {
         }
     }
 
-    private fun confirmarLimpezaCodigos() {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.obd_limpar_titulo)
-            .setMessage(R.string.obd_limpar_mensagem)
-            .setNegativeButton(R.string.botao_cancelar, null)
-            .setPositiveButton(R.string.obd_limpar_confirmar) { _, _ -> viewModel.limparCodigos() }
-            .show()
-    }
-
     private fun observarViewModel() {
         // viewLifecycleOwner: a coleta acompanha a view do Fragment (para ao destruir a view).
         viewLifecycleOwner.lifecycleScope.launch {
@@ -460,18 +455,16 @@ class ObdFragment : Fragment() {
                 launch { viewModel.dados.collect { mostrarDados(it) } }
                 launch { viewModel.sensores.collect { mostrarSensores(it) } }
                 launch { viewModel.infoEcu.collect { mostrarInfoEcu(it) } }
-                launch { viewModel.diagnostico.collect { mostrarDiagnostico(it) } }
                 launch { viewModel.estadoLog.collect { mostrarEstadoLog(it) } }
                 launch { viewModel.computador.collect { mostrarComputador(it) } }
                 launch { viewModel.cronometro.collect { mostrarCronometro(it) } }
                 launch { viewModel.grafico.collect { mostrarGrafico(it) } }
-                launch { viewModel.ocupado.collect { atualizarBotoes() } }
                 launch { viewModel.manterTelaAcesa.collect { aplicarTelaAcesa() } }
-                launch { viewModel.historicoLeituras.collect { mostrarHistorico(it) } }
                 controladorMidia?.let { midia -> launch { midia.estado.collect { mostrarMidia(it) } } }
                 launch { telemetriaHud.hudAtivo.collect { mostrarHud(it) } }
                 launch { viewModel.configAuto.collect { mostrarFaixaCaixaPreta(it, viewModel.estadoSessao.value) } }
-                launch { app.preferenciasApp.config.collect { aplicarUnidadePressao(it.unidadePressao) } }
+                launch { app.preferenciasApp.config.collect { aplicarConversor(it.conversor) } }
+                launch { app.preferenciasPainel.config.collect { aplicarConfigPainel(it) } }
                 launch { viewModel.estadoSessao.collect { mostrarEstadoSessao(it) } }
                 launch {
                     viewModel.simularFalha.collect { ativa ->
@@ -524,7 +517,6 @@ class ObdFragment : Fragment() {
         val conectado = estado is EstadoConexaoObd.Conectado
         val sessaoAtiva = viewModel.estadoSessao.value.ativa
         val livre = (estado is EstadoConexaoObd.Desconectado || estado is EstadoConexaoObd.Erro) && !sessaoAtiva
-        val ocupado = viewModel.ocupado.value
 
         botaoConectar.isEnabled = livre
         // Conectando (ou a sessão automática esperando a ECU / entre tentativas): o mesmo botão
@@ -543,12 +535,6 @@ class ObdFragment : Fragment() {
         botaoGravarLog.isEnabled = conectado || viewModel.estadoLog.value.gravando
         botaoArmarCronometro.isEnabled = conectado || viewModel.cronometro.value.estado.armado
         botaoZerarViagem.isEnabled = viewModel.computador.value.viagem.segundos > 0
-        botaoLerCodigos.isEnabled = conectado && !ocupado
-        botaoLimparCodigos.isEnabled = conectado && !ocupado
-        // Bateria e terminal usam a conexão ativa; o replay de logs funciona sempre.
-        botaoOficinaBateria.isEnabled = conectado && !ocupado
-        botaoOficinaTerminal.isEnabled = conectado && !ocupado
-        textoOficinaRequerConexao.isVisible = !conectado
     }
 
     private fun mostrarDispositivos(lista: List<DispositivoObd>) {
@@ -569,44 +555,74 @@ class ObdFragment : Fragment() {
             }
     }
 
-    /** Mostradores principais: RPM, velocidade, MAP/turbo e temperatura do motor. */
-    private fun mostrarDados(dados: DadosObd?) = with(binding) {
-        gaugeRpm.definirValor(dados?.get(Pids.RPM))
-        gaugeVelocidade.definirValor(dados?.get(Pids.VELOCIDADE))
-        gaugeMap.definirValor(unidadePressao.deKpa(dados?.get(Pids.PRESSAO_COLETOR)))
-        gaugeTemperatura.definirValor(dados?.get(Pids.TEMPERATURA_MOTOR))
+    /** Os 4 mostradores escolhidos, com o valor já convertido para a unidade global. */
+    private fun mostrarDados(dados: DadosObd?) {
+        configPainel.mostradores.forEachIndexed { i, sensor ->
+            gauges.getOrNull(i)?.definirValor(sensor.ler(dados)?.let { sensor.exibir(it, conversor).valor })
+        }
         atualizarBotoes()
     }
 
-    /** Configurações → Unidade de pressão: escala e unidade do mostrador de Turbo/MAP e da grade. */
-    private fun aplicarUnidadePressao(unidade: UnidadePressao) = with(binding) {
-        if (unidade == unidadePressao && gaugeMap.unidade == unidade.simbolo) return@with
-        unidadePressao = unidade
-        val faixa = unidade.mostradorMap
-        gaugeMap.unidade = unidade.simbolo
-        gaugeMap.casasDecimais = unidade.casasDecimais
-        gaugeMap.escala = EscalaGauge(
-            minimo = 0f,
-            maximo = faixa.maximo.toFloat(),
-            zonaVermelha = faixa.zonaVermelha?.toFloat(),
-            divisoes = faixa.divisoes,
-            subdivisoes = faixa.subdivisoes,
-        )
-        gaugeMap.definirValor(unidade.deKpa(viewModel.dados.value?.get(Pids.PRESSAO_COLETOR)), animar = false)
-        adapterSensores.definirUnidadePressao(unidade)
+    /**
+     * Personalizar Painel mudou: reposiciona os blocos do topo na ordem escolhida e refaz os
+     * mostradores (sensor, estilo e escala) e o filtro da lista rápida.
+     */
+    private fun aplicarConfigPainel(config: ConfigPainel) = with(binding) {
+        val ordemMudou = config.ordem != configPainel.ordem || containerSecoes.getChildAt(0) != cardDaSecao(config.ordem.first())
+        val mostradoresMudaram = config.mostradores != configPainel.mostradores || config.estilo != configPainel.estilo
+        configPainel = config
+        if (ordemMudou) {
+            val cards = config.ordem.map(::cardDaSecao)
+            containerSecoes.removeAllViews()
+            cards.forEach(containerSecoes::addView)
+        }
+        if (mostradoresMudaram || gauges.first().titulo.isEmpty()) configurarMostradores()
+        mostrarSensores(viewModel.sensores.value)
     }
 
-    private fun mostrarSensores(sensores: List<LeituraSensor>) = with(binding) {
+    private fun cardDaSecao(secao: SecaoPainel): View = when (secao) {
+        SecaoPainel.MUSICA -> binding.cardMusica
+        SecaoPainel.NAVEGACAO -> binding.cardNavegacao
+        SecaoPainel.MARCADORES -> binding.cardMarcadores
+    }
+
+    private fun configurarMostradores() {
+        configPainel.mostradores.forEachIndexed { i, sensor ->
+            val gauge = gauges.getOrNull(i) ?: return@forEachIndexed
+            PersonalizarPainelActivity.configurarGauge(gauge, sensor, configPainel.estilo, conversor)
+            gauge.definirValor(sensor.ler(viewModel.dados.value)?.let { sensor.exibir(it, conversor).valor }, animar = false)
+        }
+    }
+
+    /** Configurações → Unidades globais / pressão: mostradores, lista rápida, computador de bordo e 0–100. */
+    private fun aplicarConversor(novo: ConversorUnidades) {
+        if (novo == conversor && gauges.first().titulo.isNotEmpty()) return
+        conversor = novo
+        configurarMostradores()
+        adapterSensores.definirConversor(novo)
+        mostrarComputador(viewModel.computador.value)
+        mostrarCronometro(viewModel.cronometro.value)
+    }
+
+    /** Lista rápida: os sensores escolhidos (ou todos, sem escolha ou com "Ver todos"). */
+    private fun mostrarSensores(todos: List<LeituraSensor>) = with(binding) {
+        val filtrados = configPainel.filtrarListaRapida(todos) { it.definicao.comando }
+        val sensores = if (mostrarTodosSensores) todos else filtrados
+        val temFiltro = configPainel.listaRapida.isNotEmpty() && todos.size > filtrados.size
         // A cada ciclo só os valores mudam: com tamanho fixo, a grade rebinda as células sem pedir
         // um novo layout ao ScrollView (que remediria a aba inteira 4 vezes por segundo). Quando
-        // entram ou saem PIDs (conexão, perfil de montadora), a grade precisa crescer de verdade.
+        // entram ou saem PIDs (conexão, perfil de montadora, filtro), a grade precisa crescer de verdade.
         listaSensores.setHasFixedSize(sensores.size == adapterSensores.itemCount)
         adapterSensores.submitList(sensores)
         textoSensoresVazio.isVisible = sensores.isEmpty()
-        tituloSensores.definirTexto(if (sensores.isEmpty()) {
-            getString(R.string.obd_sensores_titulo)
-        } else {
-            getString(R.string.obd_sensores_titulo_qtd, sensores.size)
+        botaoVerTodosSensores.isVisible = temFiltro || (mostrarTodosSensores && configPainel.listaRapida.isNotEmpty())
+        botaoVerTodosSensores.definirTexto(
+            if (mostrarTodosSensores) getString(R.string.painel_so_lista_rapida) else getString(R.string.painel_ver_todos, todos.size),
+        )
+        tituloSensores.definirTexto(when {
+            sensores.isEmpty() -> getString(R.string.obd_sensores_titulo)
+            configPainel.listaRapida.isNotEmpty() && !mostrarTodosSensores -> getString(R.string.painel_lista_rapida_qtd, sensores.size)
+            else -> getString(R.string.obd_sensores_titulo_qtd, sensores.size)
         })
     }
 
@@ -665,9 +681,11 @@ class ObdFragment : Fragment() {
         textoConsumoKmL.definirTexto(when {
             consumo == null -> vazio
             consumo.kmPorLitro == null -> getString(R.string.obd_bordo_parado)
-            else -> getString(R.string.obd_bordo_km_l, consumo.kmPorLitro.coerceAtMost(MAX_KM_L_EXIBIDO).comoNumero(1))
+            else -> consumoTexto(consumo.kmPorLitro.coerceAtMost(MAX_KM_L_EXIBIDO))
         })
-        textoConsumoLH.definirTexto(consumo?.let { getString(R.string.obd_bordo_l_h, it.litrosPorHora.comoNumero(1)) } ?: vazio)
+        textoConsumoLH.definirTexto(consumo?.let {
+            getString(R.string.obd_valor_unidade, conversor.vazao(it.litrosPorHora).comoNumero(if (conversor.imperial) 2 else 1), conversor.simboloVazao)
+        } ?: vazio)
         textoMetodoConsumo.isVisible = consumo != null
         textoMetodoConsumo.definirTexto(when (consumo?.metodo) {
             MetodoConsumo.MAF -> getString(R.string.obd_bordo_metodo_maf)
@@ -675,9 +693,11 @@ class ObdFragment : Fragment() {
             MetodoConsumo.SENSOR_ECU -> getString(R.string.obd_bordo_metodo_ecu)
             null -> ""
         })
-        textoMediaViagem.definirTexto(ui.viagem.mediaKmPorLitro?.let { getString(R.string.obd_bordo_km_l, it.comoNumero(1)) } ?: vazio)
+        textoMediaViagem.definirTexto(ui.viagem.mediaKmPorLitro?.let(::consumoTexto) ?: vazio)
         textoTotaisViagem.definirTexto(getString(
-            R.string.obd_bordo_totais, ui.viagem.distanciaKm.comoNumero(1), ui.viagem.litros.comoNumero(2),
+            R.string.obd_bordo_totais,
+            conversor.distancia(ui.viagem.distanciaKm).comoNumero(1), conversor.simboloDistancia,
+            conversor.volume(ui.viagem.litros).comoNumero(2), conversor.simboloVolume,
         ))
 
         val conectado = viewModel.estado.value is EstadoConexaoObd.Conectado
@@ -695,6 +715,10 @@ class ObdFragment : Fragment() {
         botaoZerarViagem.isEnabled = ui.viagem.segundos > 0
     }
 
+    /** km/L ou MPG, com uma casa. */
+    private fun consumoTexto(kmPorLitro: Double): String =
+        getString(R.string.obd_valor_unidade, conversor.consumo(kmPorLitro).comoNumero(1), conversor.simboloConsumo)
+
     /** Cronômetro 0–100: tempo (ao vivo ou final), instrução do estado e melhor tempo. */
     private fun mostrarCronometro(ui: CronometroUi) = with(binding) {
         val estado = ui.estado
@@ -710,7 +734,9 @@ class ObdFragment : Fragment() {
             EstadoCronometro.Desarmado -> getString(R.string.obd_cronometro_desarmado)
             EstadoCronometro.AguardandoParada -> getString(R.string.obd_cronometro_aguardando)
             EstadoCronometro.Pronto -> getString(R.string.obd_cronometro_pronto)
-            is EstadoCronometro.Medindo -> getString(R.string.obd_cronometro_medindo, estado.velocidade.toInt())
+            is EstadoCronometro.Medindo -> getString(
+                R.string.obd_cronometro_medindo, conversor.velocidade(estado.velocidade).toInt(), conversor.simboloVelocidade,
+            )
             is EstadoCronometro.Concluido -> getString(R.string.obd_cronometro_concluido)
         })
         textoCronometroMelhor.isVisible = ui.melhorTempoMs != null
@@ -739,39 +765,6 @@ class ObdFragment : Fragment() {
             getString(R.string.obd_log_gravar)
         })
         atualizarBotoes()
-    }
-
-    private fun mostrarHistorico(leituras: List<LeituraObd>) {
-        adapterHistorico.submitList(leituras)
-        binding.textoHistoricoVazio.isVisible = leituras.isEmpty()
-    }
-
-    private fun mostrarDiagnostico(resultado: ResultadoDiagnostico?) = with(binding) {
-        adapterCodigos.submitList(resultado?.itens().orEmpty())
-        textoCodigosVazio.isVisible = resultado == null
-        mostrarFreezeFrame(resultado)
-    }
-
-    private fun mostrarFreezeFrame(resultado: ResultadoDiagnostico?) = with(binding) {
-        cardFreezeFrame.isVisible = resultado != null
-        if (resultado == null) return@with
-        val ff = resultado.freezeFrame
-        if (ff == null || ff.vazio) {
-            grupoFfDados.isVisible = false
-            textoFfVazio.isVisible = true
-            textoFfVazio.setText(if (ff == null) R.string.obd_ff_nao_suportado else R.string.obd_ff_vazio)
-            return@with
-        }
-        grupoFfDados.isVisible = true
-        textoFfVazio.isVisible = false
-        val vazio = getString(R.string.valor_indisponivel)
-        textoFfDtc.text = ff.dtc ?: getString(R.string.obd_ff_sem_dtc)
-        textoFfDescricao.isVisible = resultado.infoFreezeFrame != null
-        textoFfDescricao.text = resultado.infoFreezeFrame?.titulo
-        valorFfRpm.text = ff.rpm?.let { getString(R.string.obd_valor_rpm, it.comoMilhar()) } ?: vazio
-        valorFfVelocidade.text = ff.velocidade?.let { getString(R.string.obd_valor_velocidade, it) } ?: vazio
-        valorFfTemperatura.text = ff.temperaturaMotor?.let { getString(R.string.obd_valor_temperatura, it) } ?: vazio
-        valorFfCarga.text = ff.cargaMotor?.let { getString(R.string.obd_valor_carga, it.comoDecimal(1)) } ?: vazio
     }
 
     /** Log salvo: Snackbar com o local do arquivo e a ação de compartilhar. */

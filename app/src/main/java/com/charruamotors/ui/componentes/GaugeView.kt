@@ -12,15 +12,19 @@ import android.view.animation.LinearInterpolator
 import androidx.core.content.withStyledAttributes
 import androidx.core.graphics.ColorUtils
 import com.charruamotors.R
+import com.charruamotors.direcao.painel.EstiloMostrador
 import com.google.android.material.color.MaterialColors
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * Mostrador analógico circular desenhado com `Canvas`/`Paint` (sem bibliotecas): arco de 270°,
- * escala com traços maiores/menores e rótulos, zona vermelha configurável, arco de progresso,
- * ponteiro animado e o valor digital no centro.
+ * Mostrador desenhado com `Canvas`/`Paint` (sem bibliotecas), em três [estilo]s:
+ * - **Esportivo**: arco de 270°, escala com traços maiores/menores e rótulos, zona vermelha,
+ *   arco de progresso, ponteiro animado e o valor digital embaixo;
+ * - **Digital Moderno**: número grande no centro de um anel de progresso grosso;
+ * - **Fita / Off-road**: barra linear horizontal com marcas, zona vermelha e o valor ao lado do
+ *   título (mais baixa que larga, para caber na grade).
  *
  * Atributos XML (`app:`): `gaugeTitulo`, `gaugeUnidade`, `gaugeMin`, `gaugeMax`,
  * `gaugeZonaVermelha`, `gaugeDivisoes`, `gaugeSubdivisoes`, `gaugeDivisorRotulos`,
@@ -43,6 +47,15 @@ class GaugeView @JvmOverloads constructor(
 
     var casasDecimais: Int = 0
         set(v) { field = v.coerceIn(0, 4); invalidate() }
+
+    /** Estilo de desenho; a Fita muda a proporção (pede um novo layout). */
+    var estilo: EstiloMostrador = EstiloMostrador.ESPORTIVO
+        set(v) {
+            if (v == field) return
+            field = v
+            requestLayout()
+            invalidate()
+        }
 
     /** Valor exibido; null = sem leitura (ponteiro no mínimo e "—" no centro). */
     var valor: Float? = null
@@ -155,10 +168,14 @@ class GaugeView @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
-    /** Quadrado: usa a largura disponível (em grade de colunas) ou o tamanho padrão. */
+    /** Quadrado (Esportivo/Digital) ou faixa baixa (Fita): usa a largura disponível ou o tamanho padrão. */
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val padrao = (TAMANHO_PADRAO_DP * resources.displayMetrics.density).toInt()
         val largura = resolveSize(padrao, widthMeasureSpec)
+        if (estilo == EstiloMostrador.FITA) {
+            setMeasuredDimension(largura, resolveSize((largura * PROPORCAO_FITA).toInt(), heightMeasureSpec))
+            return
+        }
         val altura = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
             MeasureSpec.getSize(heightMeasureSpec)
         } else {
@@ -170,6 +187,116 @@ class GaugeView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        when (estilo) {
+            EstiloMostrador.ESPORTIVO -> desenharEsportivo(canvas)
+            EstiloMostrador.DIGITAL -> desenharDigital(canvas)
+            EstiloMostrador.FITA -> desenharFita(canvas)
+        }
+    }
+
+    /** Digital Moderno: anel de progresso grosso, número grande no centro, unidade e título embaixo. */
+    private fun desenharDigital(canvas: Canvas) {
+        val largura = (width - paddingLeft - paddingRight).toFloat()
+        val altura = (height - paddingTop - paddingBottom).toFloat()
+        val tamanho = min(largura, altura)
+        if (tamanho <= 0f) return
+        val cx = paddingLeft + largura / 2f
+        val cy = paddingTop + altura / 2f
+        val espessura = tamanho * 0.09f
+        val raio = tamanho / 2f - espessura
+        arco.set(cx - raio, cy - raio, cx + raio, cy + raio)
+        val inicio = EscalaGauge.ANGULO_INICIAL
+        val varredura = EscalaGauge.VARREDURA
+        pincelTrilho.strokeWidth = espessura
+        canvas.drawArc(arco, inicio, varredura, false, pincelTrilho)
+        val v = valor
+        val alerta = v != null && escala.naZonaVermelha(v)
+        escala.fracaoZonaVermelha?.let { fz ->
+            pincelZonaVermelha.strokeWidth = espessura * 0.25f
+            val r = raio + espessura * 0.62f
+            arcoZona.set(cx - r, cy - r, cx + r, cy + r)
+            canvas.drawArc(arcoZona, inicio + varredura * fz, varredura * (1f - fz), false, pincelZonaVermelha)
+        }
+        val fracao = escala.fracao(valorPonteiro)
+        if (v != null && fracao > 0f) {
+            pincelProgresso.strokeWidth = espessura
+            pincelProgresso.color = if (alerta) corErro else corPrimaria
+            canvas.drawArc(arco, inicio, varredura * fracao, false, pincelProgresso)
+        }
+        pincelValor.textSize = tamanho * 0.24f
+        pincelValor.color = if (alerta) corErro else corSuperficie
+        canvas.drawText(textoValor(), cx, cy + tamanho * 0.07f, pincelValor)
+        pincelUnidade.textSize = tamanho * 0.07f
+        canvas.drawText(unidadeExibida(), cx, cy + tamanho * 0.19f, pincelUnidade)
+        pincelTitulo.textSize = tamanho * 0.075f
+        canvas.drawText(titulo, cx, cy + tamanho * 0.43f, pincelTitulo)
+    }
+
+    /** Fita / Off-road: título e valor em cima, barra linear com marcas e zona vermelha embaixo. */
+    private fun desenharFita(canvas: Canvas) {
+        val esquerda = paddingLeft.toFloat()
+        val direita = (width - paddingRight).toFloat()
+        val topo = paddingTop.toFloat()
+        val base = (height - paddingBottom).toFloat()
+        val largura = direita - esquerda
+        val altura = base - topo
+        if (largura <= 0f || altura <= 0f) return
+        val v = valor
+        val alerta = v != null && escala.naZonaVermelha(v)
+
+        pincelTitulo.textSize = altura * 0.16f
+        pincelTitulo.textAlign = Paint.Align.LEFT
+        canvas.drawText(titulo, esquerda, topo + altura * 0.2f, pincelTitulo)
+        pincelTitulo.textAlign = Paint.Align.CENTER
+
+        pincelValor.textSize = altura * 0.34f
+        pincelValor.textAlign = Paint.Align.RIGHT
+        pincelValor.color = if (alerta) corErro else corSuperficie
+        canvas.drawText(textoValor(), direita, topo + altura * 0.42f, pincelValor)
+        pincelValor.textAlign = Paint.Align.CENTER
+        pincelUnidade.textSize = altura * 0.12f
+        pincelUnidade.textAlign = Paint.Align.LEFT
+        canvas.drawText(unidadeExibida(), esquerda, topo + altura * 0.4f, pincelUnidade)
+        pincelUnidade.textAlign = Paint.Align.CENTER
+
+        val yBarra = topo + altura * 0.62f
+        val espessura = altura * 0.16f
+        pincelTrilho.strokeWidth = espessura
+        pincelTrilho.strokeCap = Paint.Cap.BUTT
+        canvas.drawLine(esquerda, yBarra, direita, yBarra, pincelTrilho)
+        pincelTrilho.strokeCap = Paint.Cap.ROUND
+        escala.fracaoZonaVermelha?.let { fz ->
+            pincelZonaVermelha.strokeWidth = espessura * 0.35f
+            val y = yBarra + espessura * 0.78f
+            canvas.drawLine(esquerda + largura * fz, y, direita, y, pincelZonaVermelha)
+        }
+        val fracao = escala.fracao(valorPonteiro)
+        if (v != null && fracao > 0f) {
+            pincelProgresso.strokeWidth = espessura
+            pincelProgresso.strokeCap = Paint.Cap.BUTT
+            pincelProgresso.color = if (alerta) corErro else corPrimaria
+            canvas.drawLine(esquerda, yBarra, esquerda + largura * fracao, yBarra, pincelProgresso)
+            pincelProgresso.strokeCap = Paint.Cap.ROUND
+        }
+        // Marcas maiores e rótulos das pontas e do meio.
+        pincelTraco.strokeWidth = altura * 0.015f
+        pincelTraco.color = corSecundaria
+        for (i in 0..escala.divisoes) {
+            val x = esquerda + largura * i / escala.divisoes
+            canvas.drawLine(x, yBarra - espessura / 2f, x, yBarra + espessura / 2f, pincelTraco)
+        }
+        pincelRotulo.textSize = altura * 0.11f
+        val yRotulo = base - altura * 0.02f
+        val rotulos = escala.rotulos
+        pincelRotulo.textAlign = Paint.Align.LEFT
+        canvas.drawText(rotulos.first(), esquerda, yRotulo, pincelRotulo)
+        pincelRotulo.textAlign = Paint.Align.RIGHT
+        canvas.drawText(rotulos.last(), direita, yRotulo, pincelRotulo)
+        pincelRotulo.textAlign = Paint.Align.CENTER
+        if (escala.divisoes % 2 == 0) canvas.drawText(rotulos[escala.divisoes / 2], esquerda + largura / 2f, yRotulo, pincelRotulo)
+    }
+
+    private fun desenharEsportivo(canvas: Canvas) {
         val largura = (width - paddingLeft - paddingRight).toFloat()
         val altura = (height - paddingTop - paddingBottom).toFloat()
         val tamanho = min(largura, altura)
@@ -265,9 +392,13 @@ class GaugeView @JvmOverloads constructor(
         return String.format(LOCALE_BR, "%.${casasDecimais}f", v)
     }
 
-    /** Com rótulos divididos (ex.: RPM ×1000), a unidade avisa a escala. */
+    /** Com rótulos divididos (ex.: RPM ×1000), a unidade avisa a escala (o Digital não mostra rótulos). */
     private fun unidadeExibida(): String =
-        if (escala.divisorRotulos != 1f) "$unidade (escala ×${EscalaGauge.formatarRotulo(escala.divisorRotulos)})" else unidade
+        if (escala.divisorRotulos != 1f && estilo != EstiloMostrador.DIGITAL) {
+            "$unidade (escala ×${EscalaGauge.formatarRotulo(escala.divisorRotulos)})"
+        } else {
+            unidade
+        }
 
     private fun atualizarDescricao() {
         contentDescription = "$titulo: ${valor?.let { "${textoValor()} $unidade" } ?: "sem leitura"}"
@@ -281,6 +412,8 @@ class GaugeView @JvmOverloads constructor(
         private const val DURACAO_ANIMACAO_MS = 90L
         private val INTERPOLADOR = LinearInterpolator()
         private const val TAMANHO_PADRAO_DP = 160
+        /** Altura da Fita em relação à largura. */
+        private const val PROPORCAO_FITA = 0.5f
         private val LOCALE_BR = java.util.Locale.forLanguageTag("pt-BR")
     }
 }

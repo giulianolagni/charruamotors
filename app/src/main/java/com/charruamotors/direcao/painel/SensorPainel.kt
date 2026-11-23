@@ -132,7 +132,6 @@ enum class SensorPainel(
     MARCHA_ATUAL(
         "TOYOTA_MARCHA", "Marcha", "MARCHA", "", 0,
         mapOf("" to EscalaGauge(0f, 6f, null, 6, 1)),
-        alternativos = listOf("TOYOTA_MARCHA_ECM"),
         rotulos = mapOf(0 to "N", 1 to "1ª", 2 to "2ª", 3 to "3ª", 4 to "4ª", 5 to "5ª", 255 to "Parado"),
     ),
     TRACAO_4X4(

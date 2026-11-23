@@ -13,6 +13,19 @@
         <item name="android:statusBarColor">@color/azul_primario_escuro</item>
     </style>
 
+    <!-- Modo Painel Automotivo: sempre escuro (independe do tema do app), cores vivas para os relógios. -->
+    <style name="Theme.CharruaMotors.Cluster" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/cluster_destaque</item>
+        <item name="colorSecondary">@color/cluster_ponteiro</item>
+        <item name="colorError">@color/cluster_alerta</item>
+        <item name="colorOnSurface">@color/cluster_valor</item>
+        <item name="colorOnSurfaceVariant">@color/cluster_rotulo</item>
+        <item name="android:colorBackground">@color/cluster_fundo</item>
+        <item name="android:windowBackground">@color/cluster_fundo</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
     <!-- Toolbar padrão das telas. -->
     <style name="Widget.CharruaMotors.Toolbar" parent="Widget.Material3.Toolbar">
         <item name="android:background">@color/azul_primario</item>

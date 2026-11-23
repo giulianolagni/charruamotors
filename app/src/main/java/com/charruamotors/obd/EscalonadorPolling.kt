@@ -15,6 +15,9 @@ import com.charruamotors.obd.pid.Pids
  *   cada 3 ciclos), cada ciclo de 3 comandos rápidos ganha no máximo 1 comando extra e o RPM e o
  *   turbo não perdem fluidez. Sem nenhum PID rápido suportado, a fila lenta anda em todo ciclo.
  *
+ * - **fila leve** (opcional, [leves]): sensores de outro módulo CAN (câmbio `7E1`); cada visita custa
+ *   `ATSH`/`ATCRA` de ida e volta, então só entram a cada [ciclosPorLeve] ciclos, sem travar a fila rápida.
+ *
  * Também consolida as respostas num instantâneo com o último valor conhecido de cada PID
  * (amostra e retenção): um PID consultado que não respondeu sai do instantâneo, para a UI
  * não exibir um valor velho como se fosse atual.
@@ -25,10 +28,14 @@ class EscalonadorPolling(
     private val lentosPorVez: Int = LENTOS_POR_VEZ,
     private val ciclosPorLento: Int = CICLOS_POR_LENTO,
     private val candidatosRapidos: List<String> = Pids.candidatosFilaRapida(consumoPorMaf = true),
+    /** Sensores de outro módulo (câmbio `7E1`): fila própria, em cadência mais leve que a lenta. */
+    private val leves: Set<String> = emptySet(),
+    private val ciclosPorLeve: Int = CICLOS_POR_LEVE,
 ) {
     init {
         require(lentosPorVez >= 1) { "A fila lenta precisa andar ao menos 1 PID por vez" }
         require(ciclosPorLento >= 1) { "A fila lenta precisa andar ao menos a cada ciclo" }
+        require(ciclosPorLeve >= 1) { "A fila leve precisa andar ao menos a cada ciclo" }
     }
 
     /** PIDs lidos em todo ciclo. */
@@ -37,6 +44,10 @@ class EscalonadorPolling(
 
     /** PIDs lidos em rodízio (um representante por grupo, ver [atualizarSuportados]). */
     var filaLenta: List<String> = emptyList()
+        private set
+
+    /** PIDs de outro módulo, lidos juntos a cada [ciclosPorLeve] ciclos (um representante por grupo). */
+    var filaLeve: List<String> = emptyList()
         private set
 
     private var suportados: Set<String> = emptySet()
@@ -60,7 +71,8 @@ class EscalonadorPolling(
         this.suportados = conjunto
         filaRapida = candidatosRapidos.filter { it in conjunto }.distinct()
         val rapidos = filaRapida.toSet()
-        filaLenta = conjunto.filter { it !in rapidos }.map(grupoDe).distinct()
+        filaLeve = conjunto.filter { it in leves && it !in rapidos }.map(grupoDe).distinct()
+        filaLenta = conjunto.filter { it !in rapidos && it !in leves }.map(grupoDe).distinct()
         cursor = if (filaLenta.isEmpty()) 0 else cursor % filaLenta.size
         instantaneo.keys.retainAll(conjunto)
     }
@@ -68,8 +80,10 @@ class EscalonadorPolling(
     /** Comandos do próximo ciclo: toda a fila rápida + a vez da fila lenta (1 a cada [ciclosPorLento]). */
     fun proximoCiclo(): List<String> {
         val vezDaLenta = filaRapida.isEmpty() || ciclos % ciclosPorLento == 0L
+        val vezDaLeve = filaLeve.isNotEmpty() && ciclos % ciclosPorLeve == 0L
         ciclos++
-        return if (vezDaLenta) filaRapida + proximosLentos() else filaRapida
+        val base = if (vezDaLenta) filaRapida + proximosLentos() else filaRapida
+        return if (vezDaLeve) base + filaLeve else base
     }
 
     private fun proximosLentos(): List<String> {
@@ -107,5 +121,8 @@ class EscalonadorPolling(
 
         /** A fila lenta anda 1 vez a cada tantos ciclos rápidos. */
         const val CICLOS_POR_LENTO = 3
+
+        /** A fila leve (câmbio `7E1`, que exige trocar o cabeçalho) é lida 1 vez a cada tantos ciclos. */
+        const val CICLOS_POR_LEVE = 4
     }
 }

@@ -9,11 +9,8 @@
     <string name="login_dica">Login simulado — use admin@charruamotors.com / 123456</string>
 
     <!-- Dashboard -->
-    <string name="dashboard_titulo">Charrua Motors</string>
     <string name="dashboard_boas_vindas">Olá, %1$s</string>
-    <string name="dashboard_meus_veiculos">Meus veículos</string>
     <string name="dashboard_lista_vazia">Nenhum veículo cadastrado.\nToque em “Novo veículo” para começar.</string>
-    <string name="botao_conectar_scanner">Conectar scanner OBD2</string>
     <string name="botao_novo_veiculo">Novo veículo</string>
     <string name="item_veiculo_detalhes">%1$s km • %2$s</string>
     <string name="item_veiculo_consumo">Consumo médio: %1$s km/l</string>
@@ -61,33 +58,20 @@
     <string name="combustivel_gnv">GNV</string>
 
     <!-- Diagnóstico (Activity com abas) -->
-    <string name="diagnostico_titulo">Diagnóstico</string>
     <string name="aba_obd">Diagnóstico OBD2</string>
     <string name="aba_manutencoes">Manutenções</string>
     <string name="aba_abastecimentos">Abastecimentos</string>
-    <string name="botao_diagnostico">Diagnóstico</string>
-    <string name="scanner_sem_veiculo">Cadastre um veículo para usar o scanner</string>
-    <string name="scanner_escolher_veiculo">Escolha o veículo</string>
     <string name="seletor_data_titulo">Selecione a data</string>
     <string name="valor_indisponivel">—</string>
     <string name="prefixo_reais">R$</string>
     <string name="item_km">%1$s km</string>
 
     <!-- Aba OBD2 -->
-    <string name="obd_scanner">Scanner OBD2</string>
-    <string name="obd_modo_simulado">Simulado</string>
-    <string name="obd_modo_bluetooth">Bluetooth real</string>
-    <string name="obd_dispositivo">Scanner simulado</string>
-    <string name="obd_dispositivo_pareado">Scanner pareado</string>
-    <string name="obd_atualizar_dispositivos">Atualizar lista</string>
-    <string name="obd_conectar">Conectar</string>
     <string name="obd_desconectar">Desconectar</string>
-    <string name="obd_estado_desconectado">Desconectado</string>
     <string name="obd_estado_conectando">Conectando…</string>
     <string name="obd_estado_conectado">Conectado</string>
     <string name="obd_estado_erro">Erro: %1$s</string>
     <string name="obd_conectado">Scanner conectado</string>
-    <string name="obd_sem_pareados">Nenhum scanner pareado. Pareie o ELM327 nas configurações de Bluetooth.</string>
     <string name="obd_sem_bluetooth">Este aparelho não possui Bluetooth. Use o modo simulado.</string>
     <string name="obd_permissao_negada">Permissão de Bluetooth necessária para usar o scanner</string>
     <string name="obd_bluetooth_desligado">Ligue o Bluetooth para conectar ao scanner</string>
@@ -125,7 +109,6 @@
     <string name="obd_valor_temperatura">%1$d °C</string>
     <string name="obd_valor_carga">%1$s %%</string>
     <string name="obd_valor_bateria">%1$s V</string>
-    <string name="obd_simular_falha">Simular falha de conexão (demonstração)</string>
     <string name="obd_historico_titulo">Leituras salvas</string>
     <string name="obd_historico_vazio">Nenhuma leitura salva ainda.</string>
     <string name="obd_historico_valores">%1$s • %2$s • %3$s</string>

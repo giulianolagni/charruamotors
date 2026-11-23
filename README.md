@@ -27,6 +27,7 @@ Disciplina: Desenvolvimento Mobile II. Professor: Jaqson.
 - [Pacote Oficina (v1.2)](#pacote-oficina-v12)
 - [Menu lateral, Configurações e Assistente (v1.3)](#menu-lateral-configurações-e-assistente-v13)
 - [Abas, personalização do Painel e unidades globais (v1.4)](#abas-personalização-do-painel-e-unidades-globais-v14)
+- [Veículo favorito, navegação limpa e Painel livre (v1.5)](#veículo-favorito-navegação-limpa-e-painel-livre-v15)
 - [Regras de negócio e cálculos](#regras-de-negócio-e-cálculos)
 - [Arquitetura e stack](#arquitetura-e-stack)
 - [Como executar](#como-executar)
@@ -52,15 +53,15 @@ Os prints das telas do aplicativo estão em [docs/prints_telas.md](docs/prints_t
 
 ## Funcionalidades
 
-O app tem quatro Activities, todas com o mesmo tema Material 3 e a mesma Toolbar. A navegação segue o fluxo `Login → Dashboard → (Formulário de veículo | Diagnóstico)`. Entre as telas só trafega o id do veículo; cada tela recarrega os dados do banco.
+O app tem quatro Activities principais, todas com o mesmo tema Material 3 e a mesma Toolbar. Desde a v1.5 a navegação segue o fluxo `Login → abas do veículo favorito` (ou `Login → Meus Veículos` sem veículo cadastrado), com Meus Veículos e o formulário abertos por cima das abas. Entre as telas só trafega o id do veículo; cada tela recarrega os dados do banco.
 
 ### 1. Login (`LoginActivity`)
 
 - Login simulado, sem backend: as credenciais são conferidas na tabela `usuarios` do Room. O usuário padrão é criado na primeira tentativa de login.
 - Validação de e-mail e de senha (mínimo de 6 caracteres), com o erro exibido no próprio campo.
-- A sessão fica salva em `SharedPreferences`: com sessão ativa, o app abre direto no Dashboard.
+- A sessão fica salva em `SharedPreferences`: com sessão ativa, o app abre direto nas abas do **veículo favorito** (aba Painel); sem veículo cadastrado, em Meus Veículos.
 
-### 2. Dashboard (`DashboardActivity`)
+### 2. Meus Veículos (`DashboardActivity`)
 
 - Lista dos veículos cadastrados (`RecyclerView`), cada um com um resumo:
   - quilometragem atual e combustível;
@@ -68,8 +69,8 @@ O app tem quatro Activities, todas com o mesmo tema Material 3 e a mesma Toolbar
   - próxima manutenção prevista, destacada em vermelho quando vencida;
   - alerta de códigos de falha (DTCs) ativos no histórico OBD2.
 - O resumo se atualiza sozinho a cada cadastro, manutenção, abastecimento ou leitura de DTCs, porque combina os `Flow`s dos repositórios.
-- Botão "Novo veículo" e atalho "Conectar scanner OBD2" (pergunta qual veículo quando há mais de um).
-- Menu lateral (ícone de 3 riscos na Toolbar) com navegação, Configurações, Checklist de Permissões, Backup e o logout — ver [v1.3](#menu-lateral-configurações-e-assistente-v13).
+- Estrela do **veículo favorito** em cada card (o app abre direto nele), botão "Abrir Painel" e "Novo veículo".
+- Aberta pelo menu lateral ou pelo seletor da Toolbar das abas, tem a seta de Voltar; como tela inicial (sem veículo), tem o menu lateral — ver [v1.5](#veículo-favorito-navegação-limpa-e-painel-livre-v15).
 
 ### 3. Formulário de veículos (`VeiculoFormActivity`): CRUD completo
 
@@ -86,7 +87,7 @@ Campos: marca, modelo, ano, placa, cor, km atual, tipo de combustível e capacid
 
 Desde a v1.4, quatro abas na navegação inferior (`BottomNavigationView` + `ViewPager2` sem deslizar), cada uma um Fragment:
 
-- **Painel:** direção e mostradores — blocos reordenáveis (Músicas, Navegação e Marcadores), conexão com o scanner simulado ou Bluetooth real, gráfico ao vivo, computador de bordo, cronômetro 0–100, lista rápida de sensores, gravação da leitura e informações da ECU.
+- **Painel:** card de conexão inteligente (início rápido Bluetooth/Simulado ou barra compacta conectada) e os blocos escolhidos pelo usuário — Músicas, Navegação, Mostradores (1 a 12), gráfico ao vivo, computador de bordo, cronômetro 0–100, lista rápida de sensores e informações da ECU.
 - **Oficina:** cards grandes para Teste de Bateria, Diagnóstico de Erros (DTCs), Varredura de PIDs e Terminal ELM327.
 - **Manutenções:** histórico com edição e exclusão. O cadastro abre em BottomSheet: tipo de serviço, data, km, custo, oficina, descrição e lista dinâmica de peças trocadas (nome, quantidade e valor). No topo da lista aparece a previsão das próximas manutenções.
 - **Histórico:** abastecimentos (consumo médio, custo por km e CRUD em BottomSheet), logs CSV/TXT salvos e o diário de viagens.
@@ -356,6 +357,54 @@ do Android 13+). É desenhado por código: `docs/icone/IconeCharrua.java` (Java2
 
 ---
 
+## Veículo favorito, navegação limpa e Painel livre (v1.5)
+
+**Abertura direta no veículo favorito.** O favorito é o veículo padrão já salvo (o mesmo da caixa-preta) ou, sem ele,
+o primeiro cadastrado (`VeiculoFavorito`, puro). Com o login feito e algum veículo, o app entra direto nas 4 abas
+desse veículo, na aba Painel; sem veículo, abre Meus Veículos e, ao cadastrar o primeiro, o Painel dele. Em Meus
+Veículos a estrela de cada card troca o favorito. Na Toolbar, o nome do veículo ativo (com `★ Favorito`) abre o seletor
+rápido de veículos ou Meus Veículos.
+
+**Menu lateral persistente e Voltar correto.** O `DrawerLayout` agora vive na tela das abas (`MenuLateralGlobal`): os 3
+riscos ficam visíveis em Painel, Oficina, Manutenções e Histórico. O menu tem só ações globais (`AcaoMenuLateral`):
+Meus Veículos (Trocar / Favorito), Configurações, Checklist de Permissões, Backup e Restauração, Sobre e Sair. As telas
+abertas por ele entram por cima da atual, sem flags de pilha nem `parentActivityName`: a seta ou o gesto de Voltar
+retornam exatamente para a aba de onde o usuário saiu. Só o logout limpa a pilha.
+
+**Cada função em um único lugar.**
+
+| Onde | O que fica lá |
+|---|---|
+| Aba Painel | Card de conexão, Modo HUD (no bloco Navegação), Personalizar Painel (ícone na Toolbar) e os blocos escolhidos |
+| Aba Oficina | Teste de Bateria, Diagnóstico de Erros (DTCs), Varredura de PIDs e Terminal ELM327 |
+| Aba Manutenções | Manutenções, peças e lembretes |
+| Aba Histórico | Abastecimentos, logs CSV/TXT e viagens |
+| Menu lateral | Meus Veículos, Configurações, Checklist, Backup, Sobre e Sair |
+
+Saíram do Painel o atalho de DTCs e a faixa da caixa-preta (que já tem lugar nas Configurações); saíram do menu os
+atalhos de Logs e Ferramentas de Oficina (já são abas).
+
+**Card de conexão inteligente.** Desconectado: "Conectar no Carro (Bluetooth)", com o adaptador salvo (ex.: `OBDII`) e
+o ícone para trocar o pareado, e "Modo Simulado" com 1 toque. Ao conectar (manual ou pela caixa-preta), o card recolhe
+para a barra `● Conectado · OBDII · 7E0` com Desconectar (`StatusConexaoPainel`, puro).
+
+**Personalizar Painel 2.0.**
+
+- **Blocos:** todos os 8 blocos do Painel são arrastáveis pela alça (`≡`) e têm o botão de remover; os removidos ficam
+  em "Blocos removidos (+ Adicionar de volta)". No bloco Navegação, cada botão (Waze, Posto, Oficina, Modo HUD) pode ser
+  escondido.
+- **Mostradores:** lista dinâmica de 1 a 12 relógios (começa com os 4 padrão), cada um com alça, sensor, estilo próprio
+  (Esportivo, Digital ou Fita) e remover, mais "+ Adicionar mostrador" e "Aplicar estilo a todos". No Painel, grade de 2
+  colunas; a Fita ocupa a largura total (`GradeMostradores`), com altura contida e todos os rótulos que couberem, sem
+  números encostados entre relógios vizinhos.
+- **Lista rápida e HUD:** os sensores escolhidos são reordenados por arraste.
+- **Backup:** o `.json` leva a personalização do Painel (`CodecPainel`, as mesmas chaves das preferências) e as unidades
+  globais. Backups antigos sem esses campos restauram sem mexer neles; as preferências da v1.4 migram sozinhas (o estilo
+  global vira o estilo de cada relógio).
+
+
+---
+
 ## Regras de negócio e cálculos
 
 Validações e cálculos ficam na camada de domínio (`domain/`), sem dependência do Android, e são cobertos por testes unitários. A UI apenas exibe os resultados.
@@ -475,9 +524,11 @@ app/src/main/java/com/charruamotors/
 │   ├── midia/               #   ControladorMidia, MidiaNotificacaoService, EstadoMidia (lógica pura)
 │   ├── waze/                #   AtalhosWaze (deep links, puro) e AbridorWaze
 │   ├── hud/                 #   HudFlutuanteService, FormatadorHud/PainelHud, TelemetriaCompartilhada
-│   └── painel/              #   v1.4: ConfigPainel, SensorPainel, OrdemPainel e PreferenciasPainel
+│   └── painel/              #   ConfigPainel (v1.5: blocos, Mostrador com estilo próprio), CodecPainel,
+│                            #   GradeMostradores, SensorPainel e PreferenciasPainel
 ├── obd/                     # ObdClient, Elm327BluetoothClient, ObdClientFake (+ EcuSimulada), ObdParser
-├── sistema/                 # v1.3, lógica pura: StatusCaixaPreta e PreSelecaoAssistente,
+├── sistema/                 # Lógica pura: StatusCaixaPreta, PreSelecaoAssistente e StatusConexaoPainel,
+│   ├── navegacao/           #   v1.5: VeiculoFavorito, DestinoInicial e AcaoMenuLateral
 │   ├── preferencias/        #   PreferenciasApp (tema, unidade, flag do assistente), TemaApp
 │   ├── unidades/            #   UnidadePressao e ConversorUnidades (métrico ↔ imperial)
 │   ├── permissoes/          #   ChecklistPermissoes (regras por versão) e LeitorPermissoes
@@ -497,7 +548,8 @@ app/src/main/java/com/charruamotors/
     │   ├── manutencoes/     #   ManutencoesFragment, ManutencaoSheet, adapter, ViewModel
     │   ├── historico/       #   HistoricoFragment e HistoricoViewModel
     │   └── abastecimentos/  #   AbastecimentosFragment (dentro do Histórico), AbastecimentoSheet, ViewModel
-    ├── painel/              # PersonalizarPainelActivity e EditorConfigHud
+    ├── navegacao/           # MenuLateralGlobal (3 riscos das telas principais, backup, sobre e logout)
+    ├── painel/              # PersonalizarPainelActivity, adapters arrastáveis, MontadorMostradores e EditorConfigHud
     ├── oficina/             # Telas da Oficina: bateria/, falhas/, replay/ e terminal/
     ├── assistente/          # AssistenteActivity (Assistente de Primeira Abertura)
     ├── configuracoes/       # ConfiguracoesActivity e DialogosCaixaPreta
@@ -510,14 +562,14 @@ Recursos em `app/src/main/res`:
 
 - `layout/`: telas, itens de lista e BottomSheets;
 - `values/`: `strings*.xml`, `colors.xml`, `dimens.xml` e `themes.xml` (DayNight); `values-night/`: cores do tema escuro;
-- `menu/`: menu lateral do Dashboard, navegação inferior (`menu_abas`) e menus das Toolbars;
+- `menu/`: menu lateral global, navegação inferior (`menu_abas`) e menus das Toolbars;
 - `mipmap-*`: ícone adaptativo (fundo, frente e monocromático) e versões legadas, gerados por `docs/icone/IconeCharrua.java`.
 
 ---
 
 ## Testes unitários
 
-São **610 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./gradlew test`. Alguns destaques:
+São **643 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./gradlew test`. Alguns destaques:
 
 | Classe de teste | Testes | O que cobre |
 |---|---:|---|

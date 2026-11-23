@@ -34,6 +34,8 @@
 
     <!-- v1.3: bolinhas de status (menu lateral, checklist de permissões, assistente) -->
     <color name="status_ok">#2E7D32</color>
+    <!-- Estrela do veículo favorito (v1.5) -->
+    <color name="favorito">#F9A825</color>
     <color name="status_pendente">#C62828</color>
     <color name="status_espera">#9E9E9E</color>
     <color name="branco_secundario">#CCFFFFFF</color>

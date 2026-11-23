@@ -72,6 +72,15 @@ class PreferenciasAppTest {
     }
 
     @Test
+    fun `restaurar o backup traz as unidades globais`() {
+        val prefs = PreferenciasApp(armazenamento)
+        prefs.restaurar(TemaApp.CLARO, UnidadePressao.BAR, com.charruamotors.sistema.unidades.SistemaUnidades.IMPERIAL)
+        val reaberto = PreferenciasApp(armazenamento)
+        assertEquals(com.charruamotors.sistema.unidades.SistemaUnidades.IMPERIAL, reaberto.sistemaUnidades)
+        assertEquals(UnidadePressao.BAR, reaberto.unidadePressao)
+    }
+
+    @Test
     fun `valor igual ao atual nao regrava`() {
         val prefs = PreferenciasApp(armazenamento)
         prefs.definirTema(TemaApp.CLARO)

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Menu lateral do Dashboard. Os submenus viram seções com título; o grupo final é o rodapé. -->
+<!-- Menu lateral (3 riscos), presente nas 4 abas principais: só ações globais do app. Logs e
+     Oficina são abas fixas da barra inferior e não se repetem aqui (v1.5). -->
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
 
     <item android:title="@string/menu_secao_navegacao">
@@ -8,14 +9,6 @@
                 android:id="@+id/menu_veiculos"
                 android:icon="@drawable/ic_veiculo"
                 android:title="@string/menu_veiculos" />
-            <item
-                android:id="@+id/menu_logs"
-                android:icon="@drawable/ic_logs"
-                android:title="@string/menu_logs" />
-            <item
-                android:id="@+id/menu_oficina"
-                android:icon="@drawable/ic_oficina"
-                android:title="@string/menu_oficina" />
         </menu>
     </item>
 

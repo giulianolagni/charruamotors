@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Personalizar Painel: ordem dos blocos (arrastar e soltar), estilo dos mostradores, os 4 relógios,
-     a lista rápida de sensores e o HUD flutuante. Tudo é salvo na hora. -->
+<!-- Personalizar Painel 2.0: todos os blocos (arrastar, remover e adicionar de volta), botões da
+     Navegação, lista dinâmica de mostradores com estilo individual, lista rápida ordenável e o HUD.
+     Tudo é salvo na hora. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -40,7 +41,7 @@
             android:orientation="vertical"
             android:padding="@dimen/margem_tela">
 
-            <!-- 1. Ordem do topo -->
+            <!-- 1. Blocos do Painel -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -64,91 +65,62 @@
                 tools:itemCount="3"
                 tools:listitem="@layout/item_secao_painel" />
 
-            <!-- 2. Estilo dos mostradores, com prévia ao vivo -->
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/espaco_grande"
-                android:text="@string/personalizar_estilo"
-                android:textAppearance="?attr/textAppearanceTitleMedium" />
-
-            <com.google.android.material.button.MaterialButtonToggleGroup
-                android:id="@+id/grupo_estilo"
+                android:id="@+id/texto_todos_removidos"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/espaco_pequeno"
-                app:selectionRequired="true"
-                app:singleSelection="true">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/botao_estilo_esportivo"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:paddingHorizontal="4dp"
-                    android:text="@string/personalizar_estilo_esportivo" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/botao_estilo_digital"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:paddingHorizontal="4dp"
-                    android:text="@string/personalizar_estilo_digital" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/botao_estilo_fita"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:paddingHorizontal="4dp"
-                    android:text="@string/personalizar_estilo_fita" />
-            </com.google.android.material.button.MaterialButtonToggleGroup>
-
-            <TextView
-                android:id="@+id/texto_estilo_descricao"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/espaco_minimo"
+                android:paddingVertical="@dimen/espaco_pequeno"
+                android:text="@string/personalizar_todos_removidos"
                 android:textAppearance="?attr/textAppearanceBodySmall"
                 android:textColor="@color/texto_secundario"
-                tools:text="Ponteiro em arco com escala e zona vermelha" />
+                android:visibility="gone" />
 
-            <com.google.android.material.card.MaterialCardView
-                style="@style/Widget.Material3.CardView.Elevated"
+            <!-- Blocos removidos: 1 toque para trazer de volta -->
+            <LinearLayout
+                android:id="@+id/grupo_removidos"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/espaco_pequeno"
-                app:cardCornerRadius="@dimen/raio_card">
+                android:orientation="vertical"
+                android:visibility="gone"
+                tools:visibility="visible">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <TextView
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:baselineAligned="false"
-                    android:orientation="horizontal"
-                    android:padding="@dimen/espaco_pequeno">
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:text="@string/personalizar_removidos"
+                    android:textAppearance="?attr/textAppearanceLabelLarge"
+                    android:textColor="@color/texto_secundario" />
 
-                    <com.charruamotors.ui.componentes.GaugeView
-                        android:id="@+id/previa_1"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:padding="@dimen/espaco_minimo" />
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chips_removidos"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
 
-                    <com.charruamotors.ui.componentes.GaugeView
-                        android:id="@+id/previa_2"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:padding="@dimen/espaco_minimo" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
+            <!-- Botões do bloco Navegação, um a um -->
+            <LinearLayout
+                android:id="@+id/grupo_botoes_navegacao"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
 
-            <!-- 3. Os 4 relógios -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_medio"
+                    android:text="@string/personalizar_botoes_navegacao"
+                    android:textAppearance="?attr/textAppearanceLabelLarge" />
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chips_botoes_navegacao"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <!-- 2. Mostradores: lista dinâmica com estilo individual -->
             <TextView
+                android:id="@+id/titulo_mostradores"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/espaco_grande"
@@ -158,17 +130,60 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/espaco_pequeno"
                 android:text="@string/personalizar_mostradores_dica"
                 android:textAppearance="?attr/textAppearanceBodySmall"
                 android:textColor="@color/texto_secundario" />
 
-            <LinearLayout
-                android:id="@+id/grupo_mostradores"
+            <!-- Prévia com os dois primeiros relógios, cada um no seu estilo -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Material3.CardView.Elevated"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                android:layout_marginBottom="@dimen/espaco_pequeno"
+                app:cardCornerRadius="@dimen/raio_card">
 
-            <!-- 4. Lista rápida -->
+                <LinearLayout
+                    android:id="@+id/grupo_previa"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/espaco_pequeno" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/lista_mostradores"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                tools:itemCount="2"
+                tools:listitem="@layout/item_mostrador_editor" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_adicionar_mostrador"
+                    style="@style/Widget.Material3.Button.TonalButton.Icon"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/espaco_pequeno"
+                    android:layout_weight="1"
+                    android:text="@string/personalizar_adicionar_mostrador"
+                    app:icon="@drawable/ic_adicionar" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_estilo_todos"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/personalizar_estilo_todos" />
+            </LinearLayout>
+
+            <!-- 3. Lista rápida: escolha e ordem -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -190,6 +205,14 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/espaco_pequeno" />
 
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/lista_ordem_rapida"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:nestedScrollingEnabled="false"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/botao_limpar_lista_rapida"
                 style="@style/Widget.Material3.Button.TextButton"
@@ -197,7 +220,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/personalizar_lista_limpar" />
 
-            <!-- 5. HUD flutuante -->
+            <!-- 4. HUD flutuante -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

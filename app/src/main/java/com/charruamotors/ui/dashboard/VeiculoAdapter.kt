@@ -15,14 +15,18 @@ import com.charruamotors.ui.util.comoMilhar
 import com.charruamotors.ui.util.comoTexto
 import com.charruamotors.ui.util.rotulo
 
+/** Um card de Meus Veículos: o resumo calculado e se ele é o favorito (estrela acesa). */
+data class ItemVeiculo(val resumo: ResumoVeiculo, val favorito: Boolean)
+
 /**
- * Adapter da lista de veículos do Dashboard. Apenas exibe o [ResumoVeiculo] já calculado
- * pelo ViewModel/domínio (nenhum cálculo aqui). O DiffUtil anima só os itens que mudaram.
+ * Adapter de Meus Veículos. Apenas exibe o [ResumoVeiculo] já calculado pelo ViewModel/domínio
+ * (nenhum cálculo aqui), com a estrela do favorito. O DiffUtil anima só os itens que mudaram.
  */
 class VeiculoAdapter(
     private val aoClicar: (ResumoVeiculo) -> Unit,
-    private val aoDiagnosticar: (ResumoVeiculo) -> Unit,
-) : ListAdapter<ResumoVeiculo, VeiculoAdapter.ViewHolder>(Diff) {
+    private val aoAbrirPainel: (ResumoVeiculo) -> Unit,
+    private val aoFavoritar: (ResumoVeiculo) -> Unit,
+) : ListAdapter<ItemVeiculo, VeiculoAdapter.ViewHolder>(Diff) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder =
         ViewHolder(ItemVeiculoBinding.inflate(LayoutInflater.from(parent.context), parent, false))
@@ -32,7 +36,8 @@ class VeiculoAdapter(
     inner class ViewHolder(private val binding: ItemVeiculoBinding) :
         RecyclerView.ViewHolder(binding.root) {
 
-        fun bind(resumo: ResumoVeiculo) = with(binding) {
+        fun bind(item: ItemVeiculo) = with(binding) {
+            val resumo = item.resumo
             val context = root.context
             val veiculo = resumo.veiculo
             textoDescricao.text = veiculo.descricao
@@ -59,15 +64,22 @@ class VeiculoAdapter(
                 R.plurals.item_veiculo_falhas_ativas, resumo.falhasAtivas, resumo.falhasAtivas,
             )
 
+            botaoFavorito.setImageResource(if (item.favorito) R.drawable.ic_estrela else R.drawable.ic_estrela_borda)
+            botaoFavorito.contentDescription = context.getString(
+                if (item.favorito) R.string.veiculos_e_favorito else R.string.veiculos_marcar_favorito,
+                veiculo.descricao,
+            )
+            botaoFavorito.setOnClickListener { if (!item.favorito) aoFavoritar(resumo) }
+
             root.setOnClickListener { aoClicar(resumo) }
-            botaoDiagnostico.setOnClickListener { aoDiagnosticar(resumo) }
+            botaoDiagnostico.setOnClickListener { aoAbrirPainel(resumo) }
         }
     }
 
-    private object Diff : DiffUtil.ItemCallback<ResumoVeiculo>() {
-        override fun areItemsTheSame(antigo: ResumoVeiculo, novo: ResumoVeiculo) =
-            antigo.veiculo.id == novo.veiculo.id
+    private object Diff : DiffUtil.ItemCallback<ItemVeiculo>() {
+        override fun areItemsTheSame(antigo: ItemVeiculo, novo: ItemVeiculo) =
+            antigo.resumo.veiculo.id == novo.resumo.veiculo.id
 
-        override fun areContentsTheSame(antigo: ResumoVeiculo, novo: ResumoVeiculo) = antigo == novo
+        override fun areContentsTheSame(antigo: ItemVeiculo, novo: ItemVeiculo) = antigo == novo
     }
 }

@@ -9,9 +9,17 @@ import com.charruamotors.domain.model.StatusCodigoFalha
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.TipoManutencao
 import com.charruamotors.domain.model.Veiculo
+import com.charruamotors.direcao.painel.BotaoNavegacao
+import com.charruamotors.direcao.painel.CodecPainel
+import com.charruamotors.direcao.painel.ConfigHud
+import com.charruamotors.direcao.painel.ConfigPainel
+import com.charruamotors.direcao.painel.EstiloMostrador
+import com.charruamotors.direcao.painel.SecaoPainel
+import com.charruamotors.direcao.painel.TamanhoHud
 import com.charruamotors.obd.DispositivoObd
 import com.charruamotors.obd.sessao.ConfigAutoConexao
 import com.charruamotors.sistema.preferencias.TemaApp
+import com.charruamotors.sistema.unidades.SistemaUnidades
 import com.charruamotors.sistema.unidades.UnidadePressao
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -24,6 +32,19 @@ import java.time.LocalDateTime
 
 /** Serialização e desserialização do Backup/Restore (.json). */
 class BackupJsonTest {
+
+    /** Painel 2.0 personalizado: blocos removidos/reordenados, 6 mostradores mistos, lista rápida e HUD. */
+    private val painel = CodecPainel.normalizar(
+        ConfigPainel()
+            .mover(2, 0)
+            .ocultar(SecaoPainel.MUSICA)
+            .alternarBotaoNavegacao(BotaoNavegacao.POSTO)
+            .adicionarMostrador().adicionarMostrador()
+            .definirEstilo(1, EstiloMostrador.FITA)
+            .definirEstilo(2, EstiloMostrador.DIGITAL)
+            .alternarListaRapida("ATRV").alternarListaRapida("010C")
+            .copy(hud = ConfigHud(tamanho = TamanhoHud.EXPANDIDO).moverSensor(3, 0)),
+    )
 
     private val sw4 = Veiculo(
         id = 7, marca = "Toyota", modelo = "SW4", ano = 2013, placa = "ABC1D23", cor = "Prata",
@@ -60,6 +81,8 @@ class BackupJsonTest {
             ),
             tema = TemaApp.ESCURO,
             unidadePressao = UnidadePressao.BAR,
+            sistemaUnidades = SistemaUnidades.entries.last(),
+            painel = painel,
         ),
     )
 
@@ -78,6 +101,31 @@ class BackupJsonTest {
         assertEquals("2026-10-02", raiz.getJSONArray("manutencoes").getJSONObject(0).getString("data"))
         assertEquals("BAR", raiz.getJSONObject("preferencias").getString("unidadePressao"))
         assertEquals("OBDII", raiz.getJSONObject("preferencias").getJSONObject("caixaPreta").getString("scannerNome"))
+    }
+
+    @Test
+    fun `personalizacao do painel e unidades globais vao no backup`() {
+        val raiz = JSONObject(BackupJson.serializar(completo))
+        val prefs = raiz.getJSONObject("preferencias")
+        assertEquals(SistemaUnidades.entries.last().name, prefs.getString("sistemaUnidades"))
+        val json = prefs.getJSONObject("painel")
+        assertEquals("MUSICA", json.getString("ocultas"))
+        assertTrue(json.getString("mostradores_v2").contains(":FITA"))
+        assertEquals("ATRV,010C", json.getString("lista_rapida"))
+
+        val restaurado = BackupJson.desserializar(BackupJson.serializar(completo)).preferencias
+        assertEquals(painel, restaurado.painel)
+        assertEquals(6, restaurado.painel!!.mostradores.size)
+        assertEquals(EstiloMostrador.FITA, restaurado.painel!!.mostradores[1].estilo)
+        assertEquals(SistemaUnidades.entries.last(), restaurado.sistemaUnidades)
+    }
+
+    @Test
+    fun `backup antigo sem painel nao mexe na personalizacao`() {
+        val json = """{"tipo":"${BackupJson.TIPO}","versaoFormato":1,"geradoEm":"x","preferencias":{"tema":"ESCURO"}}"""
+        val prefs = BackupJson.desserializar(json).preferencias
+        assertNull(prefs.painel)
+        assertEquals(SistemaUnidades.PADRAO, prefs.sistemaUnidades)
     }
 
     @Test

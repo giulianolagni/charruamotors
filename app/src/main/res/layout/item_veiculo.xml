@@ -15,6 +15,22 @@
         android:layout_height="wrap_content"
         android:padding="@dimen/espaco_medio">
 
+        <!-- Favorito: o app abre direto neste veículo -->
+        <ImageButton
+            android:id="@+id/botao_favorito"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="-8dp"
+            android:layout_marginTop="-8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_estrela_borda"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="@color/favorito"
+            tools:contentDescription="Marcar como favorito" />
+
         <TextView
             android:id="@+id/texto_descricao"
             android:layout_width="0dp"
@@ -22,7 +38,7 @@
             android:layout_marginEnd="@dimen/espaco_pequeno"
             android:textAppearance="?attr/textAppearanceTitleMedium"
             app:layout_constraintEnd_toStartOf="@id/texto_placa"
-            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintStart_toEndOf="@id/botao_favorito"
             app:layout_constraintTop_toTopOf="parent"
             tools:text="Chevrolet Onix 2020" />
 
@@ -94,14 +110,14 @@
             tools:text="2 códigos de falha ativos"
             tools:visibility="visible" />
 
-        <!-- Atalho para o diagnóstico OBD2 / manutenções do veículo -->
+        <!-- Abre as 4 abas do veículo (Painel ativo) -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/botao_diagnostico"
             style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/espaco_pequeno"
-            android:text="@string/botao_diagnostico"
+            android:text="@string/botao_abrir_painel"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/texto_alerta_falhas" />
     </androidx.constraintlayout.widget.ConstraintLayout>

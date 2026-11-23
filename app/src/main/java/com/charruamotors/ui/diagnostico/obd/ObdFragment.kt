@@ -17,8 +17,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.ArrayAdapter
-import android.content.res.ColorStateList
 import android.widget.ImageView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -40,19 +38,20 @@ import com.charruamotors.direcao.midia.ControladorMidia
 import com.charruamotors.direcao.midia.EstadoMidia
 import com.charruamotors.direcao.waze.AbridorWaze
 import com.charruamotors.direcao.waze.AcaoWaze
+import com.charruamotors.direcao.painel.BotaoNavegacao
 import com.charruamotors.direcao.painel.ConfigPainel
+import com.charruamotors.direcao.painel.Mostrador
 import com.charruamotors.direcao.painel.SecaoPainel
+import com.charruamotors.sistema.StatusConexaoPainel
 import com.charruamotors.sistema.unidades.ConversorUnidades
 import com.charruamotors.ui.componentes.GaugeView
-import com.charruamotors.ui.oficina.falhas.DiagnosticoErrosActivity
 import com.charruamotors.ui.painel.EditorConfigHud
-import com.charruamotors.ui.painel.PersonalizarPainelActivity
+import com.charruamotors.ui.painel.MontadorMostradores
 import com.charruamotors.domain.calculo.EstadoCronometro
 import com.charruamotors.domain.calculo.MetodoConsumo
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.obd.DadosObd
-import com.charruamotors.obd.DispositivoObd
 import com.charruamotors.obd.InfoConexao
 import com.charruamotors.obd.ModoComunicacaoEcu
 import com.charruamotors.obd.ModoObd
@@ -61,10 +60,7 @@ import com.charruamotors.obd.log.LogsSessaoSalvos
 import com.charruamotors.obd.pid.Pids
 import com.charruamotors.obd.sessao.ConfigAutoConexao
 import com.charruamotors.obd.sessao.EstadoSessao
-import com.charruamotors.obd.sessao.FaseSessao
 import com.charruamotors.obd.sessao.SessaoObd
-import com.charruamotors.sistema.StatusCaixaPreta
-import com.charruamotors.ui.configuracoes.ConfiguracoesActivity
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.oficina.replay.ReplayLogActivity
 import com.charruamotors.ui.util.ArquivoExportado
@@ -79,11 +75,13 @@ import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 
 /**
- * Aba Painel: blocos reordenáveis no topo (Músicas — mini-player do Spotify/YouTube Music;
- * Navegação — atalhos do Waze e Modo HUD flutuante; Marcadores — os 4 mostradores no estilo
- * escolhido), conexão do scanner, gráfico ao vivo, computador de bordo, cronômetro 0–100, lista
- * rápida de sensores, Data Logger CSV e as informações da ECU. Ordem, estilo, sensores e HUD vêm
- * de "Personalizar Painel"; tudo é exibido nas unidades globais (métrico/imperial).
+ * Aba Painel (v1.5): só telemetria ao vivo. No topo, o card de conexão inteligente — desconectado,
+ * o início rápido com "Conectar no Carro (Bluetooth)" (adaptador salvo + trocar o pareado) e "Modo
+ * Simulado"; conectado (manual ou pela caixa-preta), uma barra compacta `● Conectado · OBDII · 7E0`
+ * com Desconectar. Abaixo, os blocos escolhidos em "Personalizar Painel", na ordem e sem os
+ * removidos: Músicas, Navegação (Waze e o Modo HUD), Mostradores (1 a 12, estilo por relógio),
+ * Gráfico, Computador de bordo, Cronômetro 0–100, Lista rápida (com salvar leitura e o Data Logger
+ * CSV) e Informações da ECU. Tudo nas unidades globais (métrico/imperial).
  */
 class ObdFragment : Fragment() {
 
@@ -112,14 +110,17 @@ class ObdFragment : Fragment() {
     /** Unidades globais (métrico/imperial) e de pressão escolhidas nas Configurações. */
     private var conversor: ConversorUnidades = ConversorUnidades.PADRAO
 
-    /** Ordem, estilo, os 4 mostradores e a lista rápida (Personalizar Painel). */
+    /** Blocos, mostradores, botões da Navegação e a lista rápida (Personalizar Painel). */
     private var configPainel: ConfigPainel = ConfigPainel()
+
+    /** Mostradores desenhados agora (sensores + estilos + unidades), para não recriar a cada mudança. */
+    private var assinaturaMostradores: Pair<List<Mostrador>, ConversorUnidades>? = null
 
     /** "Ver todos": ignora a lista rápida e mostra todos os sensores suportados. */
     private var mostrarTodosSensores = false
 
-    private val gauges: List<GaugeView>
-        get() = listOf(binding.gauge1, binding.gauge2, binding.gauge3, binding.gauge4)
+    /** Um por mostrador de [configPainel], na mesma ordem (montados pelo [MontadorMostradores]). */
+    private var gauges: List<GaugeView> = emptyList()
 
     /** A permissão de notificação (opcional, só para ver o "Fechar HUD" na gaveta) já foi pedida? */
     private var notificacaoPerguntada = false
@@ -142,7 +143,7 @@ class ObdFragment : Fragment() {
     private val pedirPermissoes =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { resultado ->
             if (PermissoesBluetooth.concedidas(requireContext())) {
-                garantirBluetooth(acaoPendente)
+                garantirBluetooth(real = true, acao = acaoPendente)
                 return@registerForActivityResult
             }
             acaoPendente = null
@@ -181,63 +182,55 @@ class ObdFragment : Fragment() {
     }
 
     private fun configurarAcoes() = with(binding) {
-        grupoModo.addOnButtonCheckedListener { _, id, marcado ->
-            if (!marcado) return@addOnButtonCheckedListener
-            val modo = if (id == R.id.botao_modo_bluetooth) ModoObd.BLUETOOTH else ModoObd.SIMULADO
-            if (modo != viewModel.modo.value) {
-                viewModel.selecionarModo(modo)
-                if (modo == ModoObd.BLUETOOTH) garantirBluetooth { viewModel.carregarDispositivos() }
-            }
+        botaoConectarCarro.setOnClickListener {
+            garantirBluetooth(real = true) { viewModel.conectarNoModo(ModoObd.BLUETOOTH) }
         }
+        botaoConectarSimulado.setOnClickListener { viewModel.conectarNoModo(ModoObd.SIMULADO) }
+        botaoTrocarAdaptador.setOnClickListener { garantirBluetooth(real = true) { escolherAdaptador() } }
         switchSimularFalha.setOnCheckedChangeListener { _, marcado -> viewModel.definirSimularFalha(marcado) }
-        campoDispositivo.setOnItemClickListener { _, _, posicao, _ ->
-            viewModel.dispositivos.value.getOrNull(posicao)?.let(viewModel::selecionarDispositivo)
-        }
-        botaoAtualizarDispositivos.setOnClickListener {
-            garantirBluetooth { viewModel.carregarDispositivos() }
-        }
-        botaoConectar.setOnClickListener { garantirBluetooth { viewModel.conectar() } }
+        botaoCancelarConexao.setOnClickListener { viewModel.desconectar() }
         botaoDesconectar.setOnClickListener { viewModel.desconectar() }
         botaoSalvarLeitura.setOnClickListener { viewModel.salvarLeitura() }
         botaoGravarLog.setOnClickListener { viewModel.alternarLog() }
         botaoArmarCronometro.setOnClickListener { viewModel.alternarCronometro() }
         botaoZerarViagem.setOnClickListener { viewModel.zerarViagem() }
         botaoRegistroComunicacao.setOnClickListener { mostrarRegistroComunicacao() }
-        botaoPersonalizarPainel.setOnClickListener { startActivity(PersonalizarPainelActivity.intent(requireContext())) }
         botaoVerTodosSensores.setOnClickListener {
             mostrarTodosSensores = !mostrarTodosSensores
             mostrarSensores(viewModel.sensores.value)
         }
-        botaoAbrirFalhas.setOnClickListener {
-            startActivity(DiagnosticoErrosActivity.intent(requireContext(), requireArguments().getLong(DiagnosticoActivity.EXTRA_VEICULO_ID)))
+    }
+
+    // ------------------------------------------------------------------ conexão (card inteligente)
+
+    /** Ícone de trocar: lista os pareados com o adaptador salvo marcado. */
+    private fun escolherAdaptador() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val pareados = viewModel.pareadosBluetooth()
+            if (pareados.isEmpty()) {
+                mostrarMensagem(getString(R.string.config_scanner_sem_pareados))
+                return@launch
+            }
+            val atual = pareados.indexOfFirst { it.endereco == viewModel.configAuto.value.scanner?.endereco }
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.conexao_escolher_adaptador)
+                .setSingleChoiceItems(pareados.map { getString(R.string.caixa_gatilho_pareado, it.nome, it.endereco) }.toTypedArray(), atual) { dialogo, i ->
+                    viewModel.escolherAdaptador(pareados[i])
+                    dialogo.dismiss()
+                }
+                .setNegativeButton(R.string.botao_cancelar, null)
+                .show()
         }
-        configurarCaixaPreta()
     }
 
-    // ------------------------------------------------------------------ caixa-preta (segundo plano)
-
-    /**
-     * Faixa discreta da caixa-preta (`Caixa-preta ativa · Gatilho: Toyota SW4`). A configuração
-     * completa (auto-conexão, logs, gatilho, vínculos e bateria) fica nas Configurações.
-     */
-    private fun configurarCaixaPreta() {
-        binding.faixaCaixaPreta.setOnClickListener { startActivity(ConfiguracoesActivity.intent(requireContext())) }
+    /** `Adaptador: OBDII` (o scanner salvo) embaixo do botão do carro. */
+    private fun mostrarAdaptador(config: ConfigAutoConexao) {
+        binding.textoAdaptador.definirTexto(
+            config.scanner?.let { getString(R.string.conexao_adaptador, it.nome) } ?: getString(R.string.conexao_adaptador_nenhum),
+        )
     }
 
-    private fun mostrarFaixaCaixaPreta(config: ConfigAutoConexao, estado: EstadoSessao) = with(binding) {
-        val texto = StatusCaixaPreta.faixa(config, estado)
-        textoFaixaCaixaPreta.definirTexto(texto)
-        faixaCaixaPreta.contentDescription = getString(R.string.obd_faixa_caixa_descricao, texto)
-        val cor = when {
-            estado.ativa && estado.fase == FaseSessao.Conectada -> R.color.status_ok
-            config.autoConexaoAtiva || estado.ativa -> R.color.azul_primario
-            else -> R.color.status_espera
-        }
-        pontoCaixaPreta.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), cor))
-    }
-
-    private fun mostrarEstadoSessao(estado: EstadoSessao) {
-        mostrarFaixaCaixaPreta(viewModel.configAuto.value, estado)
+    private fun mostrarEstadoSessao(@Suppress("UNUSED_PARAMETER") estado: EstadoSessao) {
         mostrarEstado(viewModel.estado.value)
     }
 
@@ -353,11 +346,11 @@ class ObdFragment : Fragment() {
 
     /**
      * Antes de usar o Bluetooth real: exige permissões (em tempo de execução no Android 12+)
-     * e Bluetooth ligado. No modo simulado executa a [acao] direto.
+     * e Bluetooth ligado. Com [real] = false (modo simulado) executa a [acao] direto.
      */
-    private fun garantirBluetooth(acao: (() -> Unit)?) {
+    private fun garantirBluetooth(real: Boolean = viewModel.modo.value == ModoObd.BLUETOOTH, acao: (() -> Unit)?) {
         if (acao == null) return
-        if (viewModel.modo.value == ModoObd.SIMULADO) {
+        if (!real) {
             acao()
             return
         }
@@ -448,10 +441,7 @@ class ObdFragment : Fragment() {
         // viewLifecycleOwner: a coleta acompanha a view do Fragment (para ao destruir a view).
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch { viewModel.modo.collect { mostrarModo(it) } }
                 launch { viewModel.estado.collect { mostrarEstado(it) } }
-                launch { viewModel.dispositivos.collect { mostrarDispositivos(it) } }
-                launch { viewModel.dispositivoSelecionado.collect { mostrarDispositivoSelecionado(it) } }
                 launch { viewModel.dados.collect { mostrarDados(it) } }
                 launch { viewModel.sensores.collect { mostrarSensores(it) } }
                 launch { viewModel.infoEcu.collect { mostrarInfoEcu(it) } }
@@ -462,7 +452,7 @@ class ObdFragment : Fragment() {
                 launch { viewModel.manterTelaAcesa.collect { aplicarTelaAcesa() } }
                 controladorMidia?.let { midia -> launch { midia.estado.collect { mostrarMidia(it) } } }
                 launch { telemetriaHud.hudAtivo.collect { mostrarHud(it) } }
-                launch { viewModel.configAuto.collect { mostrarFaixaCaixaPreta(it, viewModel.estadoSessao.value) } }
+                launch { viewModel.configAuto.collect { mostrarAdaptador(it) } }
                 launch { app.preferenciasApp.config.collect { aplicarConversor(it.conversor) } }
                 launch { app.preferenciasPainel.config.collect { aplicarConfigPainel(it) } }
                 launch { viewModel.estadoSessao.collect { mostrarEstadoSessao(it) } }
@@ -488,15 +478,6 @@ class ObdFragment : Fragment() {
 
     // ------------------------------------------------------------------ renderização
 
-    private fun mostrarModo(modo: ModoObd) = with(binding) {
-        grupoModo.check(if (modo == ModoObd.BLUETOOTH) R.id.botao_modo_bluetooth else R.id.botao_modo_simulado)
-        // A opção de simular falha só faz sentido (e só aparece) no modo simulado.
-        switchSimularFalha.isVisible = modo == ModoObd.SIMULADO
-        layoutDispositivo.hint = getString(
-            if (modo == ModoObd.BLUETOOTH) R.string.obd_dispositivo_pareado else R.string.obd_dispositivo,
-        )
-    }
-
     private fun mostrarEstado(estado: EstadoConexaoObd) {
         mostrarInfoEcu(viewModel.infoEcu.value)
         val sessao = viewModel.estadoSessao.value
@@ -507,29 +488,30 @@ class ObdFragment : Fragment() {
             estado is EstadoConexaoObd.Erro -> getString(R.string.obd_estado_erro, estado.mensagem)
             estado is EstadoConexaoObd.Conectando -> getString(R.string.obd_estado_conectando)
             estado is EstadoConexaoObd.Conectado -> getString(R.string.obd_estado_conectado)
-            else -> getString(R.string.obd_estado_desconectado)
+            else -> getString(R.string.conexao_dica)
         })
         atualizarBotoes()
     }
 
+    /**
+     * Card inteligente: desconectado → início rápido; conectando → os mesmos botões travados e
+     * "Cancelar" (a conexão RFCOMM com um scanner fora de alcance leva ~10 s); conectado → só a
+     * barra compacta, liberando a tela para os mostradores.
+     */
     private fun atualizarBotoes() = with(binding) {
         val estado = viewModel.estado.value
         val conectado = estado is EstadoConexaoObd.Conectado
-        val sessaoAtiva = viewModel.estadoSessao.value.ativa
-        val livre = (estado is EstadoConexaoObd.Desconectado || estado is EstadoConexaoObd.Erro) && !sessaoAtiva
+        val conectando = estado is EstadoConexaoObd.Conectando || (viewModel.estadoSessao.value.ativa && !conectado)
 
-        botaoConectar.isEnabled = livre
-        // Conectando (ou a sessão automática esperando a ECU / entre tentativas): o mesmo botão
-        // cancela (a conexão RFCOMM com um scanner fora de alcance leva ~10 s).
-        val conectando = estado is EstadoConexaoObd.Conectando || (sessaoAtiva && !conectado)
-        botaoDesconectar.isEnabled = conectado || conectando
-        botaoDesconectar.definirTexto(getString(if (conectando) R.string.obd_cancelar_conexao else R.string.obd_desconectar))
-        // Modo, dispositivo e atualização da lista só mudam com o scanner desconectado.
-        botaoModoSimulado.isEnabled = livre
-        botaoModoBluetooth.isEnabled = livre
-        layoutDispositivo.isEnabled = livre
-        switchSimularFalha.isEnabled = livre
-        botaoAtualizarDispositivos.isEnabled = livre
+        cardInicioRapido.isVisible = !conectado
+        barraConectado.isVisible = conectado
+        botaoConectarCarro.isEnabled = !conectando
+        botaoConectarSimulado.isEnabled = !conectando
+        botaoTrocarAdaptador.isEnabled = !conectando
+        switchSimularFalha.isEnabled = !conectando
+        botaoCancelarConexao.isVisible = conectando
+        if (conectado) mostrarStatusCompacto()
+
         botaoSalvarLeitura.isEnabled = conectado && viewModel.dados.value != null
         // Gravando: o botão continua ativo para permitir parar mesmo após a queda da conexão.
         botaoGravarLog.isEnabled = conectado || viewModel.estadoLog.value.gravando
@@ -537,46 +519,51 @@ class ObdFragment : Fragment() {
         botaoZerarViagem.isEnabled = viewModel.computador.value.viagem.segundos > 0
     }
 
-    private fun mostrarDispositivos(lista: List<DispositivoObd>) {
-        binding.campoDispositivo.setAdapter(
-            ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, lista.map { it.nome }),
-        )
-        mostrarDispositivoSelecionado(viewModel.dispositivoSelecionado.value)
+    /** `Conectado · OBDII · 7E0`. */
+    private fun mostrarStatusCompacto() {
+        val scanner = viewModel.estadoSessao.value.scanner ?: viewModel.dispositivoSelecionado.value?.nome
+        val texto = StatusConexaoPainel.resumo(scanner, viewModel.infoEcu.value.conexao)
+        binding.textoStatusCompacto.definirTexto(texto)
+        binding.barraConectado.contentDescription = texto
     }
 
-    private fun mostrarDispositivoSelecionado(dispositivo: DispositivoObd?) {
-        // filter = false: mantém a lista completa no dropdown mesmo com um item já escolhido.
-        binding.campoDispositivo.setText(dispositivo?.nome.orEmpty(), false)
-        binding.layoutDispositivo.helperText =
-            if (dispositivo == null && viewModel.modo.value == ModoObd.BLUETOOTH) {
-                getString(R.string.obd_sem_pareados)
-            } else {
-                null
-            }
-    }
-
-    /** Os 4 mostradores escolhidos, com o valor já convertido para a unidade global. */
+    /** Os mostradores escolhidos, com o valor já convertido para a unidade global. */
     private fun mostrarDados(dados: DadosObd?) {
-        configPainel.mostradores.forEachIndexed { i, sensor ->
-            gauges.getOrNull(i)?.definirValor(sensor.ler(dados)?.let { sensor.exibir(it, conversor).valor })
+        configPainel.mostradores.forEachIndexed { i, m ->
+            gauges.getOrNull(i)?.definirValor(m.sensor.ler(dados)?.let { m.sensor.exibir(it, conversor).valor })
         }
         atualizarBotoes()
     }
 
     /**
-     * Personalizar Painel mudou: reposiciona os blocos do topo na ordem escolhida e refaz os
-     * mostradores (sensor, estilo e escala) e o filtro da lista rápida.
+     * Personalizar Painel mudou: mostra só os blocos visíveis, na ordem escolhida; refaz os
+     * mostradores (quantidade, sensor, estilo e escala) se mudaram; aplica os botões da Navegação
+     * e o filtro da lista rápida.
      */
     private fun aplicarConfigPainel(config: ConfigPainel) = with(binding) {
-        val ordemMudou = config.ordem != configPainel.ordem || containerSecoes.getChildAt(0) != cardDaSecao(config.ordem.first())
-        val mostradoresMudaram = config.mostradores != configPainel.mostradores || config.estilo != configPainel.estilo
         configPainel = config
-        if (ordemMudou) {
-            val cards = config.ordem.map(::cardDaSecao)
+        // Navegação sem nenhum botão marcado: o bloco some (sem card vazio).
+        val secoes = config.secoesVisiveis.filter { it != SecaoPainel.NAVEGACAO || config.botoesNavegacao.isNotEmpty() }
+        val visiveis = secoes.map(::cardDaSecao)
+        val atuais = (0 until containerSecoes.childCount).map(containerSecoes::getChildAt).filter { it.isVisible }
+        if (visiveis != atuais) {
             containerSecoes.removeAllViews()
-            cards.forEach(containerSecoes::addView)
+            visiveis.forEach { card ->
+                card.isVisible = true
+                containerSecoes.addView(card)
+            }
+            // Os removidos ficam no container, escondidos (as views continuam ligadas ao binding).
+            SecaoPainel.entries.map(::cardDaSecao).filter { it !in visiveis }.forEach { card ->
+                card.isVisible = false
+                containerSecoes.addView(card)
+            }
         }
-        if (mostradoresMudaram || gauges.first().titulo.isEmpty()) configurarMostradores()
+        botaoWazeAbrir.isVisible = config.botaoVisivel(BotaoNavegacao.WAZE)
+        botaoWazePosto.isVisible = config.botaoVisivel(BotaoNavegacao.POSTO)
+        botaoWazeOficina.isVisible = config.botaoVisivel(BotaoNavegacao.OFICINA)
+        grupoAtalhosWaze.isVisible = botaoWazeAbrir.isVisible || botaoWazePosto.isVisible || botaoWazeOficina.isVisible
+        botaoHud.isVisible = config.botaoVisivel(BotaoNavegacao.HUD)
+        configurarMostradores()
         mostrarSensores(viewModel.sensores.value)
     }
 
@@ -584,19 +571,28 @@ class ObdFragment : Fragment() {
         SecaoPainel.MUSICA -> binding.cardMusica
         SecaoPainel.NAVEGACAO -> binding.cardNavegacao
         SecaoPainel.MARCADORES -> binding.cardMarcadores
+        SecaoPainel.GRAFICO -> binding.cardGrafico
+        SecaoPainel.COMPUTADOR -> binding.cardComputador
+        SecaoPainel.CRONOMETRO -> binding.cardCronometro
+        SecaoPainel.LISTA_SENSORES -> binding.cardListaSensores
+        SecaoPainel.INFO_ECU -> binding.cardInfoEcu
     }
 
+    /** Remonta a grade (2 colunas; Fita em largura total) só quando os relógios ou as unidades mudam. */
     private fun configurarMostradores() {
-        configPainel.mostradores.forEachIndexed { i, sensor ->
-            val gauge = gauges.getOrNull(i) ?: return@forEachIndexed
-            PersonalizarPainelActivity.configurarGauge(gauge, sensor, configPainel.estilo, conversor)
-            gauge.definirValor(sensor.ler(viewModel.dados.value)?.let { sensor.exibir(it, conversor).valor }, animar = false)
+        val assinatura = configPainel.mostradores to conversor
+        if (assinatura == assinaturaMostradores) return
+        assinaturaMostradores = assinatura
+        gauges = MontadorMostradores.montar(binding.grupoMostradores, configPainel.mostradores, conversor)
+        val dados = viewModel.dados.value
+        configPainel.mostradores.forEachIndexed { i, m ->
+            gauges.getOrNull(i)?.definirValor(m.sensor.ler(dados)?.let { m.sensor.exibir(it, conversor).valor }, animar = false)
         }
     }
 
     /** Configurações → Unidades globais / pressão: mostradores, lista rápida, computador de bordo e 0–100. */
     private fun aplicarConversor(novo: ConversorUnidades) {
-        if (novo == conversor && gauges.first().titulo.isNotEmpty()) return
+        if (novo == conversor && assinaturaMostradores != null) return
         conversor = novo
         configurarMostradores()
         adapterSensores.definirConversor(novo)
@@ -652,6 +648,8 @@ class ObdFragment : Fragment() {
         val observacao = (perfil as? ResultadoPerfil.Ativo)?.observacao?.takeIf { conectado && it.isNotBlank() }
         textoPerfilObservacao.isVisible = observacao != null
         textoPerfilObservacao.text = observacao
+        // O cabeçalho da ECU (7E0) e o protocolo chegam depois do "Conectado".
+        if (conectado) mostrarStatusCompacto()
     }
 
     /**

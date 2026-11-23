@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Um mostrador na lista dinâmica do Personalizar Painel: alça de arrastar, sensor, remover e o
+     estilo próprio daquele relógio (Esportivo, Digital ou Fita). -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    style="@style/Widget.Material3.CardView.Outlined"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/espaco_pequeno"
+    app:cardCornerRadius="@dimen/raio_card">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/espaco_minimo"
+        android:paddingEnd="@dimen/espaco_minimo"
+        android:paddingBottom="@dimen/espaco_pequeno">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/alca_arrastar"
+                android:layout_width="40dp"
+                android:layout_height="56dp"
+                android:contentDescription="@string/personalizar_arrastar"
+                android:padding="8dp"
+                android:src="@drawable/ic_arrastar"
+                app:tint="@color/texto_secundario" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_mostrador"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense.ExposedDropdownMenu"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:layout_weight="1"
+                tools:hint="Relógio 1">
+
+                <AutoCompleteTextView
+                    android:id="@+id/campo_mostrador"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none"
+                    tools:text="RPM" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <ImageButton
+                android:id="@+id/botao_remover"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/personalizar_remover_mostrador"
+                android:padding="10dp"
+                android:src="@drawable/ic_remover"
+                app:tint="@color/texto_secundario" />
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/grupo_estilo_mostrador"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="40dp"
+            android:layout_marginEnd="44dp"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_estilo_esportivo"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingHorizontal="2dp"
+                android:text="@string/personalizar_estilo_esportivo"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_estilo_digital"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingHorizontal="2dp"
+                android:text="@string/personalizar_estilo_digital"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_estilo_fita"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingHorizontal="2dp"
+                android:text="@string/personalizar_estilo_fita"
+                android:textSize="12sp" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

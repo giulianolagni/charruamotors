@@ -24,7 +24,7 @@ import kotlin.math.sin
  *   arco de progresso, ponteiro animado e o valor digital embaixo;
  * - **Digital Moderno**: número grande no centro de um anel de progresso grosso;
  * - **Fita / Off-road**: barra linear horizontal com marcas, zona vermelha e o valor ao lado do
- *   título (mais baixa que larga, para caber na grade).
+ *   título; ocupa a largura total do Painel, com altura contida e todos os rótulos que couberem.
  *
  * Atributos XML (`app:`): `gaugeTitulo`, `gaugeUnidade`, `gaugeMin`, `gaugeMax`,
  * `gaugeZonaVermelha`, `gaugeDivisoes`, `gaugeSubdivisoes`, `gaugeDivisorRotulos`,
@@ -173,7 +173,10 @@ class GaugeView @JvmOverloads constructor(
         val padrao = (TAMANHO_PADRAO_DP * resources.displayMetrics.density).toInt()
         val largura = resolveSize(padrao, widthMeasureSpec)
         if (estilo == EstiloMostrador.FITA) {
-            setMeasuredDimension(largura, resolveSize((largura * PROPORCAO_FITA).toInt(), heightMeasureSpec))
+            // Largura total do Painel: altura proporcional, mas contida (nem fina demais, nem um "muro").
+            val densidade = resources.displayMetrics.density
+            val desejada = (largura * PROPORCAO_FITA).coerceIn(ALTURA_MIN_FITA_DP * densidade, ALTURA_MAX_FITA_DP * densidade)
+            setMeasuredDimension(largura, resolveSize(desejada.toInt(), heightMeasureSpec))
             return
         }
         val altura = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
@@ -285,15 +288,24 @@ class GaugeView @JvmOverloads constructor(
             val x = esquerda + largura * i / escala.divisoes
             canvas.drawLine(x, yBarra - espessura / 2f, x, yBarra + espessura / 2f, pincelTraco)
         }
-        pincelRotulo.textSize = altura * 0.11f
+        pincelRotulo.textSize = altura * 0.12f
         val yRotulo = base - altura * 0.02f
         val rotulos = escala.rotulos
-        pincelRotulo.textAlign = Paint.Align.LEFT
-        canvas.drawText(rotulos.first(), esquerda, yRotulo, pincelRotulo)
-        pincelRotulo.textAlign = Paint.Align.RIGHT
-        canvas.drawText(rotulos.last(), direita, yRotulo, pincelRotulo)
+        // Com espaço (largura total), todos os rótulos; senão só as pontas e o meio. As pontas ficam
+        // alinhadas por dentro da barra, sem invadir o mostrador vizinho.
+        val maiorRotulo = rotulos.maxOf { pincelRotulo.measureText(it) }
+        val todos = largura / escala.divisoes > maiorRotulo * FOLGA_ROTULOS_FITA
+        for (i in rotulos.indices) {
+            val ponta = i == 0 || i == rotulos.lastIndex
+            if (!todos && !ponta && !(escala.divisoes % 2 == 0 && i == escala.divisoes / 2)) continue
+            pincelRotulo.textAlign = when (i) {
+                0 -> Paint.Align.LEFT
+                rotulos.lastIndex -> Paint.Align.RIGHT
+                else -> Paint.Align.CENTER
+            }
+            canvas.drawText(rotulos[i], esquerda + largura * i / escala.divisoes, yRotulo, pincelRotulo)
+        }
         pincelRotulo.textAlign = Paint.Align.CENTER
-        if (escala.divisoes % 2 == 0) canvas.drawText(rotulos[escala.divisoes / 2], esquerda + largura / 2f, yRotulo, pincelRotulo)
     }
 
     private fun desenharEsportivo(canvas: Canvas) {
@@ -412,8 +424,12 @@ class GaugeView @JvmOverloads constructor(
         private const val DURACAO_ANIMACAO_MS = 90L
         private val INTERPOLADOR = LinearInterpolator()
         private const val TAMANHO_PADRAO_DP = 160
-        /** Altura da Fita em relação à largura. */
-        private const val PROPORCAO_FITA = 0.5f
+        /** Altura da Fita em relação à largura (em largura total no Painel), limitada em dp. */
+        private const val PROPORCAO_FITA = 0.3f
+        private const val ALTURA_MIN_FITA_DP = 76f
+        private const val ALTURA_MAX_FITA_DP = 112f
+        /** Espaço mínimo entre rótulos da Fita (× o maior rótulo) para desenhar todos. */
+        private const val FOLGA_ROTULOS_FITA = 1.8f
         private val LOCALE_BR = java.util.Locale.forLanguageTag("pt-BR")
     }
 }

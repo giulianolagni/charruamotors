@@ -37,6 +37,15 @@ class PreferenciasAutoConexao(context: Context) {
         atualizar { it.copy(veiculoId = id, veiculoDescricao = descricao) }
     }
 
+    /**
+     * Abrir um veículo no Painel: vira o favorito só se ainda não houver um (ou se for o mesmo,
+     * para atualizar a descrição). Trocar de favorito é pela estrela em Meus Veículos.
+     */
+    fun vincularVeiculoSeLivre(id: Long, descricao: String?) {
+        val atual = _config.value.veiculoId
+        if (atual == 0L || atual == id) vincularVeiculo(id, descricao)
+    }
+
     /** Restauração do backup: troca a configuração inteira pela do arquivo. */
     fun restaurar(config: ConfigAutoConexao) = atualizar { config }
 

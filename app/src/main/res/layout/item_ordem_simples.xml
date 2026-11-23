@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Item reordenável simples (sensores do HUD e da lista rápida): alça, posição, nome e remover. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/colorSurface"
+    android:gravity="center_vertical"
+    android:minHeight="48dp"
+    android:orientation="horizontal">
+
+    <ImageView
+        android:id="@+id/alca_arrastar"
+        android:layout_width="40dp"
+        android:layout_height="48dp"
+        android:contentDescription="@string/personalizar_arrastar"
+        android:padding="10dp"
+        android:src="@drawable/ic_arrastar"
+        app:tint="@color/texto_secundario" />
+
+    <TextView
+        android:id="@+id/texto_posicao"
+        android:layout_width="24dp"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textAppearance="?attr/textAppearanceLabelLarge"
+        android:textColor="@color/texto_secundario"
+        tools:text="1" />
+
+    <TextView
+        android:id="@+id/texto_titulo"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/espaco_pequeno"
+        android:layout_weight="1"
+        android:textAppearance="?attr/textAppearanceBodyLarge"
+        tools:text="RPM" />
+
+    <ImageButton
+        android:id="@+id/botao_remover"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/personalizar_remover_item"
+        android:padding="11dp"
+        android:src="@drawable/ic_fechar"
+        app:tint="@color/texto_secundario" />
+</LinearLayout>

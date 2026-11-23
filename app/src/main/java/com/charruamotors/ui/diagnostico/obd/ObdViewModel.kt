@@ -211,8 +211,9 @@ class ObdViewModel(
             val v = dadosVeiculo.await()
             parametrosMotor = ParametrosMotor.deVeiculo(v?.modelo, v?.tipoCombustivel)
             _computador.value = _computador.value.copy(motor = parametrosMotor)
-            // Último veículo aberto na aba OBD2 = veículo da sessão automática do carro.
-            if (v != null) preferencias?.vincularVeiculo(veiculoId, v.descricao)
+            // O favorito (veículo da caixa-preta) só muda pela estrela em Meus Veículos; aqui ele é
+            // definido se ainda não houver um, e a descrição acompanha renomeações.
+            if (v != null) preferencias?.vincularVeiculoSeLivre(veiculoId, v.descricao)
         }
         // Cada instantâneo da telemetria da sessão. Segue com a tela em segundo plano: o serviço da
         // sessão mantém o polling, e o computador de bordo não perde a viagem.
@@ -241,6 +242,30 @@ class ObdViewModel(
         _dispositivoSelecionado.value = null
         _dispositivos.value = emptyList()
         carregarDispositivos()
+    }
+
+    /**
+     * Início rápido do Painel: "Conectar no Carro (Bluetooth)" ou "Modo Simulado" com 1 toque. Troca
+     * o modo se preciso (só com a sessão parada) e conecta ao adaptador salvo / ao simulado.
+     */
+    fun conectarNoModo(modo: ModoObd) {
+        if (conexaoJob?.isActive == true || sessao.estadoSessao.value.ativa) return
+        if (modo != sessao.modo.value) {
+            if (!sessao.selecionarModo(modo)) return
+            _dispositivoSelecionado.value = null
+            _dispositivos.value = emptyList()
+        }
+        conectar()
+    }
+
+    /** Aparelhos pareados no Bluetooth real (para trocar o adaptador), mesmo no modo simulado. */
+    suspend fun pareadosBluetooth(): List<DispositivoObd> =
+        runCatching { clientePorModo(ModoObd.BLUETOOTH).listarDispositivos() }.getOrDefault(emptyList())
+
+    /** Ícone de trocar o adaptador: vira o scanner salvo do "Conectar no Carro". */
+    fun escolherAdaptador(dispositivo: DispositivoObd) {
+        preferencias?.vincularScanner(dispositivo)
+        if (modo.value == ModoObd.BLUETOOTH) _dispositivoSelecionado.value = dispositivo
     }
 
     /** Lista os scanners disponíveis (pareados, no Bluetooth real — exige permissão concedida). */

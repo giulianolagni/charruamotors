@@ -7,12 +7,14 @@ import com.charruamotors.direcao.painel.ConfigHud
 import com.charruamotors.direcao.painel.EstiloHud
 import com.charruamotors.direcao.painel.SensorPainel
 import com.charruamotors.direcao.painel.TamanhoHud
+import com.charruamotors.ui.componentes.ArrasteReordenavel
 import com.google.android.material.chip.Chip
 
 /**
- * Liga os controles de [ConteudoConfigHudBinding] (tamanho, sensores fixados e estilo) a uma
- * [ConfigHud]: usado no diálogo de ativação do HUD e na tela Personalizar Painel. Cada mudança
- * chama [aoMudar] com a nova configuração (quem chama decide se salva na hora ou ao confirmar).
+ * Liga os controles de [ConteudoConfigHudBinding] (tamanho, sensores fixados, a ordem deles por
+ * arraste e o estilo) a uma [ConfigHud]: usado no diálogo de ativação do HUD e na tela Personalizar
+ * Painel. Cada mudança chama [aoMudar] com a nova configuração (quem chama decide se salva na hora
+ * ou ao confirmar).
  */
 class EditorConfigHud(
     private val binding: ConteudoConfigHudBinding,
@@ -23,6 +25,10 @@ class EditorConfigHud(
         private set
 
     private val chips = mutableMapOf<SensorPainel, Chip>()
+    private val adapterOrdem = ItensOrdenaveisAdapter<SensorPainel>(
+        titulo = { it.titulo },
+        aoRemover = { sensor -> atualizar(config.alternarSensor(sensor)) },
+    )
 
     init {
         val contexto = binding.root.context
@@ -35,6 +41,12 @@ class EditorConfigHud(
             chips[sensor] = chip
             binding.chipsSensoresHud.addView(chip)
         }
+        binding.listaOrdemHud.adapter = adapterOrdem
+        adapterOrdem.arraste = ArrasteReordenavel(
+            binding.listaOrdemHud,
+            moverVisual = adapterOrdem::moverVisual,
+            aoSoltar = { de, para -> atualizar(config.moverSensor(de, para)) },
+        )
         binding.grupoTamanhoHud.addOnButtonCheckedListener { _, id, marcado ->
             if (!marcado) return@addOnButtonCheckedListener
             val tamanho = if (id == R.id.botao_hud_minimizado) TamanhoHud.MINIMIZADO else TamanhoHud.EXPANDIDO
@@ -69,10 +81,13 @@ class EditorConfigHud(
         } else {
             contexto.getString(R.string.hud_config_expandido_dica, nova.sensores.size, ConfigHud.MAX_SENSORES)
         }
-        // No minimizado os sensores são fixos (RPM e Turbo): a escolha some.
+        // No minimizado os sensores são fixos (RPM e Turbo): a escolha e a ordem somem.
         val expandido = nova.tamanho == TamanhoHud.EXPANDIDO
         binding.tituloSensoresHud.isVisible = expandido
         binding.chipsSensoresHud.isVisible = expandido
+        binding.tituloOrdemHud.isVisible = expandido && nova.sensores.size > 1
+        binding.listaOrdemHud.isVisible = expandido
+        adapterOrdem.definir(nova.sensores)
         val cheio = nova.sensores.size >= ConfigHud.MAX_SENSORES
         chips.forEach { (sensor, chip) ->
             chip.isChecked = sensor in nova.sensores

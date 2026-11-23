@@ -1,43 +1,106 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Tela principal (v1.5): as 4 abas do veículo ativo com o menu lateral (3 riscos) sempre na
+     Toolbar. O nome do veículo na Toolbar abre o seletor rápido. -->
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/gaveta"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?android:colorBackground"
-    android:orientation="vertical"
     tools:context=".ui.diagnostico.DiagnosticoActivity">
 
-    <com.google.android.material.appbar.AppBarLayout
-        android:id="@+id/appbar"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorPrimary">
+        android:layout_height="match_parent"
+        android:background="?android:colorBackground"
+        android:orientation="vertical">
 
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            style="@style/Widget.CharruaMotors.Toolbar"
+        <com.google.android.material.appbar.AppBarLayout
+            android:id="@+id/appbar"
             android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            android:theme="@style/ThemeOverlay.Material3.Dark.ActionBar"
-            app:navigationContentDescription="@string/voltar"
-            app:navigationIcon="?attr/homeAsUpIndicator"
-            app:subtitleTextColor="@color/branco"
-            tools:subtitle="ABC-1234"
-            tools:title="Toyota SW4 2019" />
-    </com.google.android.material.appbar.AppBarLayout>
+            android:layout_height="wrap_content"
+            android:background="?attr/colorPrimary">
 
-    <!-- As 4 abas ficam vivas (sem deslizar: os mostradores e listas rolam na vertical). -->
-    <androidx.viewpager2.widget.ViewPager2
-        android:id="@+id/paginas"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
+            <com.google.android.material.appbar.MaterialToolbar
+                android:id="@+id/toolbar"
+                style="@style/Widget.CharruaMotors.Toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="?attr/actionBarSize"
+                android:theme="@style/ThemeOverlay.Material3.Dark.ActionBar"
+                app:contentInsetStartWithNavigation="0dp"
+                app:menu="@menu/menu_toolbar_painel"
+                app:navigationContentDescription="@string/menu_abrir"
+                app:navigationIcon="@drawable/ic_menu">
 
-    <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/navegacao"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:labelVisibilityMode="labeled"
-        app:menu="@menu/menu_abas" />
-</LinearLayout>
+                <!-- Veículo ativo: toque para trocar (seletor rápido ou Meus Veículos) -->
+                <LinearLayout
+                    android:id="@+id/seletor_veiculo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:background="?attr/selectableItemBackground"
+                    android:contentDescription="@string/veiculo_seletor_descricao"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="@dimen/espaco_pequeno"
+                    android:paddingEnd="@dimen/espaco_pequeno">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/texto_veiculo_toolbar"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:maxWidth="240dp"
+                            android:maxLines="1"
+                            android:textAppearance="?attr/textAppearanceTitleMedium"
+                            android:textColor="@color/branco"
+                            tools:text="Toyota SW4 2019" />
+
+                        <TextView
+                            android:id="@+id/texto_placa_toolbar"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:maxLines="1"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="@color/branco_secundario"
+                            tools:text="ABC-1234 · ★ Favorito" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_seta_baixo"
+                        app:tint="@color/branco" />
+                </LinearLayout>
+            </com.google.android.material.appbar.MaterialToolbar>
+        </com.google.android.material.appbar.AppBarLayout>
+
+        <!-- As 4 abas ficam vivas (sem deslizar: os mostradores e listas rolam na vertical). -->
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/paginas"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <com.google.android.material.bottomnavigation.BottomNavigationView
+            android:id="@+id/navegacao"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:labelVisibilityMode="labeled"
+            app:menu="@menu/menu_abas" />
+    </LinearLayout>
+
+    <com.google.android.material.navigation.NavigationView
+        android:id="@+id/menu_lateral"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:fitsSystemWindows="true"
+        app:headerLayout="@layout/menu_lateral_cabecalho"
+        app:menu="@menu/menu_lateral" />
+</androidx.drawerlayout.widget.DrawerLayout>

@@ -1,5 +1,6 @@
 package com.charruamotors.direcao.painel
 
+import com.charruamotors.domain.calculo.LimitesProtecao
 import com.charruamotors.obd.DadosObd
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -60,5 +61,19 @@ class ClusterPainelTest {
         ).map { it.texto }
         assertEquals(listOf("ÁGUA QUENTE", "ATF QUENTE", "BATERIA BAIXA"), textos)
         assertEquals(listOf("BATERIA ALTA"), ClusterPainel.alertas(dados("ATRV" to 15.6)).map { it.texto })
+    }
+
+    @Test
+    fun `agua e ATF seguem os limites do veiculo e o alternador so vale com o motor girando`() {
+        val limites = LimitesProtecao(aguaMaxC = 98.0, atfMaxC = 105.0, tensaoMinV = 13.2)
+        // 100 °C já passa dos 98 °C do cadastro (antes só avisava em 105 °C); ATF 106 passa dos 105.
+        assertEquals(
+            listOf("ÁGUA QUENTE", "ATF QUENTE", "ALTERNADOR BAIXO"),
+            ClusterPainel.alertas(dados("0105" to 100.0, "TOYOTA_ATF_CAMBIO" to 106.0, "010C" to 900.0, "ATRV" to 12.8), limites).map { it.texto },
+        )
+        // Motor desligado (sem RPM): 12,8 V é só bateria em repouso, sem alerta do alternador.
+        assertTrue(ClusterPainel.alertas(dados("ATRV" to 12.8), limites).isEmpty())
+        // Limite maior no cadastro: 100 °C deixa de alertar.
+        assertTrue(ClusterPainel.alertas(dados("0105" to 100.0), limites.copy(aguaMaxC = 105.0)).isEmpty())
     }
 }

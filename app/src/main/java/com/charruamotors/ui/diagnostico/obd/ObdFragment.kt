@@ -37,18 +37,21 @@ import com.charruamotors.direcao.hud.HudFlutuanteService
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
 import com.charruamotors.direcao.midia.ControladorMidia
 import com.charruamotors.direcao.midia.EstadoMidia
+import com.charruamotors.direcao.waze.AbridorAppExterno
 import com.charruamotors.direcao.waze.AbridorWaze
 import com.charruamotors.direcao.waze.AcaoWaze
 import com.charruamotors.direcao.painel.BotaoNavegacao
 import com.charruamotors.direcao.painel.ConfigPainel
 import com.charruamotors.direcao.painel.Mostrador
 import com.charruamotors.direcao.painel.SecaoPainel
+import com.charruamotors.direcao.painel.SensorPainel
 import com.charruamotors.sistema.StatusConexaoPainel
 import com.charruamotors.sistema.unidades.ConversorUnidades
 import com.charruamotors.ui.componentes.GaugeView
 import com.charruamotors.ui.painel.ClusterPainelActivity
 import com.charruamotors.ui.painel.EditorConfigHud
 import com.charruamotors.ui.painel.MontadorMostradores
+import com.charruamotors.domain.calculo.AlertaProtecao
 import com.charruamotors.domain.calculo.EstadoCronometro
 import com.charruamotors.domain.calculo.MetodoConsumo
 import com.charruamotors.domain.model.TipoCombustivel
@@ -81,7 +84,7 @@ import kotlinx.coroutines.launch
  * o início rápido com "Conectar no Carro (Bluetooth)" (adaptador salvo + trocar o pareado) e "Modo
  * Simulado"; conectado (manual ou pela caixa-preta), uma barra compacta `● Conectado · OBDII · 7E0`
  * com Desconectar. Abaixo, os blocos escolhidos em "Personalizar Painel", na ordem e sem os
- * removidos: Músicas, Navegação (Waze e o Modo HUD), Mostradores (1 a 12, estilo por relógio),
+ * removidos: Músicas, Navegação (Waze e o Modo HUD), Mostradores (quantos quiser, estilo por relógio),
  * Gráfico, Computador de bordo, Cronômetro 0–100, Lista rápida (com salvar leitura e o Data Logger
  * CSV) e Informações da ECU. Tudo nas unidades globais (métrico/imperial).
  */
@@ -255,6 +258,12 @@ class ObdFragment : Fragment() {
         }
         botaoAtivarMidia.setOnClickListener { abrirAcessoNotificacoes() }
         botaoWazeAbrir.setOnClickListener { abrirWaze(AcaoWaze.ABRIR) }
+        botaoMaps.setOnClickListener {
+            if (!AbridorAppExterno.abrir(requireContext(), AbridorAppExterno.PACOTE_MAPS)) mostrarMensagem(getString(R.string.maps_erro))
+        }
+        botaoSpotify.setOnClickListener {
+            if (!AbridorAppExterno.abrir(requireContext(), AbridorAppExterno.PACOTE_SPOTIFY)) mostrarMensagem(getString(R.string.spotify_erro))
+        }
         botaoWazePosto.setOnClickListener { abrirWaze(AcaoWaze.POSTO) }
         botaoWazeOficina.setOnClickListener { abrirWaze(AcaoWaze.OFICINA) }
         botaoHud.setOnClickListener {
@@ -464,7 +473,14 @@ class ObdFragment : Fragment() {
                 launch { viewModel.sensores.collect { mostrarSensores(it) } }
                 launch { viewModel.infoEcu.collect { mostrarInfoEcu(it) } }
                 launch { viewModel.estadoLog.collect { mostrarEstadoLog(it) } }
-                launch { viewModel.computador.collect { mostrarComputador(it) } }
+                launch {
+                    viewModel.computador.collect {
+                        mostrarComputador(it)
+                        // O mostrador de consumo (km/L) acompanha o computador de bordo.
+                        if (configPainel.mostradores.any { m -> m.sensor == SensorPainel.CONSUMO_KML }) mostrarDados(viewModel.dados.value)
+                    }
+                }
+                launch { viewModel.limites.collect { app.centralAlertas.limites = it } }
                 launch { viewModel.cronometro.collect { mostrarCronometro(it) } }
                 launch { viewModel.grafico.collect { mostrarGrafico(it) } }
                 launch { viewModel.manterTelaAcesa.collect { aplicarTelaAcesa() } }
@@ -548,10 +564,23 @@ class ObdFragment : Fragment() {
 
     /** Os mostradores escolhidos, com o valor já convertido para a unidade global. */
     private fun mostrarDados(dados: DadosObd?) {
+        val alertas = app.centralAlertas.processar(dados)
+        mostrarAlertas(alertas)
+        val consumoKmL = viewModel.computador.value.consumo?.kmPorLitro
         configPainel.mostradores.forEachIndexed { i, m ->
-            gauges.getOrNull(i)?.definirValor(m.sensor.ler(dados)?.let { m.sensor.exibir(it, conversor).valor })
+            val gauge = gauges.getOrNull(i) ?: return@forEachIndexed
+            gauge.emAlerta = m.sensor.emAlerta(alertas)
+            gauge.definirValor(m.sensor.ler(dados, consumoKmL)?.let { m.sensor.exibir(it, conversor).valor })
         }
         atualizarBotoes()
+    }
+
+    /** Faixa vermelha no topo dos blocos enquanto algum limite do veículo (água, ATF, alternador) está ultrapassado. */
+    private fun mostrarAlertas(alertas: List<AlertaProtecao>) = with(binding) {
+        textoAlertasProtecao.isVisible = alertas.isNotEmpty()
+        if (alertas.isNotEmpty()) {
+            textoAlertasProtecao.text = getString(R.string.alerta_painel_titulo, alertas.joinToString(" · ") { it.tipo.texto })
+        }
     }
 
     /**
@@ -577,13 +606,27 @@ class ObdFragment : Fragment() {
                 containerSecoes.addView(card)
             }
         }
-        botaoWazeAbrir.isVisible = config.botaoVisivel(BotaoNavegacao.WAZE)
-        botaoWazePosto.isVisible = config.botaoVisivel(BotaoNavegacao.POSTO)
-        botaoWazeOficina.isVisible = config.botaoVisivel(BotaoNavegacao.OFICINA)
-        grupoAtalhosWaze.isVisible = botaoWazeAbrir.isVisible || botaoWazePosto.isVisible || botaoWazeOficina.isVisible
-        botaoHud.isVisible = config.botaoVisivel(BotaoNavegacao.HUD)
+        organizarAtalhos(config)
         configurarMostradores()
         mostrarSensores(viewModel.sensores.value)
+    }
+
+    /** Reanexa os atalhos visíveis na grade, na ordem escolhida (só mexe quando a ordem muda). */
+    private fun organizarAtalhos(config: ConfigPainel) = with(binding) {
+        val porAtalho = mapOf(
+            BotaoNavegacao.WAZE to botaoWazeAbrir,
+            BotaoNavegacao.MAPS to botaoMaps,
+            BotaoNavegacao.SPOTIFY to botaoSpotify,
+            BotaoNavegacao.POSTO to botaoWazePosto,
+            BotaoNavegacao.OFICINA to botaoWazeOficina,
+            BotaoNavegacao.HUD to botaoHud,
+        )
+        val desejados = config.botoesVisiveis.mapNotNull(porAtalho::get)
+        val atuais = (0 until grupoAtalhos.childCount).map(grupoAtalhos::getChildAt)
+        if (desejados != atuais) {
+            grupoAtalhos.removeAllViews()
+            desejados.forEach(grupoAtalhos::addView)
+        }
     }
 
     private fun cardDaSecao(secao: SecaoPainel): View = when (secao) {
@@ -604,8 +647,9 @@ class ObdFragment : Fragment() {
         assinaturaMostradores = assinatura
         gauges = MontadorMostradores.montar(binding.grupoMostradores, configPainel.mostradores, conversor)
         val dados = viewModel.dados.value
+        val consumoKmL = viewModel.computador.value.consumo?.kmPorLitro
         configPainel.mostradores.forEachIndexed { i, m ->
-            gauges.getOrNull(i)?.definirValor(m.sensor.ler(dados)?.let { m.sensor.exibir(it, conversor).valor }, animar = false)
+            gauges.getOrNull(i)?.definirValor(m.sensor.ler(dados, consumoKmL)?.let { m.sensor.exibir(it, conversor).valor }, animar = false)
         }
     }
 

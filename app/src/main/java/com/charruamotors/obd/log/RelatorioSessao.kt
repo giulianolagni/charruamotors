@@ -1,5 +1,9 @@
 package com.charruamotors.obd.log
 
+import com.charruamotors.domain.calculo.ComputadorBordo
+import com.charruamotors.domain.calculo.ParametrosMotor
+import com.charruamotors.domain.calculo.ResumoViagem
+import com.charruamotors.domain.calculo.TelemetriaCalculada
 import com.charruamotors.obd.DtcLido
 import com.charruamotors.obd.ValoresSensores
 import com.charruamotors.obd.pid.Pids
@@ -29,9 +33,17 @@ class Extremos {
  * MAP/turbo, temperatura do motor, pressão do Common Rail e tensão da bateria. Nos modos 21/22 os
  * espelhos usam o mesmo comando canônico (`010C`...), então entram aqui sem tradução.
  */
-class EstatisticasViagem {
+class EstatisticasViagem(
+    /** Combustível e calibração do veículo para o consumo via MAF; null = sem resumo de consumo. */
+    private val motor: ParametrosMotor? = null,
+) {
     var amostras: Int = 0
         private set
+
+    private val bordo = ComputadorBordo()
+
+    /** Distância e litros integrados da viagem (v1.7); a média só existe com distância e consumo suficientes. */
+    val consumo: ResumoViagem get() = bordo.resumo
     val rpm = Extremos()
     val velocidade = Extremos()
     val map = Extremos()
@@ -39,8 +51,11 @@ class EstatisticasViagem {
     val rail = Extremos()
     val tensao = Extremos()
 
-    fun registrar(dados: ValoresSensores) {
+    fun registrar(dados: ValoresSensores, instanteMs: Long? = null) {
         amostras++
+        if (motor != null && instanteMs != null) {
+            bordo.registrar(TelemetriaCalculada.consumoInstantaneo(dados, motor), dados[Pids.VELOCIDADE], instanteMs)
+        }
         rpm.registrar(dados[Pids.RPM])
         velocidade.registrar(dados[Pids.VELOCIDADE])
         map.registrar(dados[Pids.PRESSAO_COLETOR])
@@ -64,6 +79,8 @@ data class CabecalhoSessao(
     val inicioMs: Long,
     /** Sessão gravada com o scanner simulado (Modo Simulado): marca o nome dos arquivos e o cabeçalho. */
     val simulado: Boolean = false,
+    /** Combustível/calibração do veículo, para o consumo médio do resumo; null = sem veículo. */
+    val motor: ParametrosMotor? = null,
 )
 
 /** Códigos de falha lidos na sessão; cada lista null = modo não lido / não suportado pela ECU. */
@@ -178,6 +195,10 @@ object RelatorioSessaoTxt {
             val tMin = e.tensao.minimo
             val tMax = e.tensao.maximo
             campo("Tensão mín. / máx.", if (tMin != null && tMax != null) "${numero(tMin, 1)} V / ${numero(tMax, 1)} V" else "—")
+            val viagem = e.consumo
+            campo("Distância percorrida", if (viagem.distanciaKm > 0.0) "${numero(viagem.distanciaKm, 1)} km" else "—")
+            campo("Consumo médio", viagem.mediaKmPorLitro?.let { "${numero(it, 1)} km/L" } ?: "—")
+            campo("Combustível estimado", if (viagem.litros > 0.0) "${numero(viagem.litros, 2)} L (via MAF)" else "—")
         }
         saida.append('\n').append(LINHA).append('\n')
         saida.append(TITULO_LOG_BRUTO).append('\n')

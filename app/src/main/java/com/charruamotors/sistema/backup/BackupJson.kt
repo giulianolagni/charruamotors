@@ -97,6 +97,10 @@ object BackupJson {
         put("kmAtual", v.kmAtual)
         put("tipoCombustivel", v.tipoCombustivel.name)
         putOpt("capacidadeTanque", v.capacidadeTanque)
+        put("tempMaxAguaC", v.tempMaxAguaC)
+        put("tempMaxAtfC", v.tempMaxAtfC)
+        put("tensaoMinAlternadorV", v.tensaoMinAlternadorV)
+        put("calibracaoConsumo", v.calibracaoConsumo)
     }
 
     private fun manutencaoJson(m: Manutencao) = JSONObject().apply {
@@ -227,6 +231,11 @@ object BackupJson {
         kmAtual = o.getInt("kmAtual"),
         tipoCombustivel = TipoCombustivel.valueOf(o.getString("tipoCombustivel")),
         capacidadeTanque = o.doubleOuNull("capacidadeTanque"),
+        // Backups anteriores à v1.7 não têm os limites: voltam aos padrões.
+        tempMaxAguaC = o.optInt("tempMaxAguaC", Veiculo.LIMITE_AGUA_PADRAO_C),
+        tempMaxAtfC = o.optInt("tempMaxAtfC", Veiculo.LIMITE_ATF_PADRAO_C),
+        tensaoMinAlternadorV = o.optDouble("tensaoMinAlternadorV", Veiculo.LIMITE_TENSAO_PADRAO_V),
+        calibracaoConsumo = o.optDouble("calibracaoConsumo", Veiculo.CALIBRACAO_PADRAO),
     )
 
     private fun manutencaoDe(o: JSONObject) = Manutencao(

@@ -106,15 +106,17 @@ class ConfigPainelTest {
     // ---------------------------------------------------------------- mostradores
 
     @Test
-    fun `comeca com os 4 padrao e aceita mais de 4 ate 12`() {
+    fun `comeca com os 4 padrao e aceita mais de 4 ate o total de sensores`() {
         assertEquals(listOf(SensorPainel.RPM, SensorPainel.VELOCIDADE, SensorPainel.TURBO, SensorPainel.TEMP_MOTOR), padrao.mostradores.map { it.sensor })
         val seis = padrao.adicionarMostrador().adicionarMostrador()
         assertEquals(6, seis.mostradores.size)
         assertEquals(6, seis.mostradores.map { it.sensor }.distinct().size)
-        val doze = (1..20).fold(padrao) { c, _ -> c.adicionarMostrador() }
-        assertEquals(ConfigPainel.MAX_MOSTRADORES, doze.mostradores.size)
-        assertFalse(doze.podeAdicionarMostrador)
-        assertEquals(doze, doze.adicionarMostrador())
+        val todos = (1..SensorPainel.entries.size + 5).fold(padrao) { c, _ -> c.adicionarMostrador() }
+        assertEquals(SensorPainel.entries.size, ConfigPainel.MAX_MOSTRADORES)
+        assertTrue(todos.mostradores.size > 12)
+        assertEquals(ConfigPainel.MAX_MOSTRADORES, todos.mostradores.size)
+        assertFalse(todos.podeAdicionarMostrador)
+        assertEquals(todos, todos.adicionarMostrador())
     }
 
     @Test
@@ -164,12 +166,12 @@ class ConfigPainelTest {
     }
 
     @Test
-    fun `normalizacao tira repetidos, limita a 12 e nunca fica vazia`() {
+    fun `normalizacao tira repetidos, nao corta em 12 e nunca fica vazia`() {
         assertEquals(ConfigPainel.MOSTRADORES_PADRAO, OrdemPainel.normalizarMostradores(emptyList()))
         val repetidos = OrdemPainel.normalizarMostradores(listOf(Mostrador(SensorPainel.TENSAO), Mostrador(SensorPainel.TENSAO, EstiloMostrador.FITA)))
         assertEquals(listOf(Mostrador(SensorPainel.TENSAO)), repetidos)
         val todos = OrdemPainel.normalizarMostradores(SensorPainel.entries.map { Mostrador(it) })
-        assertEquals(12, todos.size)
+        assertEquals(SensorPainel.entries.size, todos.size)
     }
 
     // ---------------------------------------------------------------- lista rápida e HUD

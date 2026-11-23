@@ -113,11 +113,11 @@ class TelemetriaCalculadaTest {
     }
 
     @Test
-    fun `diesel so usa o consumo informado pela ECU`() {
+    fun `diesel sem MAF so usa o consumo informado pela ECU`() {
         val diesel = ParametrosMotor(2.8, tipoCombustivel = TipoCombustivel.DIESEL)
-        // Diesel queima com excesso de ar: MAF não serve para estimar o combustível.
-        assertNull(TelemetriaCalculada.consumoInstantaneo(dados(Pids.MAF to 30.0), diesel))
-        val c = TelemetriaCalculada.consumoInstantaneo(dados(Pids.MAF to 30.0, Pids.CONSUMO_ECU to 6.5, Pids.VELOCIDADE to 90.0), diesel)!!
+        // Sem MAF e sem 015E não há como estimar (o Speed-Density não vale no diesel).
+        assertNull(TelemetriaCalculada.consumoInstantaneo(dados(Pids.RPM to 2000.0, Pids.PRESSAO_COLETOR to 150.0, Pids.TEMPERATURA_AR_ADMISSAO to 30.0), diesel))
+        val c = TelemetriaCalculada.consumoInstantaneo(dados(Pids.CONSUMO_ECU to 6.5, Pids.VELOCIDADE to 90.0), diesel)!!
         assertEquals(MetodoConsumo.SENSOR_ECU, c.metodo)
         assertEquals(6.5, c.litrosPorHora, 0.0)
         assertEquals(90.0 / 6.5, c.kmPorLitro!!, 1e-9)

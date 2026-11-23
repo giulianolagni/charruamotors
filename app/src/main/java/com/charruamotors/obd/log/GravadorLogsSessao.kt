@@ -63,7 +63,7 @@ class GravadorLogsSessao(
     private var desdeFlush = 0
     private var ultimoFlushMs = cabecalho.inicioMs
 
-    private val estatisticas = EstatisticasViagem()
+    private val estatisticas = EstatisticasViagem(cabecalho.motor)
     private var tensaoInicial: Double? = null
     private var conexao: InfoConexao? = null
     private var dtcs: DtcsSessao? = null
@@ -132,7 +132,7 @@ class GravadorLogsSessao(
     /** Uma amostra da telemetria: entra nas estatísticas e no CSV (ou na fila, antes de [iniciarCsv]). */
     fun registrar(dados: ValoresSensores, instanteMs: Long): Unit = synchronized(trava) {
         if (finalizado) return@synchronized
-        estatisticas.registrar(dados)
+        estatisticas.registrar(dados, instanteMs)
         if (tensaoInicial == null) tensaoInicial = dados[Pids.TENSAO_BATERIA]
         when {
             csv != null -> {

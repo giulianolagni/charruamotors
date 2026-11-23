@@ -15,9 +15,14 @@ enum class SecaoPainel(val titulo: String, val descricao: String) {
     INFO_ECU("Informações da ECU", "VIN, PIDs suportados, perfil e protocolo"),
 }
 
-/** Botões do bloco Navegação que o usuário pode exibir ou esconder um a um. */
+/**
+ * Atalhos do bloco Navegação que o usuário pode exibir, esconder e reordenar um a um (v1.7). Waze,
+ * Google Maps e Spotify abrem o app externo; Posto/Oficina buscam pelo Waze; o HUD é do próprio app.
+ */
 enum class BotaoNavegacao(val titulo: String) {
     WAZE("Abrir Waze"),
+    MAPS("Google Maps"),
+    SPOTIFY("Spotify"),
     POSTO("Posto"),
     OFICINA("Oficina"),
     HUD("Modo HUD"),
@@ -25,9 +30,9 @@ enum class BotaoNavegacao(val titulo: String) {
 
 /** Estilo de desenho de cada mostrador do Painel (escolhido relógio a relógio). */
 enum class EstiloMostrador(val titulo: String, val descricao: String) {
-    ESPORTIVO("Esportivo", "Ponteiro em arco com escala e zona vermelha"),
-    DIGITAL("Digital Moderno", "Números grandes com anel de progresso"),
-    FITA("Fita / Off-road", "Barra linear em largura total, fácil de ler na trilha"),
+    ESPORTIVO("Relógio Esportivo", "Ponteiro em arco com escala e zona vermelha"),
+    DIGITAL("Digital Grande", "Números grandes com anel de progresso"),
+    FITA("Barra / Fita", "Barra linear em largura total, fácil de ler na trilha"),
 }
 
 /** Um relógio do Painel: o sensor e o estilo próprio dele. */
@@ -86,7 +91,7 @@ data class ConfigHud(
 
 /**
  * Personalização da aba Painel (v1.5): ordem de todos os blocos e os removidos, os botões do
- * bloco Navegação, a lista dinâmica de mostradores (1 a [MAX_MOSTRADORES], cada um com o próprio
+ * bloco Navegação, a lista dinâmica de mostradores (um por sensor (sem o antigo limite de 4), cada um com o próprio
  * estilo), a lista rápida ordenada (comandos de PID; vazia = todos os suportados) e o HUD.
  */
 data class ConfigPainel(
@@ -95,6 +100,8 @@ data class ConfigPainel(
     /** Blocos que o usuário tirou da tela ("Blocos removidos"). */
     val ocultas: Set<SecaoPainel> = emptySet(),
     val botoesNavegacao: Set<BotaoNavegacao> = BotaoNavegacao.entries.toSet(),
+    /** Ordem de todos os atalhos da Navegação (os escondidos também guardam o lugar). */
+    val ordemBotoes: List<BotaoNavegacao> = BotaoNavegacao.entries,
     val mostradores: List<Mostrador> = MOSTRADORES_PADRAO,
     /** Comandos da lista rápida, na ordem escolhida (arrastar). */
     val listaRapida: List<String> = emptyList(),
@@ -109,6 +116,15 @@ data class ConfigPainel(
     fun visivel(secao: SecaoPainel): Boolean = secao !in ocultas
 
     fun botaoVisivel(botao: BotaoNavegacao): Boolean = botao in botoesNavegacao
+
+    /** Atalhos que aparecem na Navegação, na ordem escolhida. */
+    val botoesVisiveis: List<BotaoNavegacao> get() = OrdemPainel.normalizarBotoes(ordemBotoes).filter { it in botoesNavegacao }
+
+    /** Arrasta o atalho da posição [de] para [para] entre os visíveis; os escondidos vão para o fim. */
+    fun moverBotao(de: Int, para: Int): ConfigPainel {
+        val visiveis = OrdemPainel.moverItem(botoesVisiveis, de, para)
+        return copy(ordemBotoes = visiveis + OrdemPainel.normalizarBotoes(ordemBotoes).filter { it !in botoesNavegacao })
+    }
 
     val podeAdicionarMostrador: Boolean get() = mostradores.size < MAX_MOSTRADORES
 
@@ -197,7 +213,9 @@ data class ConfigPainel(
 
     companion object {
         const val MIN_MOSTRADORES = 1
-        const val MAX_MOSTRADORES = 12
+
+        /** Sem teto prático (v1.7): cada sensor entra uma vez, então o limite é o total de sensores. */
+        val MAX_MOSTRADORES: Int = SensorPainel.entries.size
 
         val ORDEM_PADRAO = listOf(
             SecaoPainel.MUSICA,
@@ -228,7 +246,10 @@ object OrdemPainel {
         return nova
     }
 
-    /** 1 a 12 relógios, sem sensor repetido; vazio volta aos 4 padrão. */
+    /** Sem repetidos e com todos os atalhos (os que faltarem entram no fim, na ordem padrão). */
+    fun normalizarBotoes(ordem: List<BotaoNavegacao>): List<BotaoNavegacao> = (ordem + BotaoNavegacao.entries).distinct()
+
+    /** Quantos relógios couberem (um por sensor, sem repetir); vazio volta aos 4 padrão. */
     fun normalizarMostradores(mostradores: List<Mostrador>): List<Mostrador> =
         mostradores.distinctBy { it.sensor }.take(ConfigPainel.MAX_MOSTRADORES).ifEmpty { ConfigPainel.MOSTRADORES_PADRAO }
 

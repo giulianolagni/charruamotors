@@ -41,6 +41,14 @@ data class Combustivel(val relacaoEstequiometrica: Double, val densidadeGL: Doub
 
         val DIESEL = Combustivel(14.5, 835.0)
 
+        /**
+         * Diesel Common Rail turbo (Toyota 1KD-FTV 3.0 e similares) estimado pelo MAF. O diesel
+         * queima com excesso de ar (λ ≈ 1,3 em plena carga a 4+ em marcha lenta), então a massa de
+         * ar não fixa a de combustível: este valor é a relação ar/combustível *média efetiva* de um
+         * uso misto (λ ≈ 1,85 × 14,5). Ajuste fino por veículo na calibração do cadastro.
+         */
+        val DIESEL_COMMON_RAIL = Combustivel(27.0, 835.0)
+
         /** Gasolina comum brasileira, com 27 % de etanol anidro. */
         val GASOLINA_C: Combustivel = mistura(0.27)
 
@@ -72,8 +80,11 @@ data class ParametrosMotor(
     val cilindradaLitros: Double = CILINDRADA_PADRAO_L,
     val eficienciaVolumetrica: Double = EFICIENCIA_VOLUMETRICA_PADRAO,
     val tipoCombustivel: TipoCombustivel = TipoCombustivel.FLEX,
+    /** Calibração do veículo: multiplica o consumo estimado (1,0 = padrão do combustível). */
+    val calibracao: Double = 1.0,
 ) {
     init {
+        require(calibracao in CALIBRACAO_MIN..CALIBRACAO_MAX) { "Calibração do consumo fora da faixa: $calibracao" }
         require(cilindradaLitros in CILINDRADA_MIN_L..CILINDRADA_MAX_L) { "Cilindrada fora da faixa: $cilindradaLitros L" }
         require(eficienciaVolumetrica in 0.3..1.3) { "Eficiência volumétrica fora da faixa: $eficienciaVolumetrica" }
     }
@@ -86,7 +97,7 @@ data class ParametrosMotor(
     fun combustivel(percentualEtanol: Double? = null): Combustivel = when (tipoCombustivel) {
         TipoCombustivel.GASOLINA, TipoCombustivel.GNV -> Combustivel.GASOLINA_C
         TipoCombustivel.ETANOL -> Combustivel.ETANOL_HIDRATADO
-        TipoCombustivel.DIESEL -> Combustivel.DIESEL
+        TipoCombustivel.DIESEL -> Combustivel.DIESEL_COMMON_RAIL
         TipoCombustivel.FLEX -> percentualEtanol?.let { Combustivel.mistura(it / 100.0) } ?: Combustivel.GASOLINA_C
     }
 
@@ -95,6 +106,8 @@ data class ParametrosMotor(
         const val EFICIENCIA_VOLUMETRICA_PADRAO = 0.85
         private const val CILINDRADA_MIN_L = 0.6
         private const val CILINDRADA_MAX_L = 8.0
+        const val CALIBRACAO_MIN = 0.3
+        const val CALIBRACAO_MAX = 3.0
 
         /** "1.6", "2,8", "1.0 TSI": número com uma casa decimal isolado no texto do modelo. */
         private val REGEX_CILINDRADA = Regex("(?<![\\d.,])(\\d)[.,](\\d)(?![\\d.,])")
@@ -103,13 +116,14 @@ data class ParametrosMotor(
          * Parâmetros a partir do cadastro: a cilindrada é lida do modelo (ex.: "Gol 1.6 MSI",
          * "Hilux 2.8 D-4D"); sem ela, usa [CILINDRADA_PADRAO_L].
          */
-        fun deVeiculo(modelo: String?, tipoCombustivel: TipoCombustivel?): ParametrosMotor {
+        fun deVeiculo(modelo: String?, tipoCombustivel: TipoCombustivel?, calibracao: Double = 1.0): ParametrosMotor {
             val cilindrada = modelo?.let { REGEX_CILINDRADA.find(it) }
                 ?.let { "${it.groupValues[1]}.${it.groupValues[2]}".toDouble() }
                 ?.takeIf { it in CILINDRADA_MIN_L..CILINDRADA_MAX_L }
             return ParametrosMotor(
                 cilindradaLitros = cilindrada ?: CILINDRADA_PADRAO_L,
                 tipoCombustivel = tipoCombustivel ?: TipoCombustivel.FLEX,
+                calibracao = calibracao.takeIf { it in CALIBRACAO_MIN..CALIBRACAO_MAX } ?: 1.0,
             )
         }
     }
@@ -121,7 +135,8 @@ data class ParametrosMotor(
  * Consumo de motores a gasolina/etanol/flex, por massa de ar:
  * `combustível (g/s) = ar (g/s) / (AFR · λ) · (1 + (STFT + LTFT) / 100)` e `L/h = g/s · 3600 / densidade`,
  * com o ar vindo do MAF quando a ECU o suporta e, sem MAF, do Speed-Density. Diesel trabalha
- * com excesso de ar (a massa de ar não diz quanto diesel foi injetado), então só usa o `015E`.
+ * com excesso de ar: o MAF é convertido pela relação ar/combustível *efetiva* do Common Rail
+ * ([Combustivel.DIESEL_COMMON_RAIL], ajustável pela calibração do veículo) e, sem MAF, vale o `015E`.
  */
 object TelemetriaCalculada {
 
@@ -152,11 +167,17 @@ object TelemetriaCalculada {
     fun consumoInstantaneo(dados: ValoresSensores, motor: ParametrosMotor): ConsumoInstantaneo? {
         val litrosPorHora: Double
         val metodo: MetodoConsumo
+        val maf = dados[Pids.MAF]
         if (motor.tipoCombustivel == TipoCombustivel.DIESEL) {
-            litrosPorHora = dados[Pids.CONSUMO_ECU] ?: return null
-            metodo = MetodoConsumo.SENSOR_ECU
+            if (maf != null) {
+                litrosPorHora = litrosPorHoraDaMassaAr(maf, dados, motor)
+                metodo = MetodoConsumo.MAF
+            } else {
+                // Sem MAF, só o consumo que a própria ECU informa (o Speed-Density não vale no diesel).
+                litrosPorHora = dados[Pids.CONSUMO_ECU] ?: return null
+                metodo = MetodoConsumo.SENSOR_ECU
+            }
         } else {
-            val maf = dados[Pids.MAF]
             val massaAr: Double
             if (maf != null) {
                 massaAr = maf
@@ -172,13 +193,19 @@ object TelemetriaCalculada {
         return ConsumoInstantaneo(litrosPorHora, kmPorLitro(dados[Pids.VELOCIDADE], litrosPorHora), metodo)
     }
 
-    /** Converte a massa de ar (g/s) em L/h, corrigindo por λ comandado e pelos ajustes de combustível. */
+    /**
+     * Converte a massa de ar (g/s) em L/h pela relação ar/combustível do [motor], vezes a calibração
+     * do veículo. Na gasolina/etanol/flex corrige ainda por λ comandado e pelos ajustes de
+     * combustível (STFT/LTFT); no diesel (sem λ de banda estreita nem trims) vale só a relação
+     * efetiva do [Combustivel.DIESEL_COMMON_RAIL].
+     */
     fun litrosPorHoraDaMassaAr(massaArGs: Double, dados: ValoresSensores, motor: ParametrosMotor): Double {
         val combustivel = motor.combustivel(dados[Pids.PERCENTUAL_ETANOL])
-        val lambda = dados[Pids.LAMBDA_COMANDADO]?.takeIf { it in 0.5..1.5 } ?: 1.0
-        val ajuste = (1.0 + ((dados[Pids.STFT] ?: 0.0) + (dados[Pids.LTFT] ?: 0.0)) / 100.0).coerceIn(0.5, 1.5)
+        val diesel = motor.tipoCombustivel == TipoCombustivel.DIESEL
+        val lambda = if (diesel) 1.0 else dados[Pids.LAMBDA_COMANDADO]?.takeIf { it in 0.5..1.5 } ?: 1.0
+        val ajuste = if (diesel) 1.0 else (1.0 + ((dados[Pids.STFT] ?: 0.0) + (dados[Pids.LTFT] ?: 0.0)) / 100.0).coerceIn(0.5, 1.5)
         val combustivelGs = massaArGs.coerceAtLeast(0.0) / (combustivel.relacaoEstequiometrica * lambda) * ajuste
-        return combustivelGs * 3600.0 / combustivel.densidadeGL
+        return combustivelGs * 3600.0 / combustivel.densidadeGL * motor.calibracao
     }
 
     /** km/L instantâneo; null parado (abaixo de [VELOCIDADE_MINIMA_KM_L]) ou sem consumo. */

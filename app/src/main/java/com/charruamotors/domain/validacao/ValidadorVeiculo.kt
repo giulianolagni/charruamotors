@@ -1,7 +1,7 @@
 package com.charruamotors.domain.validacao
 
 /** Campos do formulário de veículo que podem ter erro. */
-enum class CampoVeiculo { MARCA, MODELO, ANO, PLACA, KM, TANQUE }
+enum class CampoVeiculo { MARCA, MODELO, ANO, PLACA, KM, TANQUE, LIMITE_AGUA, LIMITE_ATF, LIMITE_TENSAO, CALIBRACAO }
 
 /** Valores digitados no formulário, ainda como texto (antes de virar um [Veiculo]). */
 data class FormularioVeiculo(
@@ -11,12 +11,24 @@ data class FormularioVeiculo(
     val placa: String,
     val km: String,
     val capacidadeTanque: String,
+    /** Limites de alerta (v1.7); vazio = padrão do veículo (98 °C, 105 °C, 13,2 V, calibração 1,0). */
+    val limiteAgua: String = "",
+    val limiteAtf: String = "",
+    val limiteTensao: String = "",
+    val calibracaoConsumo: String = "",
 )
 
 /** Regras de negócio do cadastro de veículo. */
 object ValidadorVeiculo {
 
     const val ANO_MINIMO = 1900
+    val FAIXA_LIMITE_AGUA_C = 80.0..130.0
+    val FAIXA_LIMITE_ATF_C = 80.0..150.0
+    val FAIXA_LIMITE_TENSAO_V = 11.0..15.5
+    val FAIXA_CALIBRACAO = 0.3..3.0
+
+    /** Número com vírgula ou ponto; null = vazio ou ilegível. */
+    fun numero(texto: String): Double? = texto.trim().replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() }
 
     /** Padrão antigo (ABC1234) ou Mercosul (ABC1D23), já sem hífen e em maiúsculas. */
     private val REGEX_PLACA = Regex("^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$")
@@ -66,6 +78,17 @@ object ValidadorVeiculo {
             val tanque = formulario.capacidadeTanque.trim().replace(',', '.').toDoubleOrNull()
             if (tanque == null || tanque <= 0) erros[CampoVeiculo.TANQUE] = ErroValidacao.NUMERO_INVALIDO
         }
+
+        // Limites de alerta e calibração: opcionais (vazio = padrão), mas dentro de faixas sensatas.
+        fun conferir(campo: CampoVeiculo, texto: String, faixa: ClosedFloatingPointRange<Double>) {
+            if (texto.isBlank()) return
+            val valor = numero(texto)
+            if (valor == null || valor !in faixa) erros[campo] = ErroValidacao.NUMERO_INVALIDO
+        }
+        conferir(CampoVeiculo.LIMITE_AGUA, formulario.limiteAgua, FAIXA_LIMITE_AGUA_C)
+        conferir(CampoVeiculo.LIMITE_ATF, formulario.limiteAtf, FAIXA_LIMITE_ATF_C)
+        conferir(CampoVeiculo.LIMITE_TENSAO, formulario.limiteTensao, FAIXA_LIMITE_TENSAO_V)
+        conferir(CampoVeiculo.CALIBRACAO, formulario.calibracaoConsumo, FAIXA_CALIBRACAO)
 
         return erros
     }

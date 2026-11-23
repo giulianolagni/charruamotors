@@ -37,7 +37,19 @@
     <string name="personalizar_adicionar_de_volta">+ %1$s</string>
     <string name="personalizar_adicionar_de_volta_descricao">Adicionar %1$s de volta ao Painel</string>
     <string name="personalizar_botoes_navegacao">Botões da Navegação</string>
-    <string name="personalizar_mostradores_qtd">Mostradores (%1$d de %2$d)</string>
+    <string name="personalizar_mostradores_qtd">Mostradores (%1$d)</string>
+    <string name="personalizar_atalhos_ordem">Ordem dos atalhos: arraste pela alça (≡). O X esconde o atalho.</string>
+    <string name="maps_erro">Não foi possível abrir o Google Maps</string>
+    <string name="spotify_erro">Não foi possível abrir o Spotify</string>
+    <string name="alerta_painel_titulo">Atenção: %1$s</string>
+    <string name="veiculo_alertas_titulo">Alertas de proteção</string>
+    <string name="veiculo_alertas_dica">O Painel fica vermelho e toca um aviso discreto quando um limite é ultrapassado. Vazio = padrão.</string>
+    <string name="campo_limite_agua">Temp. máx. da água (padrão 98)</string>
+    <string name="campo_limite_atf">Temp. máx. do câmbio ATF (padrão 105)</string>
+    <string name="campo_limite_tensao">Tensão mín. do alternador, motor acima de 600 rpm (padrão 13,2)</string>
+    <string name="veiculo_consumo_titulo">Consumo pelo MAF</string>
+    <string name="veiculo_consumo_dica">Fator multiplicado ao consumo estimado (1,00 = padrão do combustível: diesel Common Rail 1KD-FTV ou gasolina/flex). Ajuste comparando com o abastecimento: litros reais ÷ litros estimados.</string>
+    <string name="campo_calibracao_consumo">Calibração do consumo (padrão 1,00)</string>
     <string name="personalizar_adicionar_mostrador">Adicionar mostrador</string>
     <string name="personalizar_estilo_todos">Aplicar estilo a todos</string>
     <string name="personalizar_remover_item">Remover</string>

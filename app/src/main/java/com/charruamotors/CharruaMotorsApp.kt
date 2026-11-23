@@ -16,6 +16,8 @@ import com.charruamotors.data.repository.UsuarioRepository
 import com.charruamotors.data.repository.VeiculoRepository
 import com.charruamotors.data.session.SessaoManager
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
+import com.charruamotors.domain.calculo.CentralAlertas
+import com.charruamotors.ui.util.SomAlerta
 import com.charruamotors.direcao.painel.PreferenciasPainel
 import com.charruamotors.obd.Elm327BluetoothClient
 import com.charruamotors.obd.ModoObd
@@ -146,6 +148,9 @@ class CharruaMotorsApp : Application() {
             configHud = preferenciasPainel.config.map { it.hud },
         )
     }
+
+    /** Alertas de proteção (água, ATF, alternador) com o aviso sonoro; os limites vêm do veículo ativo. */
+    val centralAlertas: CentralAlertas by lazy { CentralAlertas(som = SomAlerta::tocar) }
 
     /** Salva os logs CSV do Data Logger em Downloads. */
     val exportadorCsv: ExportadorCsv by lazy { ExportadorCsv(this) }

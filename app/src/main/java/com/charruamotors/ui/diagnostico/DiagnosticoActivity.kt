@@ -4,8 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
@@ -34,7 +36,8 @@ import kotlinx.coroutines.launch
  *
  * A Toolbar traz sempre os 3 riscos do [MenuLateralGlobal], o nome do veículo ativo (toque = seletor
  * rápido ou Meus Veículos) e, só na aba Painel, o ícone de Personalizar Painel. As telas abertas
- * pelo menu ficam por cima desta: o Voltar retorna para a mesma aba.
+ * pelo menu ficam por cima desta: o Voltar retorna para a mesma aba. Nas outras abas o Voltar leva
+ * ao Painel antes de sair, e a sessão OBD (no serviço) segue ativa ao sair.
  */
 class DiagnosticoActivity : AppCompatActivity() {
 
@@ -42,6 +45,25 @@ class DiagnosticoActivity : AppCompatActivity() {
     private val app get() = application as CharruaMotorsApp
     private val viewModel: DiagnosticoViewModel by viewModels { DiagnosticoViewModel.Factory }
     private val menuLateral = MenuLateralGlobal(this)
+
+    /**
+     * Voltar previsível (v1.7): fora da aba Painel, volta primeiro ao Painel (a tela principal);
+     * só do Painel o Voltar sai. Registrado antes do menu lateral, que tem prioridade quando a
+     * gaveta está aberta (fecha a gaveta primeiro).
+     */
+    private val voltarAoPainel = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() = mostrarAba(DiagnosticoPagerAdapter.ABA_PAINEL)
+    }
+
+    /**
+     * Meus Veículos abre por cima das abas; se o usuário escolher outro veículo lá, ele devolve o
+     * id e esta tela troca no lugar (sem limpar a pilha de telas).
+     */
+    private val abrirMeusVeiculos = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { resultado ->
+        if (resultado.resultCode != RESULT_OK) return@registerForActivityResult
+        val escolhido = resultado.data?.getLongExtra(EXTRA_VEICULO_ID, 0L) ?: 0L
+        if (escolhido > 0 && escolhido != viewModel.veiculoId) trocarVeiculo(escolhido)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
@@ -57,8 +79,9 @@ class DiagnosticoActivity : AppCompatActivity() {
         setContentView(binding.root)
         binding.appbar.aplicarInsetsDoSistema(base = false)
 
+        onBackPressedDispatcher.addCallback(this, voltarAoPainel)
         menuLateral.ligar(binding.gaveta, binding.menuLateral, binding.toolbar, binding.root) {
-            startActivity(DashboardActivity.intent(this, viewModel.veiculoId))
+            abrirMeusVeiculos.launch(DashboardActivity.intent(this, viewModel.veiculoId))
         }
         menuLateral.verificarAtualizacaoAoAbrir(savedInstanceState == null)
         binding.seletorVeiculo.setOnClickListener { escolherVeiculoRapido() }
@@ -83,6 +106,7 @@ class DiagnosticoActivity : AppCompatActivity() {
             override fun onPageSelected(position: Int) {
                 val item = DiagnosticoPagerAdapter.itemDaPagina(position)
                 if (binding.navegacao.selectedItemId != item) binding.navegacao.selectedItemId = item
+                voltarAoPainel.isEnabled = position != DiagnosticoPagerAdapter.ABA_PAINEL
                 // Personalizar Painel fica só na Toolbar da aba Painel (sem repetir nas outras).
                 binding.toolbar.menu.findItem(R.id.acao_personalizar_painel)?.isVisible = position == DiagnosticoPagerAdapter.ABA_PAINEL
             }
@@ -130,7 +154,7 @@ class DiagnosticoActivity : AppCompatActivity() {
                     dialogo.dismiss()
                     val escolhido = veiculos.getOrNull(i)
                     when {
-                        escolhido == null -> startActivity(DashboardActivity.intent(this@DiagnosticoActivity, viewModel.veiculoId))
+                        escolhido == null -> abrirMeusVeiculos.launch(DashboardActivity.intent(this@DiagnosticoActivity, viewModel.veiculoId))
                         escolhido.id != viewModel.veiculoId -> trocarVeiculo(escolhido.id)
                     }
                 }

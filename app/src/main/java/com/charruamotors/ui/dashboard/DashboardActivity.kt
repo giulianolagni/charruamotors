@@ -9,7 +9,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
-import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -65,18 +64,12 @@ class DashboardActivity : AppCompatActivity() {
         binding.appbar.aplicarInsetsDoSistema(base = false)
         binding.conteudo.aplicarInsetsDoSistema(topo = false)
 
-        if (comoRaiz) {
-            menuLateral.ligar(binding.gaveta, binding.menuLateral, binding.toolbar, binding.root) {
-                // Já está em Meus Veículos: o item só fecha a gaveta.
-            }
-            menuLateral.verificarAtualizacaoAoAbrir(savedInstanceState == null)
-        } else {
-            // Tela secundária: seta de Voltar (1 nível) e sem gaveta própria.
-            binding.gaveta.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
-            binding.toolbar.setNavigationIcon(R.drawable.ic_seta_voltar)
-            binding.toolbar.setNavigationContentDescription(R.string.voltar)
-            binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        // Menu lateral (3 riscos) sempre acessível, também quando aberta pelas abas (v1.7); o Voltar
+        // do sistema retorna à aba de onde o usuário veio.
+        menuLateral.ligar(binding.gaveta, binding.menuLateral, binding.toolbar, binding.root) {
+            // Já está em Meus Veículos: o item só fecha a gaveta.
         }
+        if (comoRaiz) menuLateral.verificarAtualizacaoAoAbrir(savedInstanceState == null)
         binding.textoBoasVindas.text = getString(R.string.dashboard_boas_vindas, app.sessao.nomeUsuario.orEmpty())
         binding.botaoNovoVeiculo.setOnClickListener { startActivity(VeiculoFormActivity.intent(this)) }
         binding.listaVeiculos.adapter = adapter
@@ -115,11 +108,13 @@ class DashboardActivity : AppCompatActivity() {
     }
 
     /**
-     * "Abrir Painel": o mesmo veículo das abas de baixo → só volta para elas; outro veículo (ou a
-     * tela inicial) → as abas desse veículo viram a raiz da pilha, sem telas antigas por baixo.
+     * "Abrir Painel": o mesmo veículo das abas de baixo → só volta para elas; outro veículo, aberto
+     * pelas abas → devolve o id para elas trocarem no lugar (pilha intacta, sessão ativa preservada);
+     * a partir da tela inicial → as abas desse veículo viram a raiz da pilha.
      */
     private fun abrirPainel(veiculo: Veiculo) {
-        if (!comoRaiz && veiculo.id == veiculoAtual) {
+        if (!comoRaiz) {
+            if (veiculo.id != veiculoAtual) setResult(RESULT_OK, Intent().putExtra(DiagnosticoActivity.EXTRA_VEICULO_ID, veiculo.id))
             finish()
             return
         }

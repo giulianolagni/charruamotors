@@ -100,6 +100,20 @@
             android:parentActivityName=".ui.diagnostico.DiagnosticoActivity"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- v1.3: Assistente de Primeira Abertura, Configurações e Checklist de Permissões (menu lateral) -->
+        <activity
+            android:name=".ui.assistente.AssistenteActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".ui.configuracoes.ConfiguracoesActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.dashboard.DashboardActivity" />
+        <activity
+            android:name=".ui.permissoes.ChecklistPermissoesActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.dashboard.DashboardActivity" />
+
         <!-- Mini-player: o Acesso a Notificações libera a leitura das sessões de mídia
              (Spotify, YouTube Music...). Nenhuma notificação é lida. -->
         <service

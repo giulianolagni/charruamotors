@@ -3,6 +3,7 @@ package com.charruamotors.sistema.backup
 import android.content.ContentResolver
 import android.net.Uri
 import com.charruamotors.data.local.dao.BackupDao
+import com.charruamotors.direcao.painel.PreferenciasPainel
 import com.charruamotors.obd.sessao.PreferenciasAutoConexao
 import com.charruamotors.sistema.preferencias.PreferenciasApp
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +43,7 @@ class BackupRepository(
     private val dao: BackupDao,
     private val preferenciasCaixaPreta: PreferenciasAutoConexao,
     private val preferenciasApp: PreferenciasApp,
+    private val preferenciasPainel: PreferenciasPainel,
     private val versaoApp: String,
 ) {
 
@@ -58,6 +60,8 @@ class BackupRepository(
             caixaPreta = preferenciasCaixaPreta.config.value,
             tema = preferenciasApp.tema,
             unidadePressao = preferenciasApp.unidadePressao,
+            sistemaUnidades = preferenciasApp.sistemaUnidades,
+            painel = preferenciasPainel.config.value,
         ),
     )
 
@@ -92,7 +96,9 @@ class BackupRepository(
             codigos = dados.codigosFalha,
         )
         preferenciasCaixaPreta.restaurar(dados.caixaPretaRestauravel())
-        preferenciasApp.restaurar(dados.preferencias.tema, dados.preferencias.unidadePressao)
+        val p = dados.preferencias
+        preferenciasApp.restaurar(p.tema, p.unidadePressao, p.sistemaUnidades)
+        p.painel?.let(preferenciasPainel::restaurar)
     }
 
     companion object {

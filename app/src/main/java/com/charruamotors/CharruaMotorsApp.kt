@@ -159,7 +159,7 @@ class CharruaMotorsApp : Application() {
     /** Tema, unidade de pressão, unidades globais e a flag do Assistente de Primeira Abertura. */
     val preferenciasApp: PreferenciasApp by lazy { PreferenciasApp(this) }
 
-    /** Personalização da aba Painel (ordem, estilo dos mostradores, sensores) e do HUD flutuante. */
+    /** Personalização da aba Painel (blocos, mostradores com estilo próprio, lista rápida) e do HUD flutuante. */
     val preferenciasPainel: PreferenciasPainel by lazy { PreferenciasPainel(this) }
 
     /** Cruza as respostas da varredura e do Terminal com os três catálogos de PIDs do app. */
@@ -175,7 +175,7 @@ class CharruaMotorsApp : Application() {
 
     /** Backup e Restauração (.json via Storage Access Framework). */
     val backupRepository: BackupRepository by lazy {
-        BackupRepository(database.backupDao(), preferenciasAutoConexao, preferenciasApp, versaoApp)
+        BackupRepository(database.backupDao(), preferenciasAutoConexao, preferenciasApp, preferenciasPainel, versaoApp)
     }
 
     // ---------------------------------------------------------------- caixa-preta

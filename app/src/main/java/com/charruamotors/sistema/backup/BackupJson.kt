@@ -9,9 +9,12 @@ import com.charruamotors.domain.model.StatusCodigoFalha
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.TipoManutencao
 import com.charruamotors.domain.model.Veiculo
+import com.charruamotors.direcao.painel.CodecPainel
+import com.charruamotors.direcao.painel.ConfigPainel
 import com.charruamotors.obd.DispositivoObd
 import com.charruamotors.obd.sessao.ConfigAutoConexao
 import com.charruamotors.sistema.preferencias.TemaApp
+import com.charruamotors.sistema.unidades.SistemaUnidades
 import com.charruamotors.sistema.unidades.UnidadePressao
 import org.json.JSONArray
 import org.json.JSONException
@@ -19,11 +22,15 @@ import org.json.JSONObject
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-/** Preferências que vão junto do banco no backup (caixa-preta + aparência). */
+/** Preferências que vão junto do banco no backup (caixa-preta, aparência, unidades e Painel). */
 data class PreferenciasBackup(
     val caixaPreta: ConfigAutoConexao = ConfigAutoConexao(),
     val tema: TemaApp = TemaApp.PADRAO,
     val unidadePressao: UnidadePressao = UnidadePressao.PADRAO,
+    /** Unidades globais (v1.5; backups antigos = métrico). */
+    val sistemaUnidades: SistemaUnidades = SistemaUnidades.PADRAO,
+    /** Personalização do Painel e do HUD (v1.5); null = backup antigo, a restauração não mexe nela. */
+    val painel: ConfigPainel? = null,
 )
 
 /**
@@ -156,6 +163,8 @@ object BackupJson {
         })
         put("tema", p.tema.name)
         put("unidadePressao", p.unidadePressao.name)
+        put("sistemaUnidades", p.sistemaUnidades.name)
+        p.painel?.let { put("painel", JSONObject(CodecPainel.codificar(it))) }
     }
 
     // ------------------------------------------------------------------ importação
@@ -291,6 +300,8 @@ object BackupJson {
             caixaPreta = caixa,
             tema = TemaApp.deCodigo(o.textoOuNull("tema")),
             unidadePressao = UnidadePressao.deCodigo(o.textoOuNull("unidadePressao")),
+            sistemaUnidades = SistemaUnidades.deCodigo(o.textoOuNull("sistemaUnidades")),
+            painel = o.optJSONObject("painel")?.let { p -> CodecPainel.decodificar { chave -> p.textoOuNull(chave) } },
         )
     }
 
@@ -301,6 +312,7 @@ object BackupJson {
         return (0 until array.length()).map { ler(array.getJSONObject(it)) }
     }
 
+    /** Ausente ou `null` = null (o `isNull` do org.json cobre os dois casos). */
     private fun JSONObject.textoOuNull(nome: String): String? = if (isNull(nome)) null else optString(nome)
 
     private fun JSONObject.intOuNull(nome: String): Int? = if (isNull(nome)) null else getInt(nome)

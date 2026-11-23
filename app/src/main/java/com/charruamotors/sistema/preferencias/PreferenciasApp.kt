@@ -97,8 +97,9 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
     /** "Refazer Assistente Inicial" nas Configurações. */
     fun reiniciarAssistente() = atualizar { it.copy(assistenteConcluido = false) }
 
-    /** Restauração do backup: tema e unidade vêm do arquivo; a flag do assistente fica como está. */
-    fun restaurar(tema: TemaApp, unidade: UnidadePressao) = atualizar { it.copy(tema = tema, unidadePressao = unidade) }
+    /** Restauração do backup: tema e unidades vêm do arquivo; a flag do assistente fica como está. */
+    fun restaurar(tema: TemaApp, unidade: UnidadePressao, sistema: SistemaUnidades = SistemaUnidades.PADRAO) =
+        atualizar { it.copy(tema = tema, unidadePressao = unidade, sistemaUnidades = sistema) }
 
     @Synchronized
     private fun atualizar(transformar: (ConfigApp) -> ConfigApp) {

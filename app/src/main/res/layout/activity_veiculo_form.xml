@@ -295,7 +295,7 @@
                         android:layout_marginTop="@dimen/espaco_pequeno"
                         android:lineSpacingExtra="2dp"
                         android:textAppearance="?attr/textAppearanceBodyMedium"
-                        tools:text="RPM marcha lenta: 650 – 750 rpm" />
+                        tools:text="RPM marcha lenta: 650 – 800 rpm" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/botao_preset"

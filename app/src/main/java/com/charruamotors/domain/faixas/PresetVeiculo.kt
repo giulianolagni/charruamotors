@@ -46,19 +46,19 @@ enum class PresetVeiculo(
         faixas = FaixasVeiculo(
             "Toyota Hilux SW4 3.0 D-4D 2013 (1KD-FTV)",
             listOf(
-                FaixaEsperada(ParametroFaixa.RPM_LENTA, 650.0, 750.0),
+                FaixaEsperada(ParametroFaixa.RPM_LENTA, 650.0, 800.0),
                 FaixaEsperada(ParametroFaixa.RPM_MAXIMO, null, 4_200.0),
                 FaixaEsperada(ParametroFaixa.TEMP_AGUA, 80.0, 98.0),
                 FaixaEsperada(ParametroFaixa.TEMP_ATF, 60.0, 105.0),
                 FaixaEsperada(ParametroFaixa.TENSAO, 13.4, 14.6),
                 FaixaEsperada(ParametroFaixa.RAIL, 280.0, 1_800.0),
-                FaixaEsperada(ParametroFaixa.RAIL_LENTA, 280.0, 380.0),
+                FaixaEsperada(ParametroFaixa.RAIL_LENTA, 280.0, 600.0),
                 // Em altitude a marcha lenta fica em 73–75 kPa: 95 dava falso alerta vermelho.
                 FaixaEsperada(ParametroFaixa.MAP_TURBO, 60.0, 215.0),
                 FaixaEsperada(ParametroFaixa.BICOS, -3.0, 3.0),
-                FaixaEsperada(ParametroFaixa.CARGA_MOTOR, 15.0, 100.0),
+                FaixaEsperada(ParametroFaixa.CARGA_MOTOR, 0.0, 100.0),
                 FaixaEsperada(ParametroFaixa.TEMP_ADMISSAO, 10.0, 65.0),
-                FaixaEsperada(ParametroFaixa.MAF, 15.0, 170.0),
+                FaixaEsperada(ParametroFaixa.MAF, 10.0, 170.0),
                 FaixaEsperada(ParametroFaixa.BORBOLETA, 0.0, 100.0),
                 FaixaEsperada(ParametroFaixa.PRESSAO_BARO, 85.0, 105.0),
                 FaixaEsperada(ParametroFaixa.TENSAO_ECU, 13.4, 14.6),

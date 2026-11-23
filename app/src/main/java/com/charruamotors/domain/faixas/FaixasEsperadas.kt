@@ -68,7 +68,7 @@ data class FaixaEsperada(val parametro: ParametroFaixa, val min: Double?, val ma
         else -> SituacaoFaixa.DENTRO
     }
 
-    /** `650 – 750 rpm`, `máx. 4.200 rpm`, `-3,00 a +3,00 mm³/st`. */
+    /** `650 – 800 rpm`, `máx. 4.200 rpm`, `-3,00 a +3,00 mm³/st`. */
     val texto: String
         get() {
             val u = parametro.unidade
@@ -128,7 +128,7 @@ data class FaixasVeiculo(val perfil: String, val faixas: List<FaixaEsperada>) {
         return violacoes(dados).any { it.comando.uppercase() in chaves }
     }
 
-    /** Linhas da ficha do veículo: `RPM marcha lenta: 650 – 750 rpm (marcha lenta ...)`. */
+    /** Linhas da ficha do veículo: `RPM marcha lenta: 650 – 800 rpm (marcha lenta ...)`. */
     fun linhasFicha(): List<String> = faixas.map { "${it.parametro.titulo}: ${it.texto}" }
 
     companion object {

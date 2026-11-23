@@ -1,5 +1,6 @@
 package com.charruamotors.ui.oficina.falhas
 
+import com.charruamotors.obd.sessao.FerramentaManualObd
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -32,7 +33,7 @@ import kotlinx.coroutines.launch
  * categoria (confirmados, pendentes e permanentes) com a descrição do banco offline e o Freeze
  * Frame com velocidade e temperatura nas unidades globais.
  */
-class DiagnosticoErrosActivity : AppCompatActivity() {
+class DiagnosticoErrosActivity : AppCompatActivity(), FerramentaManualObd {
 
     private lateinit var binding: ActivityDiagnosticoErrosBinding
     private val viewModel: DiagnosticoErrosViewModel by viewModels { DiagnosticoErrosViewModel.Factory }

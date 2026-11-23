@@ -13,7 +13,8 @@ import com.charruamotors.CharruaMotorsApp
  * Gatilho da caixa-preta: recebe `ACTION_ACL_CONNECTED`/`ACTION_ACL_DISCONNECTED` (registrado no
  * manifesto — broadcasts isentos da restrição de broadcasts implícitos e que liberam o início do
  * serviço em primeiro plano vindo do segundo plano). Se o aparelho for o Bluetooth do carro
- * (padrão `Toyota SW4`), inicia ou encerra a sessão; a decisão fica em [GatilhoBluetooth.decidir].
+ * (padrão `Toyota SW4`), inicia ou encerra a sessão; a decisão fica em [GatilhoBluetooth.decidir] e o
+ * encerramento passa pela [ProtecaoSessao] (app em uso mantém a sessão; segundo plano espera 15 s).
  */
 class GatilhoBluetoothReceiver : BroadcastReceiver() {
 
@@ -34,8 +35,11 @@ class GatilhoBluetoothReceiver : BroadcastReceiver() {
         val app = context.applicationContext as? CharruaMotorsApp ?: return
         val config = app.preferenciasAutoConexao.config.value
         // Só consulta a sessão quando importa (o broadcast chega para qualquer fone ou relógio).
+        val ehCarro = GatilhoBluetooth.corresponde(nome, endereco, config)
+        // O carro reconectou: cancela um encerramento que estava na janela de tolerância.
+        if (evento == EventoBluetooth.CONECTADO && ehCarro) app.protecaoSessao.carroConectou()
         val sessaoAutomatica = evento == EventoBluetooth.DESCONECTADO &&
-            GatilhoBluetooth.corresponde(nome, endereco, config) &&
+            ehCarro &&
             app.sessaoObd.estadoSessao.value.automatica
 
         when (GatilhoBluetooth.decidir(evento, nome, endereco, config, sessaoAutomatica)) {
@@ -44,8 +48,9 @@ class GatilhoBluetoothReceiver : BroadcastReceiver() {
                 ObdSessaoService.iniciarAutomatico(context, nome ?: config.gatilhoNome)
             }
             AcaoGatilho.ENCERRAR_SESSAO -> {
-                Log.i(TAG, "Bluetooth do carro desconectou ($nome): encerrando a sessão OBD")
-                app.sessaoObd.encerrarPorGatilho(nome ?: config.gatilhoNome)
+                // Só encerra se o app não estiver em uso e depois da tolerância contra piscadas do Bluetooth.
+                Log.i(TAG, "Bluetooth do carro desconectou ($nome): avaliando o encerramento da sessão OBD")
+                app.protecaoSessao.carroDesconectou(nome ?: config.gatilhoNome)
             }
             AcaoGatilho.IGNORAR -> Unit
         }

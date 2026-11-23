@@ -97,6 +97,11 @@ data class EstadoSessao(
     /** Bluetooth do carro que disparou a sessão automática. */
     val gatilho: String? = null,
     val gravandoLogs: Boolean = false,
+    /**
+     * O usuário assumiu a sessão (abriu uma ferramenta manual): o Bluetooth do carro deixa de
+     * encerrá-la — só o botão Desconectar ou a ECU muda (ignição desligada). Zera com a sessão.
+     */
+    val assumidaPeloUsuario: Boolean = false,
 ) {
     val ativa: Boolean get() = fase != FaseSessao.Inativa
     val automatica: Boolean get() = ativa && origem == OrigemSessao.AUTOMATICA
@@ -262,6 +267,19 @@ class SessaoObd(
         if (job?.isActive == true && motivoPedido == null) motivoPedido = motivo
         escopo.launch(io) { cli.desconectar() }
         job?.cancel()
+    }
+
+    /** Promove a sessão automática a "assumida pelo usuário" (ver [EstadoSessao.assumidaPeloUsuario]). */
+    fun assumir() {
+        if (_sessao.value.automatica && !_sessao.value.assumidaPeloUsuario) {
+            _sessao.update { it.copy(assumidaPeloUsuario = true) }
+            registrarEvento("Sessão assumida pelo usuário: só encerra em Desconectar ou quando a ECU parar de responder")
+        }
+    }
+
+    /** Anota um evento no log bruto (`.txt`) da sessão em curso, se houver. */
+    fun registrarEvento(texto: String) {
+        gravador?.evento(texto, relogio())
     }
 
     /** Bluetooth do carro desconectou: encerra só a sessão que ele abriu. */

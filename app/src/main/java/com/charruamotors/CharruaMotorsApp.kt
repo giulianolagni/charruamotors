@@ -31,6 +31,7 @@ import com.charruamotors.obd.pid.CatalogoCascata
 import com.charruamotors.obd.pid.CatalogoEstendido
 import com.charruamotors.obd.pid.CatalogoPids
 import com.charruamotors.obd.sessao.DestinoLogsDownloads
+import com.charruamotors.obd.sessao.FaseSessao
 import com.charruamotors.obd.sessao.FerramentaManualObd
 import com.charruamotors.obd.sessao.ObdSessaoService
 import com.charruamotors.obd.sessao.OrigemSessao
@@ -38,6 +39,7 @@ import com.charruamotors.obd.sessao.PreferenciasAutoConexao
 import com.charruamotors.obd.sessao.ProtecaoSessao
 import com.charruamotors.obd.sessao.SessaoObd
 import com.charruamotors.obd.sessao.VeiculoSessao
+import com.charruamotors.sistema.gps.ProvedorVelocidadeGps
 import com.charruamotors.oficina.varredura.IdentificadorPids
 import com.charruamotors.sistema.backup.BackupRepository
 import com.charruamotors.sistema.preferencias.PreferenciasApp
@@ -46,6 +48,8 @@ import com.charruamotors.ui.util.PermissoesBluetooth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
@@ -153,7 +157,17 @@ class CharruaMotorsApp : Application() {
                 aoParcial060 = { t -> recordesDesempenho.registrar(chaveRecorde(), t, null) },
                 aoConcluir0100 = { t60, t100 -> recordesDesempenho.registrar(chaveRecorde(), t60, t100) },
             ),
+            fonteCronometro = { preferenciasApp.config.value.fonteCronometroEfetiva },
         )
+    }
+
+    /** Velocidade pelo GPS do celular (v2.0): só escuta com a opção ligada e a sessão OBD conectada. */
+    val velocidadeGps: ProvedorVelocidadeGps by lazy { ProvedorVelocidadeGps(this) }
+
+    /** Liga/desliga a escuta do GPS conforme a opção e a sessão (também depois de conceder a permissão). */
+    fun reavaliarGps() {
+        val conectada = sessaoObd.estadoSessao.value.fase == FaseSessao.Conectada
+        if (conectada && preferenciasApp.config.value.velocidadeGps) velocidadeGps.iniciar() else velocidadeGps.parar()
     }
 
     /** Melhores 0–60 e 0–100 por veículo. */
@@ -269,6 +283,17 @@ class CharruaMotorsApp : Application() {
                 // Bluetooth (emulador), o tipo connectedDevice do Android 14+ recusaria o serviço.
                 if (origem == OrigemSessao.MANUAL && PermissoesBluetooth.concedidas(this)) ObdSessaoService.iniciar(this)
             },
-        )
+            gpsAtivo = { preferenciasApp.config.value.velocidadeGps },
+            velocidadeGps = { velocidadeGps.velocidadeKmh() },
+        ).also { sessao ->
+            val escopo = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+            escopo.launch {
+                sessao.estadoSessao.map { it.fase == FaseSessao.Conectada }
+                    .combine(preferenciasApp.config.map { it.velocidadeGps }) { conectada, gps -> conectada && gps }
+                    .distinctUntilChanged()
+                    // Usa o valor do fluxo (não reavaliarGps): aqui o lazy de sessaoObd ainda está inicializando.
+                    .collect { ligar -> if (ligar) velocidadeGps.iniciar() else velocidadeGps.parar() }
+            }
+        }
     }
 }

@@ -20,6 +20,7 @@ import com.charruamotors.R
 import com.charruamotors.databinding.FragmentOficinaBinding
 import com.charruamotors.databinding.ItemBicoInjetorBinding
 import com.charruamotors.databinding.ItemCardOficinaBinding
+import com.charruamotors.direcao.desempenho.FonteVelocidade
 import com.charruamotors.direcao.painel.SensorPainel
 import com.charruamotors.obd.DadosObd
 import com.charruamotors.oficina.bicos.AvaliacaoBicos
@@ -80,9 +81,14 @@ class OficinaFragment : Fragment() {
                 launch { app.sessaoObd.estado.collect(::mostrarConexao) }
                 launch { app.sessaoObd.dados.collect { mostrarBicos(it) } }
                 launch {
-                    combine(app.telemetriaCompartilhada.cronometro.estado, app.recordesDesempenho.recordes) { e, _ -> e }
-                        .collect { e ->
-                            binding.cardDesempenho.textoDesempenhoEstado.text = e.texto
+                    combine(
+                        app.telemetriaCompartilhada.cronometro.estado,
+                        app.telemetriaCompartilhada.fonteCronometroAtiva,
+                        app.recordesDesempenho.recordes,
+                    ) { e, fonte, _ -> e to fonte }
+                        .collect { (e, fonte) ->
+                            binding.cardDesempenho.textoDesempenhoEstado.text =
+                                if (fonte == FonteVelocidade.GPS) "${e.texto} · via GPS" else e.texto
                             binding.cardDesempenho.textoDesempenhoRecorde.text = app.recordesDesempenho.recordeDe(app.chaveRecorde()).texto
                         }
                 }

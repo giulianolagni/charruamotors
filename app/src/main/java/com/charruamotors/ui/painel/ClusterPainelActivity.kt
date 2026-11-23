@@ -17,6 +17,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.databinding.ActivityClusterPainelBinding
+import com.charruamotors.direcao.desempenho.FonteVelocidade
 import com.charruamotors.direcao.painel.ClusterPainel
 import com.charruamotors.direcao.painel.EstiloMostrador
 import com.charruamotors.direcao.painel.SensorPainel
@@ -80,9 +81,14 @@ class ClusterPainelActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
-                    combine(app.telemetriaCompartilhada.cronometro.estado, app.recordesDesempenho.recordes) { e, _ -> e }
-                        .collect { e ->
-                            binding.textoDesempenho.text = "0–100 · ${e.texto}${"\n"}${app.recordesDesempenho.recordeDe(app.chaveRecorde()).texto}"
+                    combine(
+                        app.telemetriaCompartilhada.cronometro.estado,
+                        app.telemetriaCompartilhada.fonteCronometroAtiva,
+                        app.recordesDesempenho.recordes,
+                    ) { e, fonte, _ -> e to fonte }
+                        .collect { (e, fonte) ->
+                            val via = if (fonte == FonteVelocidade.GPS) " (GPS)" else ""
+                            binding.textoDesempenho.text = "0–100$via · ${e.texto}${"\n"}${app.recordesDesempenho.recordeDe(app.chaveRecorde()).texto}"
                         }
                 }
                 combine(app.telemetriaCompartilhada.dados, app.preferenciasApp.config.map { it.conversor }) { d, c -> d to c }

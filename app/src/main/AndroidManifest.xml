@@ -21,6 +21,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Velocidade GPS (v2.0, opcional): sensor do Painel/HUD e fonte do cronômetro 0–100. Só com o
+         app em uso ou com o HUD aberto (serviço em primeiro plano do tipo location); nunca em segundo plano puro. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
     <!-- Caixa-preta: atalho para liberar a bateria do app ("Sem restrições"), para o One UI / Android 14+
          não bloquear o serviço da sessão OBD iniciado pelo Bluetooth do carro com o app fechado. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
@@ -32,6 +38,9 @@
     <!-- Bluetooth opcional: o app também roda no emulador usando o scanner simulado. -->
     <uses-feature
         android:name="android.hardware.bluetooth"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.location.gps"
         android:required="false" />
 
     <!-- Visibilidade de pacotes (Android 11+): abrir o player de música ativo e o Waze pelo ícone
@@ -153,7 +162,7 @@
         <service
             android:name=".direcao.hud.HudFlutuanteService"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice" />
+            android:foregroundServiceType="connectedDevice|location" />
 
         <!-- Sessão OBD2 compartilhada (caixa-preta): mantém a conexão, o polling e a gravação dos logs
              em segundo plano, para a aba OBD2 e o HUD assumirem a sessão já ativa. -->

@@ -93,7 +93,6 @@ class TesteBateriaViewModel(
     private val pontos = ArrayDeque<PontoTensao>()
     private var ultimaTensao: Double? = null
     private var faseSimulada: FaseBateriaSimulada? = null
-    private var sessaoIniciada = false
     private var amostragem: Job? = null
     private var laudoCache: String? = null
 
@@ -119,7 +118,6 @@ class TesteBateriaViewModel(
             _eventos.send(EventoBateria.SemConexao(R.string.oficina_sem_conexao))
             return
         }
-        sessaoIniciada = true
         while (viewModelScope.isActive) {
             if (cliente.estado.value !is EstadoConexaoObd.Conectado) {
                 _eventos.send(EventoBateria.SemConexao(R.string.oficina_conexao_perdida))
@@ -236,12 +234,14 @@ class TesteBateriaViewModel(
 
     /**
      * Tela fechada de vez: para a amostragem e encerra a sessão manual (restaura o `ATSH` e libera
-     * o polling). O `viewModelScope` já está cancelado aqui, então usa um escopo próprio.
+     * o polling). O `viewModelScope` já está cancelado aqui, então usa um escopo próprio. Sempre
+     * encerra (é idempotente): a tela pode fechar depois de a sessão começar e antes do retorno de
+     * `iniciarSessaoManual()`, e sem isso o polling ficaria congelado com o estado "Conectado".
      */
     override fun onCleared() {
         amostragem?.cancel()
         simulador?.invoke(null)
-        if (sessaoIniciada) CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { cliente.encerrarSessaoManual() }
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { cliente.encerrarSessaoManual() }
         super.onCleared()
     }
 

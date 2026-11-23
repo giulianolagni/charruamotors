@@ -11,6 +11,7 @@ import com.charruamotors.obd.log.DestinoMemoria
 import com.charruamotors.obd.log.GeradorCsv
 import com.charruamotors.obd.log.OrganizadorLogs
 import com.charruamotors.obd.pid.CatalogoTeste
+import com.charruamotors.obd.pid.Pids
 import com.charruamotors.oficina.replay.LeitorCsvLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -59,7 +60,11 @@ class SessaoObdTest {
     @After
     fun cancelarEscopos() = escopos.forEach { it.cancel() }
 
-    private fun TestScope.novaSessao(modo: ModoObd = ModoObd.SIMULADO) = SessaoObd(
+    private fun TestScope.novaSessao(
+        modo: ModoObd = ModoObd.SIMULADO,
+        gpsAtivo: Boolean = false,
+        velocidadeGps: () -> Double? = { null },
+    ) = SessaoObd(
         clientePorModo = { fake },
         modoInicial = modo,
         catalogoPids = CatalogoTeste.padrao,
@@ -75,7 +80,62 @@ class SessaoObdTest {
         aoAtivar = { ativacoes += it },
         relogio = { inicio + testScheduler.currentTime },
         zona = ZoneOffset.UTC,
+        gpsAtivo = { gpsAtivo },
+        velocidadeGps = velocidadeGps,
     )
+
+    // ---------------------------------------------------------------- velocidade GPS (v2.0)
+
+    @Test
+    fun `velocidade GPS ativa entra nos instantaneos, no HUD e numa coluna do CSV`() = runTest {
+        val sessao = novaSessao(ModoObd.BLUETOOTH, gpsAtivo = true, velocidadeGps = { 42.5 })
+        sessao.conectar(scanner, veiculoId = 7, origem = OrigemSessao.MANUAL)
+        avancar(5_000)
+
+        assertEquals(42.5, sessao.dados.value!![Pids.VELOCIDADE_GPS]!!, 1e-9)
+        assertEquals(42.5, telemetria.dados.value!![Pids.VELOCIDADE_GPS]!!, 1e-9)
+        assertNotNull("a ECU segue publicando a própria velocidade", sessao.dados.value!![Pids.VELOCIDADE])
+        sessao.desconectar()
+        advanceUntilIdle()
+
+        // A coluna do celular vem depois das da ECU (última do arquivo).
+        val csv = destino.terminadoEm(".csv").conteudo
+        val cabecalho = csv.removePrefix(GeradorCsv.BOM.toString()).lineSequence().first()
+        assertTrue(cabecalho, cabecalho.endsWith(",Velocidade GPS (km/h) [GPS_VEL]"))
+        val linhas = csv.lines().drop(1).filter { it.isNotBlank() }
+        assertTrue(linhas.isNotEmpty())
+        assertTrue(linhas.all { it.substringAfterLast(',') == "42.5" })
+    }
+
+    @Test
+    fun `GPS sem fix nao inventa valor - a chave some e a coluna fica vazia`() = runTest {
+        val sessao = novaSessao(ModoObd.BLUETOOTH, gpsAtivo = true, velocidadeGps = { null })
+        sessao.conectar(scanner, veiculoId = 7, origem = OrigemSessao.MANUAL)
+        avancar(5_000)
+
+        assertNull(sessao.dados.value!![Pids.VELOCIDADE_GPS])
+        sessao.desconectar()
+        advanceUntilIdle()
+
+        val csv = destino.terminadoEm(".csv").conteudo
+        assertTrue(csv.removePrefix(GeradorCsv.BOM.toString()).lineSequence().first().endsWith(",Velocidade GPS (km/h) [GPS_VEL]"))
+        assertTrue(csv.lines().drop(1).filter { it.isNotBlank() }.all { it.endsWith(",") })
+    }
+
+    @Test
+    fun `GPS desativado nao cria coluna nem consulta o provedor`() = runTest {
+        var consultas = 0
+        val sessao = novaSessao(ModoObd.BLUETOOTH, gpsAtivo = false, velocidadeGps = { consultas++; 50.0 })
+        sessao.conectar(scanner, veiculoId = 7, origem = OrigemSessao.MANUAL)
+        avancar(5_000)
+
+        assertNull(sessao.dados.value!![Pids.VELOCIDADE_GPS])
+        assertEquals(0, consultas)
+        assertTrue(sessao.colunasDoAparelho().isEmpty())
+        sessao.desconectar()
+        advanceUntilIdle()
+        assertFalse("[GPS_VEL]" in destino.terminadoEm(".csv").conteudo)
+    }
 
     private fun TestScope.avancar(ms: Long) {
         advanceTimeBy(ms)

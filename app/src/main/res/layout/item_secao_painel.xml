@@ -52,6 +52,17 @@
                 tools:text="Mini-player do Spotify / YouTube Music" />
         </LinearLayout>
 
+        <!-- Tira o bloco da tela (vai para "Blocos removidos") -->
+        <ImageButton
+            android:id="@+id/botao_ocultar"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/personalizar_ocultar"
+            android:padding="12dp"
+            android:src="@drawable/ic_ocultar"
+            app:tint="@color/texto_secundario" />
+
         <ImageView
             android:id="@+id/alca_arrastar"
             android:layout_width="48dp"

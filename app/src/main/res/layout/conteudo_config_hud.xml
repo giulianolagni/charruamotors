@@ -60,6 +60,23 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/espaco_minimo" />
 
+    <!-- Ordem das células do HUD: arraste pela alça -->
+    <TextView
+        android:id="@+id/titulo_ordem_hud"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/espaco_pequeno"
+        android:text="@string/hud_config_ordem"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="@color/texto_secundario" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/lista_ordem_hud"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:nestedScrollingEnabled="false"
+        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

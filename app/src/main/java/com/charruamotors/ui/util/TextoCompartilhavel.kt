@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.view.View
 import android.widget.Toast
 import com.charruamotors.R
 import com.charruamotors.databinding.DialogRegistroComunicacaoBinding
@@ -37,13 +36,21 @@ object TextoCompartilhavel {
     fun mostrarDialogo(contexto: Context, titulo: String, texto: String) {
         val conteudo = DialogRegistroComunicacaoBinding.inflate(android.view.LayoutInflater.from(contexto))
         conteudo.textoRegistro.text = texto
-        conteudo.root.post { conteudo.root.fullScroll(View.FOCUS_UP) }
-        MaterialAlertDialogBuilder(contexto)
+        val dialogo = MaterialAlertDialogBuilder(contexto)
             .setTitle(titulo)
             .setView(conteudo.root)
             .setNegativeButton(R.string.oficina_compartilhar) { _, _ -> compartilhar(contexto, titulo, texto) }
             .setPositiveButton(R.string.oficina_copiar) { _, _ -> copiar(contexto, titulo, texto) }
             .setNeutralButton(R.string.botao_fechar, null)
-            .show()
+            .create()
+        // O TextView selecionável pega o foco ao abrir e o ScrollView rola até ele (o fim do texto):
+        // volta ao topo depois do primeiro layout e de novo logo em seguida, para vencer essa rolagem.
+        dialogo.setOnShowListener {
+            val rolagem = conteudo.root
+            fun topo() = rolagem.scrollTo(0, 0)
+            rolagem.post(::topo)
+            rolagem.postDelayed(::topo, 150)
+        }
+        dialogo.show()
     }
 }

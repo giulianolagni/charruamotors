@@ -80,9 +80,9 @@ class ExportadorCsv(context: Context) {
         const val SUFIXO_AUTORIDADE = ".arquivos"
 
         /** Intent de compartilhamento (e-mail, Drive, WhatsApp...) com permissão de leitura temporária. */
-        fun intentCompartilhar(arquivo: ArquivoExportado, titulo: String): Intent {
+        fun intentCompartilhar(arquivo: ArquivoExportado, titulo: String, mime: String = MIME_CSV): Intent {
             val envio = Intent(Intent.ACTION_SEND).apply {
-                type = MIME_CSV
+                type = mime
                 putExtra(Intent.EXTRA_STREAM, arquivo.uri)
                 putExtra(Intent.EXTRA_SUBJECT, arquivo.nome)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

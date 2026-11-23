@@ -26,7 +26,11 @@ import com.charruamotors.R
 import com.charruamotors.databinding.ActivityReplayLogBinding
 import com.charruamotors.databinding.ItemArquivoLogBinding
 import com.charruamotors.oficina.replay.JanelaReplay
+import com.charruamotors.obd.log.DestinoLogs
 import com.charruamotors.ui.componentes.LogReplayChartView
+import com.charruamotors.ui.util.ArquivoExportado
+import com.charruamotors.ui.util.ExportadorCsv
+import com.charruamotors.ui.util.TextoCompartilhavel
 import com.charruamotors.ui.util.aplicarInsetsDoSistema
 import com.charruamotors.ui.util.comoNumero
 import com.charruamotors.ui.util.definirTexto
@@ -40,16 +44,18 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 
 /**
- * Ferramenta 2 — Visualizador Interno de Logs CSV: lista os logs do Data Logger (ou abre outro CSV
- * pelo seletor do sistema) e faz o replay em [LogReplayChartView] com até 3 sensores, zoom por
- * pinça, arraste, cursor com horário e valores e o resumo Mín/Máx/Média da janela visível.
+ * Ferramenta 2 — Visualizador Interno de Logs: lista os logs de `Downloads/CharruaOBD` — CSV do
+ * Data Logger e da caixa-preta, e os relatórios `.txt` das sessões — ou abre outro CSV pelo
+ * seletor do sistema. O CSV vira replay em [LogReplayChartView] com até 3 sensores, zoom por
+ * pinça, arraste, cursor com horário e valores e o resumo Mín/Máx/Média da janela visível; o
+ * `.txt` abre num diálogo no topo (resumo da viagem primeiro). Toque longo compartilha o arquivo.
  * Não usa a conexão OBD2.
  */
 class ReplayLogActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityReplayLogBinding
     private val viewModel: ReplayLogViewModel by viewModels { ReplayLogViewModel.Factory }
-    private val adapter = ArquivoAdapter { viewModel.abrir(it) }
+    private val adapter = ArquivoAdapter(aoAbrir = { viewModel.abrir(it) }, aoCompartilhar = ::compartilhar)
     private val coresSeries by lazy {
         listOf(R.color.serie_1, R.color.serie_2, R.color.serie_3).map { ContextCompat.getColor(this, it) }
     }
@@ -108,11 +114,29 @@ class ReplayLogActivity : AppCompatActivity() {
                         when (evento) {
                             is EventoReplay.Erro -> mensagem(getString(R.string.replay_erro_ler, evento.detalhe))
                             EventoReplay.MaximoSensores -> mensagem(getString(R.string.replay_max_sensores))
+                            is EventoReplay.Texto -> mostrarTexto(evento.arquivo, evento.texto)
                         }
                     }
                 }
             }
         }
+    }
+
+    /** Relatório `.txt`: diálogo aberto no início do texto; "Compartilhar" envia o arquivo inteiro. */
+    private fun mostrarTexto(arquivo: ArquivoLogCsv, texto: TextoLog) {
+        val conteudo = if (texto.truncado) {
+            texto.conteudo + getString(R.string.replay_txt_truncado, Formatter.formatShortFileSize(this, texto.conteudo.length.toLong()))
+        } else {
+            texto.conteudo
+        }
+        TextoCompartilhavel.mostrarDialogo(this, arquivo.nome, conteudo) { compartilhar(arquivo) }
+    }
+
+    private fun compartilhar(arquivo: ArquivoLogCsv) {
+        val mime = if (arquivo.texto) DestinoLogs.MIME_TXT else DestinoLogs.MIME_CSV
+        val exportado = ArquivoExportado(viewModel.uriCompartilhavel(arquivo), arquivo.nome, "")
+        runCatching { startActivity(ExportadorCsv.intentCompartilhar(exportado, getString(R.string.replay_compartilhar_titulo), mime)) }
+            .onFailure { mensagem(it.message ?: "") }
     }
 
     private fun mostrarLog(aberto: LogAberto?, selecionados: List<Int>) = with(binding) {
@@ -249,7 +273,10 @@ class ReplayLogActivity : AppCompatActivity() {
         }
     }
 
-    private class ArquivoAdapter(private val aoAbrir: (ArquivoLogCsv) -> Unit) :
+    private class ArquivoAdapter(
+        private val aoAbrir: (ArquivoLogCsv) -> Unit,
+        private val aoCompartilhar: (ArquivoLogCsv) -> Unit,
+    ) :
         ListAdapter<ArquivoLogCsv, ArquivoAdapter.Item>(Diferenca) {
 
         class Item(val binding: ItemArquivoLogBinding) : RecyclerView.ViewHolder(binding.root)
@@ -264,7 +291,12 @@ class ReplayLogActivity : AppCompatActivity() {
             val data = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").format(Instant.ofEpochMilli(arquivo.modificadoMs).atZone(ZoneId.systemDefault()))
             holder.binding.textoDetalhe.text =
                 contexto.getString(R.string.replay_item_detalhe, data, Formatter.formatShortFileSize(contexto, arquivo.tamanhoBytes))
+            holder.binding.imagemTipo.setImageResource(if (arquivo.texto) R.drawable.ic_terminal else R.drawable.ic_grafico)
             holder.itemView.setOnClickListener { aoAbrir(arquivo) }
+            holder.itemView.setOnLongClickListener {
+                aoCompartilhar(arquivo)
+                true
+            }
         }
 
         private object Diferenca : DiffUtil.ItemCallback<ArquivoLogCsv>() {

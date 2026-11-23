@@ -199,6 +199,10 @@ class Elm327BluetoothClient(
 
     override fun registroComunicacao(): List<EntradaRegistro> = registro.entradas()
 
+    override fun observarRegistro(ouvinte: ((EntradaRegistro) -> Unit)?) {
+        registro.ouvinte = ouvinte
+    }
+
     override suspend fun listarDispositivos(): List<DispositivoObd> = withContext(dispatcher) {
         try {
             adaptador?.bondedDevices.orEmpty()

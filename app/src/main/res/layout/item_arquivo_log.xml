@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Log CSV na lista do Visualizador: nome, data e tamanho. -->
+<!-- Log na lista do Visualizador (CSV de telemetria ou relatório .txt): nome, data e tamanho. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -12,6 +12,7 @@
     android:paddingVertical="@dimen/espaco_pequeno">
 
     <ImageView
+        android:id="@+id/imagem_tipo"
         android:layout_width="24dp"
         android:layout_height="24dp"
         android:importantForAccessibility="no"

@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.view.ViewGroup
 import android.widget.Toast
 import com.charruamotors.R
 import com.charruamotors.databinding.DialogRegistroComunicacaoBinding
@@ -32,21 +33,32 @@ object TextoCompartilhavel {
         runCatching { contexto.startActivity(Intent.createChooser(envio, assunto)) }
     }
 
-    /** Diálogo com o texto em fonte monoespaçada (selecionável) e as ações Copiar/Compartilhar. */
-    fun mostrarDialogo(contexto: Context, titulo: String, texto: String) {
+    /**
+     * Diálogo com o texto em fonte monoespaçada (selecionável) e as ações Copiar/Compartilhar,
+     * aberto no **topo** (início do texto: o resumo do relatório vem primeiro).
+     *
+     * @param aoCompartilhar ação própria de compartilhar (ex.: o arquivo `.txt` inteiro em vez do texto exibido)
+     */
+    fun mostrarDialogo(contexto: Context, titulo: String, texto: String, aoCompartilhar: (() -> Unit)? = null) {
         val conteudo = DialogRegistroComunicacaoBinding.inflate(android.view.LayoutInflater.from(contexto))
         conteudo.textoRegistro.text = texto
+        val rolagem = conteudo.root
+        // O TextView selecionável pedia o foco ao abrir e o ScrollView rolava até ele (o fim do
+        // texto). Com o ScrollView focável antes dos filhos, o foco inicial fica nele, no topo.
+        rolagem.isFocusableInTouchMode = true
+        rolagem.descendantFocusability = ViewGroup.FOCUS_BEFORE_DESCENDANTS
         val dialogo = MaterialAlertDialogBuilder(contexto)
             .setTitle(titulo)
-            .setView(conteudo.root)
-            .setNegativeButton(R.string.oficina_compartilhar) { _, _ -> compartilhar(contexto, titulo, texto) }
+            .setView(rolagem)
+            .setNegativeButton(R.string.oficina_compartilhar) { _, _ ->
+                if (aoCompartilhar != null) aoCompartilhar() else compartilhar(contexto, titulo, texto)
+            }
             .setPositiveButton(R.string.oficina_copiar) { _, _ -> copiar(contexto, titulo, texto) }
             .setNeutralButton(R.string.botao_fechar, null)
             .create()
-        // O TextView selecionável pega o foco ao abrir e o ScrollView rola até ele (o fim do texto):
-        // volta ao topo depois do primeiro layout e de novo logo em seguida, para vencer essa rolagem.
         dialogo.setOnShowListener {
-            val rolagem = conteudo.root
+            rolagem.requestFocus()
+            // Reforço para aparelhos que ainda rolam no primeiro layout do diálogo.
             fun topo() = rolagem.scrollTo(0, 0)
             rolagem.post(::topo)
             rolagem.postDelayed(::topo, 150)

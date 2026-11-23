@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Caixa-preta: sessão OBD2 em segundo plano, gatilho pelo Bluetooth do carro e logs automáticos. -->
+<resources>
+    <!-- Card da aba OBD2 -->
+    <string name="caixa_titulo">Caixa-preta automática</string>
+    <string name="caixa_auto_conexao">Auto-conexão em segundo plano</string>
+    <string name="caixa_logs_automaticos">Gravar logs automaticamente ao conectar</string>
+    <string name="caixa_gatilho">Bluetooth gatilho do carro: %1$s</string>
+    <string name="caixa_trocar">Trocar</string>
+    <string name="caixa_vinculos">Scanner OBD2: %1$s · Veículo: %2$s</string>
+    <string name="caixa_scanner_nenhum">o próximo conectado</string>
+    <string name="caixa_veiculo_nenhum">nenhum (abra a aba OBD2 de um veículo)</string>
+    <string name="caixa_liberar_bateria">Liberar bateria do app (Sem restrições)</string>
+    <string name="caixa_bateria_erro">Abra Configurações → Apps → Charrua OBD Pro → Bateria → Sem restrições</string>
+    <string name="caixa_status_inativa">Sem sessão ativa. Com a auto-conexão ligada, a sessão começa sozinha quando o celular conectar ao Bluetooth do carro; os logs .txt e .csv vão para Downloads/CharruaOBD.</string>
+    <string name="caixa_status_automatica">Sessão automática: %1$s</string>
+    <string name="caixa_permissao_bluetooth">A auto-conexão precisa da permissão de Bluetooth (dispositivos próximos) para reconhecer o carro com o app fechado</string>
+    <string name="caixa_logs_salvos">Logs da sessão (.txt e .csv) salvos em %1$s</string>
+    <string name="caixa_ver_logs">Ver logs</string>
+    <string name="caixa_salvar">Salvar</string>
+
+    <!-- Escolha do gatilho -->
+    <string name="caixa_gatilho_titulo">Bluetooth gatilho do carro</string>
+    <string name="caixa_gatilho_padrao">Padrão: %1$s (pelo nome)</string>
+    <string name="caixa_gatilho_pareado">%1$s (%2$s)</string>
+    <string name="caixa_gatilho_digitar">Digitar outro nome…</string>
+    <string name="caixa_gatilho_digitar_titulo">Nome do Bluetooth do carro</string>
+    <string name="caixa_gatilho_digitar_mensagem">Como aparece na lista de Bluetooth do celular. Maiúsculas e espaços não importam.</string>
+
+    <!-- Aba OBD2 -->
+    <string name="obd_sessao_ja_ativa">Já existe uma sessão OBD em andamento; a tela acompanha a sessão ativa</string>
+
+    <!-- Serviço em primeiro plano -->
+    <string name="sessao_canal_nome">Sessão OBD2 (caixa-preta)</string>
+    <string name="sessao_canal_descricao">Status discreto da conexão com o scanner OBD2 e da gravação dos logs</string>
+    <string name="sessao_canal_alerta_nome">Alertas da sessão OBD2</string>
+    <string name="sessao_canal_alerta_descricao">Avisa quando o Android bloqueia o início automático da sessão</string>
+    <string name="sessao_notificacao_titulo">Charrua OBD Pro · sessão OBD2</string>
+    <string name="sessao_notificacao_preparando">Bluetooth do carro conectado · preparando a sessão</string>
+    <string name="sessao_desconectar">Desconectar</string>
+    <string name="sessao_bloqueada_titulo">Carro conectado: toque para gravar</string>
+    <string name="sessao_bloqueada_texto">O Android bloqueou o início automático da sessão OBD2 em segundo plano. Toque para conectar ao scanner e gravar os logs. Para não precisar disso, deixe a bateria do app em “Sem restrições”.</string>
+    <string name="sessao_bloqueada_acao">Iniciar sessão</string>
+
+    <!-- Visualizador de logs: relatórios .txt -->
+    <string name="replay_txt_titulo">Relatório da sessão</string>
+    <string name="replay_txt_truncado">\n\n… (visualização limitada aos primeiros %1$s; compartilhe o arquivo para ver tudo)</string>
+    <string name="replay_compartilhar_titulo">Compartilhar log</string>
+</resources>

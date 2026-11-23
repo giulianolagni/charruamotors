@@ -31,10 +31,27 @@ object GeradorCsv {
 
     fun linha(amostra: AmostraLog, sessao: SessaoLog, zona: ZoneId): String {
         require(amostra.valores.size == sessao.colunas.size) { "Amostra com ${amostra.valores.size} valores para ${sessao.colunas.size} colunas" }
-        val dataHora = formatoDataHora.format(Instant.ofEpochMilli(amostra.instanteMs).atZone(zona))
-        val tempo = formatarNumero((amostra.instanteMs - sessao.inicioMs) / 1000.0, 3)
-        val valores = sessao.colunas.mapIndexed { i, def -> formatarNumero(amostra.valores[i], def.casasDecimais) }
-        return (listOf(amostra.instanteMs.toString(), dataHora, tempo) + valores).joinToString(SEPARADOR.toString())
+        return linha(amostra.instanteMs, sessao.inicioMs, sessao.colunas, zona) { i -> amostra.valores[i] }
+    }
+
+    /**
+     * Linha de uma leitura avulsa (gravação incremental da sessão automática): o valor de cada
+     * coluna vem de [valores] pelo comando; comando ausente = campo vazio.
+     */
+    fun linha(instanteMs: Long, inicioMs: Long, colunas: List<DefinicaoPid>, valores: Map<String, Double>, zona: ZoneId): String =
+        linha(instanteMs, inicioMs, colunas, zona) { i -> valores[colunas[i].comando] ?: Double.NaN }
+
+    private inline fun linha(
+        instanteMs: Long,
+        inicioMs: Long,
+        colunas: List<DefinicaoPid>,
+        zona: ZoneId,
+        valor: (Int) -> Double,
+    ): String {
+        val dataHora = formatoDataHora.format(Instant.ofEpochMilli(instanteMs).atZone(zona))
+        val tempo = formatarNumero((instanteMs - inicioMs) / 1000.0, 3)
+        val campos = colunas.mapIndexed { i, def -> formatarNumero(valor(i), def.casasDecimais) }
+        return (listOf(instanteMs.toString(), dataHora, tempo) + campos).joinToString(SEPARADOR.toString())
     }
 
     /** Escreve o CSV inteiro em [saida] (streaming: não monta o arquivo todo em memória). */

@@ -8,6 +8,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.annotation.RequiresApi
+import androidx.core.content.FileProvider
 import com.charruamotors.oficina.replay.LeitorCsvLog
 import com.charruamotors.oficina.replay.LogCsv
 import com.charruamotors.ui.util.ExportadorCsv
@@ -16,11 +17,17 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 
-/** Log CSV disponível para o replay. */
-data class ArquivoLogCsv(val uri: Uri, val nome: String, val tamanhoBytes: Long, val modificadoMs: Long)
+/** Log salvo disponível no visualizador: CSV de telemetria (replay) ou relatório `.txt` da sessão. */
+data class ArquivoLogCsv(val uri: Uri, val nome: String, val tamanhoBytes: Long, val modificadoMs: Long) {
+    /** Relatório de texto da caixa-preta (abre no diálogo, não no gráfico). */
+    val texto: Boolean get() = nome.endsWith(".txt", ignoreCase = true)
+}
+
+/** Trecho de um relatório `.txt` para exibir: [truncado] = o arquivo é maior que o lido. */
+data class TextoLog(val conteudo: String, val truncado: Boolean)
 
 /**
- * Encontra e lê os logs do Data Logger onde o [ExportadorCsv] os salva:
+ * Encontra e lê os logs onde o [ExportadorCsv] e a sessão automática os salvam (`.csv` e `.txt`):
  * - Android 10+: `Downloads/CharruaOBD` pelo `MediaStore` (sem permissão: o app vê os arquivos que
  *   ele mesmo criou, inclusive depois de uma atualização por cima);
  * - Android 8/9: a pasta `Download` do app (e a interna `logs`, o fallback do exportador).
@@ -32,7 +39,9 @@ class RepositorioLogsCsv(context: Context) {
 
     suspend fun listar(): List<ArquivoLogCsv> = withContext(Dispatchers.IO) {
         val encontrados = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) listarMediaStore() else emptyList()
-        (encontrados + listarPastasDoApp()).distinctBy { it.nome to it.tamanhoBytes }.sortedByDescending { it.modificadoMs }
+        (encontrados + listarPastasDoApp())
+            .distinctBy { it.nome to it.tamanhoBytes }
+            .sortedByDescending { it.modificadoMs }
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
@@ -43,8 +52,9 @@ class RepositorioLogsCsv(context: Context) {
             MediaStore.Downloads.SIZE,
             MediaStore.Downloads.DATE_MODIFIED,
         )
-        val selecao = "${MediaStore.Downloads.RELATIVE_PATH} LIKE ? AND ${MediaStore.Downloads.DISPLAY_NAME} LIKE ?"
-        val argumentos = arrayOf("${Environment.DIRECTORY_DOWNLOADS}/${ExportadorCsv.PASTA}%", "%.csv")
+        val selecao = "${MediaStore.Downloads.RELATIVE_PATH} LIKE ? AND " +
+            "(${MediaStore.Downloads.DISPLAY_NAME} LIKE ? OR ${MediaStore.Downloads.DISPLAY_NAME} LIKE ?)"
+        val argumentos = arrayOf("${Environment.DIRECTORY_DOWNLOADS}/${ExportadorCsv.PASTA}%", "%.csv", "%.txt")
         val lista = mutableListOf<ArquivoLogCsv>()
         runCatching {
             contexto.contentResolver.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI, colunas, selecao, argumentos, null)?.use { c ->
@@ -67,7 +77,9 @@ class RepositorioLogsCsv(context: Context) {
 
     private fun listarPastasDoApp(): List<ArquivoLogCsv> =
         listOfNotNull(contexto.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), File(contexto.filesDir, "logs"))
-            .flatMap { pasta -> pasta.listFiles { f -> f.isFile && f.name.endsWith(".csv", ignoreCase = true) }.orEmpty().toList() }
+            .flatMap { pasta ->
+                pasta.listFiles { f -> f.isFile && (f.name.endsWith(".csv", true) || f.name.endsWith(".txt", true)) }.orEmpty().toList()
+            }
             .map { ArquivoLogCsv(Uri.fromFile(it), it.name, it.length(), it.lastModified()) }
 
     /** Nome de exibição de um documento escolhido pelo SAF (ou o último segmento da URI). */
@@ -83,5 +95,34 @@ class RepositorioLogsCsv(context: Context) {
     suspend fun abrir(uri: Uri): LogCsv = withContext(Dispatchers.IO) {
         val entrada = contexto.contentResolver.openInputStream(uri) ?: throw IOException("Arquivo indisponível")
         entrada.bufferedReader(Charsets.UTF_8).use { LeitorCsvLog.ler(it) }
+    }
+
+    /** Lê o começo do relatório `.txt` (o resumo vem primeiro; o log bruto pode ter megabytes). */
+    suspend fun lerTexto(uri: Uri, limiteCaracteres: Int = LIMITE_TEXTO): TextoLog = withContext(Dispatchers.IO) {
+        val entrada = contexto.contentResolver.openInputStream(uri) ?: throw IOException("Arquivo indisponível")
+        entrada.bufferedReader(Charsets.UTF_8).use { leitor ->
+            val buffer = CharArray(limiteCaracteres)
+            var lidos = 0
+            while (lidos < limiteCaracteres) {
+                val n = leitor.read(buffer, lidos, limiteCaracteres - lidos)
+                if (n < 0) break
+                lidos += n
+            }
+            TextoLog(String(buffer, 0, lidos), truncado = lidos == limiteCaracteres && leitor.read() >= 0)
+        }
+    }
+
+    /** URI que outro app pode ler (os `file://` das pastas do app passam pelo FileProvider). */
+    fun uriCompartilhavel(arquivo: ArquivoLogCsv): Uri {
+        val caminho = arquivo.uri.path
+        if (arquivo.uri.scheme != "file" || caminho == null) return arquivo.uri
+        return runCatching {
+            FileProvider.getUriForFile(contexto, "${contexto.packageName}${ExportadorCsv.SUFIXO_AUTORIDADE}", File(caminho))
+        }.getOrDefault(arquivo.uri)
+    }
+
+    companion object {
+        /** ~200 mil caracteres no diálogo (o TextView fica lento com o log bruto de horas). */
+        const val LIMITE_TEXTO = 200_000
     }
 }

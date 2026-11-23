@@ -69,6 +69,7 @@ class DashboardActivity : AppCompatActivity() {
             menuLateral.ligar(binding.gaveta, binding.menuLateral, binding.toolbar, binding.root) {
                 // Já está em Meus Veículos: o item só fecha a gaveta.
             }
+            menuLateral.verificarAtualizacaoAoAbrir(savedInstanceState == null)
         } else {
             // Tela secundária: seta de Voltar (1 nível) e sem gaveta própria.
             binding.gaveta.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)

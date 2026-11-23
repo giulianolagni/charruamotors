@@ -55,6 +55,8 @@ android {
     buildFeatures {
         // View Binding: acesso tipado às views dos layouts XML (substitui findViewById).
         viewBinding = true
+        // BuildConfig.VERSION_NAME: comparado com a tag da última GitHub Release pelo atualizador.
+        buildConfig = true
     }
 }
 

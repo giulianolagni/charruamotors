@@ -28,6 +28,7 @@ import com.charruamotors.sistema.backup.BackupRepository
 import com.charruamotors.sistema.backup.DadosBackup
 import com.charruamotors.sistema.backup.ResumoBackup
 import com.charruamotors.sistema.navegacao.AcaoMenuLateral
+import com.charruamotors.ui.atualizacao.AtualizadorApp
 import com.charruamotors.ui.configuracoes.ConfiguracoesActivity
 import com.charruamotors.ui.login.LoginActivity
 import com.charruamotors.ui.permissoes.ChecklistPermissoesActivity
@@ -57,6 +58,9 @@ class MenuLateralGlobal(private val activity: AppCompatActivity) {
     private lateinit var raiz: View
     private lateinit var cabecalho: MenuLateralCabecalhoBinding
     private var aoMeusVeiculos: () -> Unit = {}
+
+    /** GitHub Releases: "Verificar atualizações" no Sobre e a verificação silenciosa da abertura. */
+    private val atualizador = AtualizadorApp(activity)
 
     // Backup e Restauração via Storage Access Framework (sem permissão de armazenamento).
     private val criarBackup = activity.registerForActivityResult(ActivityResultContracts.CreateDocument(BackupRepository.MIME_JSON)) { uri ->
@@ -219,6 +223,14 @@ class MenuLateralGlobal(private val activity: AppCompatActivity) {
 
     private fun mensagem(texto: String) = Snackbar.make(raiz, texto, Snackbar.LENGTH_LONG).show()
 
+    /**
+     * Abertura da tela principal (cold start, não a recriação por rotação): procura uma versão nova
+     * no GitHub em segundo plano e só mostra o diálogo se ela existir.
+     */
+    fun verificarAtualizacaoAoAbrir(primeiraCriacao: Boolean) {
+        if (primeiraCriacao) atualizador.verificarAoAbrir()
+    }
+
     // ------------------------------------------------------------------ rodapé
 
     /** Versão, versionCode e o estado do catálogo/protocolo. */
@@ -252,6 +264,7 @@ class MenuLateralGlobal(private val activity: AppCompatActivity) {
             .setIcon(R.mipmap.ic_launcher_round)
             .setMessage(detalhes)
             .setPositiveButton(R.string.botao_fechar, null)
+            .setNeutralButton(R.string.atualizacao_verificar) { _, _ -> atualizador.verificarManualmente() }
             .show()
     }
 

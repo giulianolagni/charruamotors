@@ -25,6 +25,10 @@
          não bloquear o serviço da sessão OBD iniciado pelo Bluetooth do carro com o app fechado. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Atualizador (v1.5): consulta a última GitHub Release, baixa o APK e abre o instalador nativo. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <!-- Bluetooth opcional: o app também roda no emulador usando o scanner simulado. -->
     <uses-feature
         android:name="android.hardware.bluetooth"
@@ -158,7 +162,8 @@
             </intent-filter>
         </receiver>
 
-        <!-- Compartilhamento dos logs CSV salvos na pasta do app (Android 8/9). -->
+        <!-- Compartilhamento dos logs CSV salvos na pasta do app (Android 8/9) e entrega do APK
+             baixado pelo atualizador (cacheDir/updates/) ao instalador do Android. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.arquivos"

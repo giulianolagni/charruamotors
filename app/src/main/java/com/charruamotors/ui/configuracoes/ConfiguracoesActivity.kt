@@ -1,11 +1,13 @@
 package com.charruamotors.ui.configuracoes
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
@@ -16,6 +18,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.databinding.ActivityConfiguracoesBinding
+import com.charruamotors.direcao.desempenho.FonteVelocidade
 import com.charruamotors.obd.sessao.ConfigAutoConexao
 import com.charruamotors.sistema.StatusCaixaPreta
 import com.charruamotors.sistema.permissoes.ItemPermissao
@@ -54,6 +57,15 @@ class ConfiguracoesActivity : AppCompatActivity() {
     private val dialogos = DialogosCaixaPreta(this) { solicitador.solicitarBluetooth() }
     private val atualizador = AtualizadorApp(this)
 
+    /** Localização precisa (o provedor GPS exige a FINE; a COARSE vai junto, como o Android 12+ pede). */
+    private val pedirLocalizacao = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { resultado ->
+        if (resultado[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
+            app.reavaliarGps()
+        } else {
+            Snackbar.make(binding.root, R.string.config_gps_permissao_negada, Snackbar.LENGTH_LONG).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
@@ -65,6 +77,7 @@ class ConfiguracoesActivity : AppCompatActivity() {
 
         configurarCaixaPreta()
         configurarAparencia()
+        configurarGps()
         binding.botaoRefazerAssistente.setOnClickListener {
             prefsApp.reiniciarAssistente()
             startActivity(AssistenteActivity.intent(this))
@@ -83,6 +96,12 @@ class ConfiguracoesActivity : AppCompatActivity() {
                         }
                 }
                 launch { prefsApp.config.collect(::mostrarAparencia) }
+                launch { prefsApp.config.collect(::mostrarGps) }
+                launch {
+                    app.velocidadeGps.situacao.collect { s ->
+                        binding.textoSituacaoGps.text = getString(R.string.config_gps_situacao, s.texto)
+                    }
+                }
             }
         }
     }
@@ -200,6 +219,32 @@ class ConfiguracoesActivity : AppCompatActivity() {
         // No imperial a pressão é sempre psi: a escolha de kPa/bar só vale no métrico.
         grupoUnidade.isEnabled = !imperial
         textoUnidadePressao.setText(if (imperial) R.string.config_unidade_imperial else R.string.config_unidade_descricao)
+    }
+
+    // ------------------------------------------------------------------ velocidade GPS
+
+    private fun configurarGps() = with(binding) {
+        switchVelocidadeGps.setOnCheckedChangeListener { _, marcado ->
+            if (marcado == prefsApp.config.value.velocidadeGps) return@setOnCheckedChangeListener
+            prefsApp.definirVelocidadeGps(marcado)
+            if (marcado && !app.velocidadeGps.temPermissao()) {
+                pedirLocalizacao.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            }
+        }
+        grupoFonteCronometro.addOnButtonCheckedListener { _, id, marcado ->
+            if (!marcado) return@addOnButtonCheckedListener
+            val fonte = if (id == R.id.botao_fonte_gps) FonteVelocidade.GPS else FonteVelocidade.OBD
+            if (fonte != prefsApp.config.value.fonteCronometro) prefsApp.definirFonteCronometro(fonte)
+        }
+    }
+
+    private fun mostrarGps(config: ConfigApp) = with(binding) {
+        if (switchVelocidadeGps.isChecked != config.velocidadeGps) switchVelocidadeGps.isChecked = config.velocidadeGps
+        val fonte = if (config.fonteCronometro == FonteVelocidade.GPS) R.id.botao_fonte_gps else R.id.botao_fonte_ecu
+        if (grupoFonteCronometro.checkedButtonId != fonte) grupoFonteCronometro.check(fonte)
+        // A fonte GPS só vale com a leitura ligada.
+        grupoFonteCronometro.isEnabled = config.velocidadeGps
+        textoSituacaoGps.isVisible = config.velocidadeGps
     }
 
     companion object {

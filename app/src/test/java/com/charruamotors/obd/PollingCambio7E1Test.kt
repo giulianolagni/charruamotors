@@ -29,6 +29,9 @@ class PollingCambio7E1Test {
         val enviados = mutableListOf<String>()
         var cabecalho = "7DF"
         var filtro: String? = null
+
+        /** Como um ELM327 real: com um `ATCRA` ativo, módulos de outro endereço de resposta ficam mudos. */
+        var respeitaFiltro = false
         private var aberto = false
 
         override suspend fun conectar() {
@@ -38,10 +41,14 @@ class PollingCambio7E1Test {
         override suspend fun enviarComando(comando: String, timeoutMs: Long): String {
             if (!aberto) throw IOException("fechado")
             enviados += comando
-            if (comando.startsWith("ATSH")) cabecalho = comando.removePrefix("ATSH")
-            if (comando.startsWith("ATCRA")) filtro = comando.removePrefix("ATCRA").ifEmpty { null }
             val r = respostas["$cabecalho:$comando"] ?: respostas[comando]
-            return r ?: if (comando.startsWith("AT")) "OK\r\r" else "NO DATA\r\r"
+                ?: if (comando.startsWith("AT")) "OK\r\r" else "NO DATA\r\r"
+            val ok = "OK" in r
+            if (comando.startsWith("ATSH") && ok) cabecalho = comando.removePrefix("ATSH")
+            if (comando.startsWith("ATCRA") && ok) filtro = comando.removePrefix("ATCRA").ifEmpty { null }
+            if (comando == "ATAR" && ok) filtro = null
+            val respondeNoFiltro = filtro == null || filtro == "%03X".format(cabecalho.toInt(16) + 8)
+            return if (respeitaFiltro && !comando.startsWith("AT") && !respondeNoFiltro) "NO DATA\r\r" else r
         }
 
         override fun fechar() {
@@ -165,6 +172,53 @@ class PollingCambio7E1Test {
         assertEquals(4.0, primeira["TOYOTA_MARCHA"]!!, 1e-9)
         assertNotNull(leituras[1]["TOYOTA_MARCHA"])
         assertNotNull(primeira["TOYOTA_ATF_CAMBIO"])
+    }
+
+    @Test
+    fun `clone que recusa o ATCRA sem endereco volta ao filtro padrao pelo ATAR e o motor segue respondendo`() = runTest {
+        val t = Ecu(sw4(comCambio = true).apply { put("ATCRA", "?\r\r") })
+        t.respeitaFiltro = true
+        val obd = cliente(t)
+        obd.conectar(dispositivo, "Toyota Hilux SW4")
+        obd.ativarPerfilFabricante("Toyota")
+        assertNull(t.filtro)
+        t.enviados.clear()
+
+        val leituras = obd.lerTelemetria(intervaloMinimoMs = 1, lentosPorVez = 1, ciclosPorLento = 3).take(9).toList()
+
+        // O filtro do câmbio continua sendo aplicado a cada visita (o clone aceita a forma com endereço)...
+        assertEquals(3, t.enviados.count { it == "ATCRA7E9" })
+        // ...e a volta ao motor recorre ao ATAR quando o ATCRA puro é recusado.
+        t.enviados.forEachIndexed { i, c ->
+            if (c == "21D9") assertEquals(listOf("2130", "ATSH7E0", "ATCRA", "ATAR"), t.enviados.subList(i + 1, i + 5))
+        }
+        assertNull(t.filtro)
+        assertTrue(leituras.all { it[Pids.RPM] != null })
+        assertEquals(3.0, leituras.first()["TOYOTA_ALAVANCA"]!!, 1e-9) // o câmbio segue com filtro
+    }
+
+    @Test
+    fun `volta ao filtro padrao que falha fica pendente e o proximo comando insiste ate conseguir`() = runTest {
+        val t = Ecu(sw4(comCambio = true).apply {
+            put("ATCRA", "?\r\r")
+            put("ATAR", "?\r\r")
+        })
+        t.respeitaFiltro = true
+        val obd = cliente(t)
+        obd.conectar(dispositivo, "Toyota Hilux SW4")
+        obd.ativarPerfilFabricante("Toyota")
+        assertEquals("7E9", t.filtro) // adaptador preso no filtro do câmbio
+        assertTrue(obd.eventos().any { "Filtro de recepção não voltou ao padrão" in it })
+
+        // O adaptador volta a aceitar o ATCRA: o próximo comando ao motor (mesmo cabeçalho 7E0) já o reenvia.
+        t.respostas.remove("ATCRA")
+        t.enviados.clear()
+        val leituras = obd.lerTelemetria(intervaloMinimoMs = 1, lentosPorVez = 1, ciclosPorLento = 3).take(2).toList()
+
+        assertNull(t.filtro)
+        assertEquals("ATCRA", t.enviados.first { it.startsWith("ATCRA") || it == "ATAR" })
+        assertTrue(t.enviados.indexOf("ATCRA") < t.enviados.indexOf("210C"))
+        assertTrue(leituras.all { it[Pids.RPM] != null })
     }
 
     @Test

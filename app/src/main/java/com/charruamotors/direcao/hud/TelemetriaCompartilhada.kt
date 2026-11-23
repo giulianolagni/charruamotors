@@ -2,8 +2,10 @@ package com.charruamotors.direcao.hud
 
 import com.charruamotors.direcao.painel.ConfigHud
 import com.charruamotors.direcao.desempenho.CronometroDesempenho
+import com.charruamotors.direcao.desempenho.FaseDesempenho
+import com.charruamotors.direcao.desempenho.FonteVelocidade
+import com.charruamotors.direcao.desempenho.SeletorVelocidade
 import com.charruamotors.obd.DadosObd
-import com.charruamotors.obd.pid.Pids
 import com.charruamotors.sistema.unidades.ConversorUnidades
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +28,8 @@ class TelemetriaCompartilhada(
     /** Cronômetro 0–60/0–100 alimentado a cada instantâneo de velocidade. */
     val cronometro: CronometroDesempenho = CronometroDesempenho(),
     private val relogioMs: () -> Long = { System.nanoTime() / 1_000_000 },
+    /** Fonte preferida da velocidade do cronômetro (Configurações): ECU ou GPS (com fallback para a ECU). */
+    private val fonteCronometro: () -> FonteVelocidade = { FonteVelocidade.PADRAO },
 ) {
 
     private val _dados = MutableStateFlow<DadosObd?>(null)
@@ -38,6 +42,10 @@ class TelemetriaCompartilhada(
     /** O HUD está na tela? Enquanto estiver, a telemetria não pausa em segundo plano. */
     val hudAtivo: StateFlow<Boolean> = _hudAtivo.asStateFlow()
 
+    private val _fonteCronometroAtiva = MutableStateFlow<FonteVelocidade?>(null)
+    /** Fonte que alimentou o cronômetro no último instantâneo (null = sem velocidade), para o card. */
+    val fonteCronometroAtiva: StateFlow<FonteVelocidade?> = _fonteCronometroAtiva.asStateFlow()
+
     /** Painel do HUD, recalculado a cada instantâneo (só emite quando algum texto muda). */
     val painel: Flow<PainelHud> = combine(_dados, _conectado, conversor, configHud) { dados, conectado, conv, config ->
         FormatadorHud.montar(dados, conectado, config, conv)
@@ -47,7 +55,13 @@ class TelemetriaCompartilhada(
     fun publicar(dados: DadosObd?, conectado: Boolean) {
         _dados.value = dados
         _conectado.value = conectado
-        cronometro.amostrar(dados?.get(Pids.VELOCIDADE), relogioMs())
+        val agora = relogioMs()
+        val escolha = SeletorVelocidade.escolher(dados, fonteCronometro())
+        // GPS perdeu (ou recuperou) o sinal no meio do teste: recomeça, nunca mistura GPS e ECU.
+        val medindo = cronometro.estado.value.fase == FaseDesempenho.MEDINDO
+        if (medindo && SeletorVelocidade.mudouDeFonte(_fonteCronometroAtiva.value, escolha?.fonte)) cronometro.amostrar(null, agora)
+        _fonteCronometroAtiva.value = escolha?.fonte
+        cronometro.amostrar(escolha?.kmh, agora)
     }
 
     fun definirHudAtivo(ativo: Boolean) {

@@ -21,6 +21,8 @@ import kotlin.math.roundToInt
  *   [formula] em [converter]. Resultado `NaN` = leitura inválida (fora da faixa).
  * @property rotulos estados discretos (ex.: alavanca do câmbio `0` → `P`, `3` → `D`): o valor inteiro
  *   é exibido pelo rótulo em vez do número. Vazio nos sensores contínuos.
+ * @property doAparelho leitura do próprio celular (ex.: velocidade do GPS, [VELOCIDADE_GPS]), não da
+ *   ECU: nunca é enviada ao adaptador nem entra nos bitmasks; só existe para os logs (CSV).
  *
  * Um **espelho** é um PID dos modos 21/22 que lê o mesmo sensor de um PID padrão (`210C`,
  * `22F40C` ↔ `010C`): tem [estendida], [chave] e, como [comando], o do PID canônico — o valor
@@ -39,12 +41,15 @@ data class DefinicaoPid(
     val chave: ChaveSemantica? = null,
     val rotulos: Map<Int, String> = emptyMap(),
     val decodificador: String? = null,
+    val doAparelho: Boolean = false,
 ) {
     init {
         require(decodificador == null || Decodificadores.existe(decodificador)) {
             "$comando: decodificador desconhecido \"$decodificador\""
         }
-        if (estendida == null) {
+        if (doAparelho) {
+            require(estendida == null && REGEX_ID_ESTENDIDO.matches(comando)) { "Leitura do aparelho inválida: $comando" }
+        } else if (estendida == null) {
             require(ehComandoAt || REGEX_MODO_01.matches(comando)) { "Comando inválido: $comando" }
         } else {
             require(REGEX_ID_ESTENDIDO.matches(comando) || (chave != null && REGEX_MODO_01.matches(comando))) {
@@ -70,13 +75,13 @@ data class DefinicaoPid(
     fun rotulo(valor: Double?): String? = rotuloDe(rotulos, valor)
 
     /** Comando AT do adaptador (não é enviado à ECU e não aparece nos bitmasks de suporte). */
-    val ehComandoAt: Boolean get() = estendida == null && comando.startsWith("AT")
+    val ehComandoAt: Boolean get() = !doAparelho && estendida == null && comando.startsWith("AT")
 
     /** PID específico de montadora (modo 21 Toyota / 22 UDS), fora dos bitmasks do modo 01. */
     val ehEstendido: Boolean get() = estendida != null
 
     /** PID padrão SAE J1979 do modo 01. */
-    val ehModo01: Boolean get() = !ehComandoAt && !ehEstendido
+    val ehModo01: Boolean get() = !doAparelho && !ehComandoAt && !ehEstendido
 
     /** Espelho de um PID padrão lido pelos modos 21/22 (comando = o do PID canônico, ex.: `010C`). */
     val ehEspelho: Boolean get() = estendida != null && REGEX_MODO_01.matches(comando)
@@ -99,6 +104,21 @@ data class DefinicaoPid(
         valor.isFinite() && valor >= min - TOLERANCIA && valor <= max + TOLERANCIA
 
     companion object {
+        /** Coluna de log da velocidade pelo GPS do celular ([Pids.VELOCIDADE_GPS]), quando ativa nas Configurações. */
+        val VELOCIDADE_GPS: DefinicaoPid by lazy {
+            DefinicaoPid(
+                comando = Pids.VELOCIDADE_GPS,
+                nome = "Velocidade GPS",
+                unidade = "km/h",
+                bytes = 0,
+                formula = Formula.compilar("0"),
+                min = 0.0,
+                max = 400.0,
+                casasDecimais = 1,
+                doAparelho = true,
+            )
+        }
+
         private val REGEX_MODO_01 = Regex("^01[0-9A-F]{2}$")
         private val REGEX_ID_ESTENDIDO = Regex("^[A-Z][A-Z0-9_]{2,31}$")
         private const val MAX_BYTES = 8
@@ -217,6 +237,12 @@ object Pids {
     const val PERCENTUAL_ETANOL = "0152"
     const val CONSUMO_ECU = "015E"
     const val TENSAO_BATERIA = "ATRV"
+
+    /**
+     * Não é PID: velocidade (km/h) pelo GPS do celular, mesclada pela sessão em cada instantâneo
+     * quando ativa nas Configurações e com sinal válido (sem fix = ausente). Ver `ProvedorVelocidadeGps`.
+     */
+    const val VELOCIDADE_GPS = "GPS_VEL"
 
     /** Sensores exibidos no painel principal (lidos a cada ciclo de polling). */
     val PAINEL: List<String> = listOf(RPM, VELOCIDADE, TEMPERATURA_MOTOR, CARGA_MOTOR, TENSAO_BATERIA)

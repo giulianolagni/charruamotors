@@ -16,9 +16,9 @@ object HistoricoSensores {
     fun registrar(dados: ValoresSensores?) {
         if (dados == null) return
         // Sem nenhum sensor lido o problema é a conexão, não o veículo: não condena ninguém.
-        if (SensorPainel.entries.none { it.ler(dados) != null }) return
+        if (SensorPainel.entries.none { !it.foraDaEcu && it.ler(dados) != null }) return
         for (s in SensorPainel.entries) {
-            if (s == SensorPainel.CONSUMO_KML) continue // calculado: nunca vem da ECU
+            if (s.foraDaEcu) continue // consumo calculado e GPS do celular: nunca vêm da ECU
             if (s.ler(dados) != null) semValor.remove(s) else semValor[s] = (semValor[s] ?: 0) + 1
         }
     }

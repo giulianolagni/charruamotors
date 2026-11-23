@@ -33,6 +33,7 @@ import com.charruamotors.R
 import com.charruamotors.databinding.DialogAtivarHudBinding
 import com.charruamotors.databinding.DialogRegistroComunicacaoBinding
 import com.charruamotors.databinding.FragmentObdBinding
+import com.charruamotors.direcao.desempenho.FonteVelocidade
 import com.charruamotors.direcao.hud.HudFlutuanteService
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
 import com.charruamotors.direcao.midia.ControladorMidia
@@ -792,7 +793,7 @@ class ObdFragment : Fragment() {
                 else -> segundos(0, 2)
             },
         ))
-        textoCronometroStatus.definirTexto(when (estado) {
+        val status = when (estado) {
             EstadoCronometro.Desarmado -> getString(R.string.obd_cronometro_desarmado)
             EstadoCronometro.AguardandoParada -> getString(R.string.obd_cronometro_aguardando)
             EstadoCronometro.Pronto -> getString(R.string.obd_cronometro_pronto)
@@ -800,7 +801,9 @@ class ObdFragment : Fragment() {
                 R.string.obd_cronometro_medindo, conversor.velocidade(estado.velocidade).toInt(), conversor.simboloVelocidade,
             )
             is EstadoCronometro.Concluido -> getString(R.string.obd_cronometro_concluido)
-        })
+        }
+        val viaGps = ui.fonte == FonteVelocidade.GPS && estado !is EstadoCronometro.Desarmado
+        textoCronometroStatus.definirTexto(if (viaGps) getString(R.string.obd_cronometro_via_gps, status) else status)
         textoCronometroMelhor.isVisible = ui.melhorTempoMs != null
         textoCronometroMelhor.definirTexto(ui.melhorTempoMs?.let { getString(R.string.obd_cronometro_melhor, segundos(it, 2)) })
         botaoArmarCronometro.setText(

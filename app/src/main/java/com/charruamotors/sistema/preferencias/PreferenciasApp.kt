@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.edit
+import com.charruamotors.direcao.desempenho.FonteVelocidade
 import com.charruamotors.sistema.unidades.ConversorUnidades
 import com.charruamotors.sistema.unidades.SistemaUnidades
 import com.charruamotors.sistema.unidades.UnidadePressao
@@ -33,7 +34,15 @@ data class ConfigApp(
     val sistemaUnidades: SistemaUnidades = SistemaUnidades.PADRAO,
     /** O Assistente de Primeira Abertura já foi concluído (ou pulado até o fim)? */
     val assistenteConcluido: Boolean = false,
+    /** Velocidade pelo GPS do celular (v2.0): sensor no Painel/Cluster/HUD e coluna nos CSVs. */
+    val velocidadeGps: Boolean = false,
+    /** Fonte da velocidade do cronômetro 0–60/0–100; GPS só vale com [velocidadeGps] ligada. */
+    val fonteCronometro: FonteVelocidade = FonteVelocidade.PADRAO,
 ) {
+    /** Fonte que o cronômetro realmente usa: sem a velocidade GPS ligada, sempre a ECU. */
+    val fonteCronometroEfetiva: FonteVelocidade
+        get() = if (velocidadeGps) fonteCronometro else FonteVelocidade.OBD
+
     /** Conversor de exibição: no imperial a pressão é sempre psi; no métrico, a [unidadePressao]. */
     val conversor: ConversorUnidades get() = ConversorUnidades(sistemaUnidades, unidadePressao)
 }
@@ -94,6 +103,10 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
 
     fun marcarAssistenteConcluido() = atualizar { it.copy(assistenteConcluido = true) }
 
+    fun definirVelocidadeGps(ativa: Boolean) = atualizar { it.copy(velocidadeGps = ativa) }
+
+    fun definirFonteCronometro(fonte: FonteVelocidade) = atualizar { it.copy(fonteCronometro = fonte) }
+
     /** "Refazer Assistente Inicial" nas Configurações. */
     fun reiniciarAssistente() = atualizar { it.copy(assistenteConcluido = false) }
 
@@ -111,6 +124,8 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
                 UNIDADE_PRESSAO to nova.unidadePressao.name,
                 SISTEMA_UNIDADES to nova.sistemaUnidades.name,
                 ASSISTENTE_CONCLUIDO to nova.assistenteConcluido,
+                VELOCIDADE_GPS to nova.velocidadeGps,
+                FONTE_CRONOMETRO to nova.fonteCronometro.name,
             ),
         )
         _config.value = nova
@@ -121,6 +136,8 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
         unidadePressao = UnidadePressao.deCodigo(armazenamento.lerTexto(UNIDADE_PRESSAO)),
         sistemaUnidades = SistemaUnidades.deCodigo(armazenamento.lerTexto(SISTEMA_UNIDADES)),
         assistenteConcluido = armazenamento.lerBooleano(ASSISTENTE_CONCLUIDO, false),
+        velocidadeGps = armazenamento.lerBooleano(VELOCIDADE_GPS, false),
+        fonteCronometro = FonteVelocidade.deCodigo(armazenamento.lerTexto(FONTE_CRONOMETRO)),
     )
 
     companion object {
@@ -129,5 +146,7 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
         const val UNIDADE_PRESSAO = "unidade_pressao"
         const val SISTEMA_UNIDADES = "sistema_unidades"
         const val ASSISTENTE_CONCLUIDO = "assistente_concluido"
+        const val VELOCIDADE_GPS = "velocidade_gps"
+        const val FONTE_CRONOMETRO = "fonte_cronometro"
     }
 }

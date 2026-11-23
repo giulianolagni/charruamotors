@@ -11,9 +11,12 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.data.repository.DiagnosticoRepository
+import com.charruamotors.direcao.desempenho.FonteVelocidade
+import com.charruamotors.direcao.desempenho.SeletorVelocidade
 import com.charruamotors.domain.calculo.ComputadorBordo
 import com.charruamotors.domain.calculo.LimitesProtecao
 import com.charruamotors.domain.calculo.Cronometro0a100
+import com.charruamotors.domain.calculo.EstadoCronometro
 import com.charruamotors.domain.calculo.ParametrosMotor
 import com.charruamotors.domain.calculo.TelemetriaCalculada
 import com.charruamotors.domain.model.EstadoConexaoObd
@@ -99,6 +102,8 @@ class ObdViewModel(
     private val veiculo: suspend () -> Veiculo?,
     private val salvarCsv: suspend (String, (Writer) -> Unit) -> ArquivoExportado,
     private val relogio: () -> Long = System::currentTimeMillis,
+    /** Fonte da velocidade do cronômetro 0–100 (Configurações): ECU ou GPS com fallback para a ECU. */
+    private val fonteCronometro: () -> FonteVelocidade = { FonteVelocidade.PADRAO },
 ) : ViewModel() {
 
     val modo: StateFlow<ModoObd> = sessao.modo
@@ -150,6 +155,9 @@ class ObdViewModel(
     val computador: StateFlow<ComputadorBordoUi> = _computador.asStateFlow()
 
     private val cronometro0a100 = Cronometro0a100()
+
+    /** Fonte que alimentou a última leitura do cronômetro 0–100 (para detectar a troca no meio da arrancada). */
+    private var fonteCronometroAtual: FonteVelocidade? = null
     private val _cronometro = MutableStateFlow(CronometroUi())
     val cronometro: StateFlow<CronometroUi> = _cronometro.asStateFlow()
 
@@ -353,7 +361,13 @@ class ObdViewModel(
             motor = parametrosMotor,
         )
         if (cronometro0a100.armado) {
-            _cronometro.value = CronometroUi(cronometro0a100.registrar(velocidade, instanteMs), cronometro0a100.melhorTempoMs)
+            val escolha = SeletorVelocidade.escolher(dados, fonteCronometro())
+            // GPS perdeu/recuperou o sinal no meio da arrancada: recomeça a tentativa (nunca mistura as fontes).
+            if (cronometro0a100.estado is EstadoCronometro.Medindo && SeletorVelocidade.mudouDeFonte(fonteCronometroAtual, escolha?.fonte)) {
+                cronometro0a100.armar(escolha?.kmh)
+            }
+            if (escolha != null) fonteCronometroAtual = escolha.fonte
+            _cronometro.value = CronometroUi(cronometro0a100.registrar(escolha?.kmh, instanteMs), cronometro0a100.melhorTempoMs, fonteCronometroAtual)
         }
         _grafico.value = janelaGrafico.adicionar(PontoTelemetria(instanteMs, dados[Pids.RPM], dados[Pids.PRESSAO_COLETOR]))
     }
@@ -373,11 +387,14 @@ class ObdViewModel(
             _eventos.trySend(EventoObd.Mensagem(R.string.obd_cronometro_sem_conexao))
             return
         }
-        if (Pids.VELOCIDADE !in pidsSuportados.value) {
+        val fonte = fonteCronometro()
+        if (Pids.VELOCIDADE !in pidsSuportados.value && fonte != FonteVelocidade.GPS) {
             _eventos.trySend(EventoObd.Mensagem(R.string.obd_cronometro_sem_velocidade))
             return
         }
-        _cronometro.value = CronometroUi(cronometro0a100.armar(dados.value?.get(Pids.VELOCIDADE)), cronometro0a100.melhorTempoMs)
+        val escolha = SeletorVelocidade.escolher(dados.value, fonte)
+        fonteCronometroAtual = escolha?.fonte
+        _cronometro.value = CronometroUi(cronometro0a100.armar(escolha?.kmh), cronometro0a100.melhorTempoMs, fonteCronometroAtual)
         if (modo.value == ModoObd.SIMULADO) clienteSimulado?.simularArrancada()
     }
 
@@ -399,7 +416,7 @@ class ObdViewModel(
             _eventos.trySend(EventoObd.Mensagem(R.string.obd_log_sem_conexao))
             return
         }
-        val colunas = sessao.definicoesSuportadas(pidsSuportados.value)
+        val colunas = sessao.definicoesSuportadas(pidsSuportados.value) + sessao.colunasDoAparelho()
         if (colunas.isEmpty()) {
             _eventos.trySend(EventoObd.Mensagem(R.string.obd_log_sem_pids))
             return
@@ -495,6 +512,7 @@ class ObdViewModel(
                     catalogoPids = app.catalogoPids,
                     veiculo = { app.veiculoRepository.buscarPorId(veiculoId) },
                     salvarCsv = { nome, escrever -> app.exportadorCsv.salvar(nome, escrever) },
+                    fonteCronometro = { app.preferenciasApp.config.value.fonteCronometroEfetiva },
                 )
             }
         }

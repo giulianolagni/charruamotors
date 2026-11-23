@@ -117,7 +117,6 @@ class TerminalObdViewModel(
     fun conversor(): ConversorUnidades = conversorAtual()
 
     private var sessao: Job? = null
-    private var sessaoIniciada = false
     private var jobVarredura: Job? = null
     private var inicioVarreduraMs = 0L
     private var duracaoVarreduraMs: Long? = null
@@ -125,9 +124,7 @@ class TerminalObdViewModel(
 
     init {
         sessao = viewModelScope.launch {
-            if (cliente.iniciarSessaoManual().isSuccess) {
-                sessaoIniciada = true
-            } else {
+            if (cliente.iniciarSessaoManual().isFailure) {
                 _eventos.send(EventoTerminal.SemConexao(R.string.oficina_sem_conexao))
             }
         }
@@ -340,10 +337,14 @@ class TerminalObdViewModel(
         if (cliente.estado.value !is EstadoConexaoObd.Conectado) _eventos.send(EventoTerminal.SemConexao(R.string.oficina_conexao_perdida))
     }
 
-    /** Tela fechada de vez: para a varredura e encerra a sessão manual (restaura o `ATSH` e o polling). */
+    /**
+     * Tela fechada de vez: para a varredura e encerra a sessão manual (restaura o `ATSH` e o polling).
+     * Sempre encerra (é idempotente): se a tela fechar enquanto `iniciarSessaoManual()` esperava o
+     * ciclo de polling, a sessão já pode ter começado sem o retorno chegar aqui, e o polling congelaria.
+     */
     override fun onCleared() {
         jobVarredura?.cancel()
-        if (sessaoIniciada) CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { cliente.encerrarSessaoManual() }
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { cliente.encerrarSessaoManual() }
         super.onCleared()
     }
 

@@ -705,22 +705,65 @@ class Elm327BluetoothClient(
     /**
      * Ajusta o `ATCRA` ao [cabecalho] recém-fixado (só se mudar): `ATCRA 7B8` para o ABS/VSC,
      * `ATCRA` (sem endereço = filtro padrão) ao voltar ao motor/funcional. Um clone que não aceite
-     * o comando segue sem o filtro: as requisições desse módulo apenas não respondem.
+     * *aplicar* o filtro segue sem ele (as requisições desse módulo apenas não respondem), mas o
+     * adaptador nunca fica preso num filtro anterior: a remoção tem alternativa (`ATAR`) e, se
+     * falhar, o filtro fica indefinido e é tentado de novo no próximo comando.
      */
     private suspend fun ajustarFiltroRecepcao(canal: ObdTransport, cabecalho: String?, registrar: Boolean) {
         val alvo = filtroRecepcaoPara(cabecalho)
-        if (alvo == filtroRecepcaoAtivo || semFiltroRecepcao) return
+        if (alvo == filtroRecepcaoAtivo) return
+        if (alvo == null) {
+            removerFiltroRecepcao(canal, registrar)
+            return
+        }
+        if (semFiltroRecepcao) {
+            // Este adaptador não aplica filtros: garante ao menos o padrão (nunca o de outro módulo).
+            if (filtroRecepcaoAtivo != null) removerFiltroRecepcao(canal, registrar)
+            return
+        }
+        var expirou = false
         val resposta = try {
-            trocar(canal, "ATCRA" + alvo.orEmpty(), timeoutComandoMs, registrar)
+            trocar(canal, "ATCRA$alvo", timeoutComandoMs, registrar)
         } catch (_: ObdTimeoutException) {
+            expirou = true
             ""
         }
         if ("OK" in resposta.uppercase()) {
             filtroRecepcaoAtivo = alvo
         } else {
             semFiltroRecepcao = true
-            registro.evento("ATCRA ${alvo ?: "(padrão)"} recusado pelo adaptador: \"${RegistroComunicacao.visivel(resposta)}\"")
+            registro.evento("ATCRA $alvo recusado pelo adaptador: \"${RegistroComunicacao.visivel(resposta)}\"")
+            // Sem prompt, não se sabe o que o adaptador aplicou; recusado, continua o filtro anterior.
+            if (expirou) filtroRecepcaoAtivo = FILTRO_INDEFINIDO
+            if (filtroRecepcaoAtivo != null) removerFiltroRecepcao(canal, registrar)
         }
+    }
+
+    /**
+     * Volta ao filtro de recepção padrão: `ATCRA` sem endereço e, se o clone não aceitar essa forma,
+     * `ATAR` (recepção automática, que também desfaz o `ATCRA`). Se nenhum confirmar, o filtro fica
+     * [FILTRO_INDEFINIDO] e o próximo comando à ECU tenta de novo, em vez de seguir surdo ao motor.
+     */
+    private suspend fun removerFiltroRecepcao(canal: ObdTransport, registrar: Boolean) {
+        var ultima = ""
+        for (comando in COMANDOS_FILTRO_PADRAO) {
+            ultima = try {
+                trocar(canal, comando, timeoutComandoMs, registrar)
+            } catch (_: ObdTimeoutException) {
+                ""
+            }
+            if ("OK" in ultima.uppercase()) {
+                filtroRecepcaoAtivo = null
+                return
+            }
+        }
+        if (filtroRecepcaoAtivo != FILTRO_INDEFINIDO) {
+            registro.evento(
+                "Filtro de recepção não voltou ao padrão (ATCRA/ATAR: \"${RegistroComunicacao.visivel(ultima)}\"); " +
+                    "nova tentativa no próximo comando",
+            )
+        }
+        filtroRecepcaoAtivo = FILTRO_INDEFINIDO
     }
 
     /** Um ciclo de polling sob [mutexCiclo]; null = uma sessão manual começou (o ciclo é pulado). */
@@ -1502,6 +1545,8 @@ class Elm327BluetoothClient(
                 if ("OK" !in resposta.uppercase()) return@withLock resposta
                 cabecalhoAtivo = cabecalho
                 ajustarFiltroRecepcao(canal, cabecalho, registrar)
+            } else if (!comando.startsWith("AT") && filtroRecepcaoAtivo == FILTRO_INDEFINIDO) {
+                ajustarFiltroRecepcao(canal, cabecalho, registrar) // a volta ao padrão falhou antes: insiste
             }
             var resposta = trocar(canal, comando, timeoutMs, registrar)
             if (ObdParser.interrompido(resposta)) {
@@ -1678,6 +1723,12 @@ class Elm327BluetoothClient(
         /** Câmbio automático (A750F): cabeçalho `7E1`, resposta em `7E9`. */
         private const val CABECALHO_CAMBIO = "7E1"
         private const val FILTRO_CAMBIO = "7E9"
+
+        /** Filtro de recepção desconhecido (a volta ao padrão falhou): difere de qualquer alvo, então o próximo comando insiste. */
+        private const val FILTRO_INDEFINIDO = "?"
+
+        /** Volta ao filtro padrão: `ATCRA` sem endereço; `ATAR` para clones que só aceitam a forma com endereço. */
+        private val COMANDOS_FILTRO_PADRAO = listOf("ATCRA", "ATAR")
 
         /** Requisições do câmbio lidas no polling do modo 21: alavanca + ATF (`21D9`) e marcha (`2130`). */
         private val IDS_CAMBIO_POLLING = setOf("D9", "30")

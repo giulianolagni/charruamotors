@@ -20,6 +20,7 @@ import com.charruamotors.obd.log.GravadorLogsSessao
 import com.charruamotors.obd.log.LogsSessaoSalvos
 import com.charruamotors.obd.pid.CatalogoPids
 import com.charruamotors.obd.pid.DefinicaoPid
+import com.charruamotors.obd.pid.Pids
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -162,6 +163,10 @@ class SessaoObd(
     private val relogio: () -> Long = System::currentTimeMillis,
     private val tempos: TemposSessao = TemposSessao(),
     private val zona: ZoneId = ZoneId.systemDefault(),
+    /** Velocidade GPS ativa nas Configurações? (coluna no CSV e mescla nos instantâneos). */
+    private val gpsAtivo: () -> Boolean = { false },
+    /** Velocidade GPS atual em km/h, já filtrada (null = sem fix confiável: a chave fica ausente). */
+    private val velocidadeGps: () -> Double? = { null },
 ) {
     private val _modo = MutableStateFlow(modoInicial)
     val modo: StateFlow<ModoObd> = _modo.asStateFlow()
@@ -314,6 +319,9 @@ class SessaoObd(
         return (catalogoPids.pids.map { espelhos[it.comando] ?: it } + montadora).filter { it.comando in suportados }
     }
 
+    /** Colunas de log que vêm do próprio celular (hoje, a velocidade GPS quando ativa). */
+    fun colunasDoAparelho(): List<DefinicaoPid> = if (gpsAtivo()) listOf(DefinicaoPid.VELOCIDADE_GPS) else emptyList()
+
     // ------------------------------------------------------------------ execução
 
     private suspend fun executar(
@@ -391,7 +399,7 @@ class SessaoObd(
                 _eventos.tryEmit(EventoSessao.Mensagem("Perfil ${perfil.fabricante} ativado: ${perfil.pids.size} PIDs da montadora"))
             }
             if (g != null) {
-                val colunas = definicoesSuportadas(cli.pidsSuportados.value, cli.infoConexao.value, perfil)
+                val colunas = definicoesSuportadas(cli.pidsSuportados.value, cli.infoConexao.value, perfil) + colunasDoAparelho()
                 withContext(io) { g.iniciarCsv(colunas) }
                 g.evento("CSV de telemetria aberto com ${colunas.size} sensores", relogio())
                 lerDtcsParaRelatorio(cli, g)
@@ -402,11 +410,19 @@ class SessaoObd(
         (fim as? EstadoConexaoObd.Erro)?.mensagem ?: "Desconectado"
     }
 
-    private fun receberAmostra(dados: DadosObd, g: GravadorLogsSessao?) {
+    private fun receberAmostra(daEcu: DadosObd, g: GravadorLogsSessao?) {
+        val dados = comVelocidadeGps(daEcu)
         _dados.value = dados
         _amostras.tryEmit(dados)
         telemetria.publicar(dados, conectado = true)
         g?.registrar(dados, relogio())
+    }
+
+    /** Mescla a velocidade GPS ([Pids.VELOCIDADE_GPS]) ao instantâneo da ECU; sem fix (ou desativada), ele segue igual. */
+    private fun comVelocidadeGps(dados: DadosObd): DadosObd {
+        if (!gpsAtivo()) return dados
+        val kmh = runCatching { velocidadeGps() }.getOrNull()?.takeIf { it.isFinite() } ?: return dados
+        return DadosObd(dados.valores + (Pids.VELOCIDADE_GPS to kmh))
     }
 
     /** Uma leitura de confirmados/pendentes/permanentes por sessão, só para o relatório (não mexe no histórico). */

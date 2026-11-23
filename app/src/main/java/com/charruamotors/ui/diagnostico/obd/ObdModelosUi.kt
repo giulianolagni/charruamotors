@@ -1,5 +1,6 @@
 package com.charruamotors.ui.diagnostico.obd
 
+import com.charruamotors.direcao.desempenho.FonteVelocidade
 import com.charruamotors.domain.calculo.ConsumoInstantaneo
 import com.charruamotors.domain.calculo.EstadoCronometro
 import com.charruamotors.domain.calculo.ParametrosMotor
@@ -38,6 +39,8 @@ data class ComputadorBordoUi(
 data class CronometroUi(
     val estado: EstadoCronometro = EstadoCronometro.Desarmado,
     val melhorTempoMs: Long? = null,
+    /** Fonte da última velocidade usada (null = nenhuma ainda): o card mostra "via GPS". */
+    val fonte: FonteVelocidade? = null,
 )
 
 /** Estado do Data Logger exibido no botão "Gravar Log CSV". */

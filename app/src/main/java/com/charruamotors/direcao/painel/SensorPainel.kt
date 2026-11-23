@@ -4,6 +4,7 @@ import com.charruamotors.domain.calculo.AlertaProtecao
 import com.charruamotors.domain.calculo.TipoAlertaProtecao
 import com.charruamotors.obd.ValoresSensores
 import com.charruamotors.obd.pid.DefinicaoPid
+import com.charruamotors.obd.pid.Pids
 import com.charruamotors.sistema.unidades.ConversorUnidades
 import com.charruamotors.sistema.unidades.UnidadePressao
 import com.charruamotors.sistema.unidades.ValorExibicao
@@ -169,12 +170,25 @@ enum class SensorPainel(
     BICO_2("TOYOTA_INJ2", "Bico Injetor #2", "BICO 2", "mm³/st", 2, ESCALA_BICO, comSinal = true),
     BICO_3("TOYOTA_INJ3", "Bico Injetor #3", "BICO 3", "mm³/st", 2, ESCALA_BICO, comSinal = true),
     BICO_4("TOYOTA_INJ4", "Bico Injetor #4", "BICO 4", "mm³/st", 2, ESCALA_BICO, comSinal = true),
+
+    // ---- Celular (v2.0): no fim do enum para não mudar a ordem de sugestão dos demais mostradores.
+    /**
+     * Velocidade pelo GPS do celular (v2.0), ativada nas Configurações: não é um PID, a sessão
+     * mescla a leitura ([Pids.VELOCIDADE_GPS]) em cada instantâneo. Sem fix válido, "—".
+     */
+    VELOCIDADE_GPS(
+        Pids.VELOCIDADE_GPS, "Velocidade GPS", "GPS", "km/h", 0,
+        mapOf(
+            "km/h" to EscalaGauge(0f, 240f, null, 6, 4),
+            "mph" to EscalaGauge(0f, 160f, null, 8, 4),
+        ),
+    ),
     ;
 
     /** Seção em que o sensor aparece nos chips de escolha. */
     val grupo: GrupoSensor
         get() = when (this) {
-            RPM, VELOCIDADE, TURBO, CARGA, BORBOLETA, ACELERADOR, CONSUMO_KML -> GrupoSensor.PRINCIPAL
+            RPM, VELOCIDADE, VELOCIDADE_GPS, TURBO, CARGA, BORBOLETA, ACELERADOR, CONSUMO_KML -> GrupoSensor.PRINCIPAL
             TEMP_MOTOR, TEMP_ADMISSAO, TEMP_OLEO, TEMP_CAMBIO -> GrupoSensor.TEMPERATURAS
             RAIL, MAF, COMBUSTIVEL, PRESSAO_BARO, BICO_1, BICO_2, BICO_3, BICO_4 -> GrupoSensor.INJECAO
             MARCHA_ALAVANCA, MARCHA_ATUAL, TRACAO_4X4, VSC -> GrupoSensor.CAMBIO_CHASSI
@@ -199,6 +213,9 @@ enum class SensorPainel(
      */
     fun ler(dados: ValoresSensores?, consumoKmL: Double?): Double? =
         if (this == CONSUMO_KML) consumoKmL?.takeIf { it.isFinite() }?.coerceAtMost(MAX_KM_L) else ler(dados)
+
+    /** Leitura do próprio celular ou calculada (GPS, consumo): nunca vem da ECU, então nunca é "não suportada". */
+    val foraDaEcu: Boolean get() = this == CONSUMO_KML || this == VELOCIDADE_GPS
 
     /** Todas as chaves que alimentam o mostrador, na ordem de preferência. */
     val comandos: List<String> get() = listOf(comando) + alternativos

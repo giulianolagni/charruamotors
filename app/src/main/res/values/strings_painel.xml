@@ -119,4 +119,16 @@
 
     <string name="desempenho_titulo">⏱ 0–100 km/h</string>
     <string name="desempenho_dica">Dispara sozinho ao sair do lugar. Toque para zerar.</string>
+
+    <!-- Velocidade GPS (v2.0) -->
+    <string name="config_secao_gps">Velocidade GPS</string>
+    <string name="config_gps_switch">Ler a velocidade pelo GPS do celular</string>
+    <string name="config_gps_descricao">Sensor \"Velocidade GPS\" no Painel, Cluster e HUD, e coluna nos CSVs. Só funciona com a sessão OBD conectada. Sem sinal, mostra \"—\".</string>
+    <string name="config_gps_situacao">Situação: %1$s</string>
+    <string name="config_gps_fonte_cronometro">Velocidade do cronômetro 0–60 / 0–100</string>
+    <string name="config_gps_fonte_descricao">Com GPS, o cronômetro usa o celular e volta para a ECU quando não houver sinal (a medição em andamento recomeça).</string>
+    <string name="config_gps_fonte_ecu">ECU (010D)</string>
+    <string name="config_gps_fonte_gps">GPS</string>
+    <string name="config_gps_permissao_negada">Sem a permissão de localização precisa, a velocidade GPS fica indisponível.</string>
+    <string name="obd_cronometro_via_gps">%1$s · via GPS</string>
 </resources>

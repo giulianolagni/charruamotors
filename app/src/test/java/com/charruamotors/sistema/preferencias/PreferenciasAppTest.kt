@@ -1,6 +1,7 @@
 package com.charruamotors.sistema.preferencias
 
 import androidx.appcompat.app.AppCompatDelegate
+import com.charruamotors.direcao.desempenho.FonteVelocidade
 import com.charruamotors.sistema.unidades.UnidadePressao
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,6 +31,23 @@ class PreferenciasAppTest {
         assertTrue(prefs.deveMostrarAssistente)
         assertEquals(TemaApp.SISTEMA, prefs.tema)
         assertEquals(UnidadePressao.KPA, prefs.unidadePressao)
+    }
+
+    @Test
+    fun `velocidade GPS e fonte do cronometro persistem e a fonte so vale com o GPS ligado`() {
+        val prefs = PreferenciasApp(armazenamento)
+        assertFalse(prefs.config.value.velocidadeGps)
+        assertEquals(FonteVelocidade.OBD, prefs.config.value.fonteCronometroEfetiva)
+
+        prefs.definirFonteCronometro(FonteVelocidade.GPS)
+        // GPS desligado: o cronômetro continua na ECU, mas a escolha fica guardada.
+        assertEquals(FonteVelocidade.OBD, prefs.config.value.fonteCronometroEfetiva)
+        prefs.definirVelocidadeGps(true)
+        assertEquals(FonteVelocidade.GPS, prefs.config.value.fonteCronometroEfetiva)
+
+        val reaberto = PreferenciasApp(armazenamento).config.value
+        assertTrue(reaberto.velocidadeGps)
+        assertEquals(FonteVelocidade.GPS, reaberto.fonteCronometro)
     }
 
     @Test

@@ -93,18 +93,27 @@ class HudFlutuanteService : Service() {
 
     // ------------------------------------------------------------------ primeiro plano
 
-    private fun entrarEmPrimeiroPlano(): Boolean = try {
-        ServiceCompat.startForeground(
-            this,
-            ID_NOTIFICACAO,
-            criarNotificacao(),
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0,
-        )
+    /**
+     * Com a velocidade GPS ligada e a permissão concedida, o HUD também declara o tipo `location`:
+     * é o que deixa o Android entregar o GPS com o app minimizado sob o Waze. Se o sistema recusar
+     * esse tipo, o HUD sobe só como `connectedDevice` (a velocidade GPS expira e mostra "—").
+     */
+    private fun entrarEmPrimeiroPlano(): Boolean {
+        val base = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0
+        val app = application as? CharruaMotorsApp
+        val comGps = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            app?.preferenciasApp?.config?.value?.velocidadeGps == true && app.velocidadeGps.temPermissao()
+        if (comGps && iniciarPrimeiroPlano(base or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)) return true
+        return iniciarPrimeiroPlano(base)
+    }
+
+    private fun iniciarPrimeiroPlano(tipos: Int): Boolean = try {
+        ServiceCompat.startForeground(this, ID_NOTIFICACAO, criarNotificacao(), tipos)
         true
     } catch (e: RuntimeException) {
-        // Android 14+: SecurityException sem a permissão de Bluetooth (pré-requisito do tipo
-        // connectedDevice) ou ForegroundServiceStartNotAllowedException.
-        Log.w(TAG, "Não foi possível iniciar o HUD em primeiro plano", e)
+        // Android 14+: SecurityException sem a permissão de Bluetooth/localização (pré-requisito
+        // dos tipos connectedDevice/location) ou ForegroundServiceStartNotAllowedException.
+        Log.w(TAG, "Não foi possível iniciar o HUD em primeiro plano (tipos $tipos)", e)
         false
     }
 

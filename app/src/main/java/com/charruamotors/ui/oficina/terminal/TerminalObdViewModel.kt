@@ -15,6 +15,13 @@ import com.charruamotors.domain.model.Veiculo
 import com.charruamotors.obd.ObdClient
 import com.charruamotors.oficina.terminal.EntradaTerminal
 import com.charruamotors.oficina.terminal.FormatadorTerminal
+import com.charruamotors.oficina.terminal.LaudoTerminal
+import com.charruamotors.oficina.terminal.TradutorTerminal
+import com.charruamotors.oficina.varredura.IdentificacaoPid
+import com.charruamotors.oficina.varredura.IdentificadorPids
+import com.charruamotors.oficina.varredura.MetricasVarredura
+import com.charruamotors.oficina.varredura.StatusIdentificacao
+import com.charruamotors.sistema.unidades.ConversorUnidades
 import com.charruamotors.oficina.varredura.ConfigVarredura
 import com.charruamotors.oficina.varredura.ProgressoVarredura
 import com.charruamotors.oficina.varredura.RelatorioVarredura
@@ -37,17 +44,22 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 
-/** Estado da aba Varredura de PIDs. */
+/** Estado da aba Varredura de PIDs (amigável: cada resposta já cruzada com o catálogo). */
 data class EstadoVarredura(
     val rodando: Boolean = false,
     val config: ConfigVarredura? = null,
     val progresso: ProgressoVarredura? = null,
     val resultados: List<ResultadoPid> = emptyList(),
+    val identificacoes: List<IdentificacaoPid> = emptyList(),
     val mostrarTudo: Boolean = false,
     /** Varredura terminada (concluída, parada ou interrompida); null enquanto roda ou antes da primeira. */
     val final: ResultadoVarredura? = null,
 ) {
-    val visiveis: List<ResultadoPid> get() = VarreduraPids.filtrar(resultados, mostrarTudo)
+    /** Filtro "Ver apenas o que o carro respondeu": identificados e desconhecidos; com [mostrarTudo], tudo. */
+    val visiveis: List<IdentificacaoPid>
+        get() = if (mostrarTudo) identificacoes else identificacoes.filter { it.status != StatusIdentificacao.IGNORADO }
+
+    val metricas: MetricasVarredura get() = MetricasVarredura.de(identificacoes, config?.quantidade ?: 0)
 }
 
 sealed interface EventoTerminal {
@@ -65,6 +77,9 @@ sealed interface EventoTerminal {
 class TerminalObdViewModel(
     private val cliente: ObdClient,
     private val veiculo: suspend () -> Veiculo?,
+    private val identificador: IdentificadorPids,
+    val tradutor: TradutorTerminal,
+    private val conversorAtual: () -> ConversorUnidades = { ConversorUnidades.PADRAO },
     private val relogioParede: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
 
@@ -80,9 +95,16 @@ class TerminalObdViewModel(
     private val _eventos = Channel<EventoTerminal>(Channel.BUFFERED)
     val eventos: Flow<EventoTerminal> = _eventos.receiveAsFlow()
 
-    private val descricaoVeiculo = viewModelScope.async {
-        runCatching { veiculo() }.getOrNull()?.let { "${it.descricao} (${it.placaFormatada})" }
-    }
+    private val dadosVeiculo = viewModelScope.async { runCatching { veiculo() }.getOrNull() }
+    private val descricaoVeiculo = viewModelScope.async { dadosVeiculo.await()?.let { "${it.descricao} (${it.placaFormatada})" } }
+
+    /** Modelo do veículo para o filtro ("Ver apenas o que a SW4 respondeu"); null até carregar. */
+    suspend fun modeloVeiculo(): String? = dadosVeiculo.await()?.modelo?.takeIf { it.isNotBlank() }
+
+    /** `ATSH` em vigor no log (para traduzir `21xx`/`22xxxx` no módulo certo). */
+    fun cabecalhoAtivo(): String? = tradutor.cabecalhoAtivo(_log.value)
+
+    fun conversor(): ConversorUnidades = conversorAtual()
 
     private var sessao: Job? = null
     private var sessaoIniciada = false
@@ -138,6 +160,17 @@ class TerminalObdViewModel(
 
     fun textoLog(): String? = _log.value.takeIf { it.isNotEmpty() }?.let { FormatadorTerminal.formatar(it) }
 
+    /** Laudo da sessão do terminal (resumo, leituras traduzidas e log bruto); null se nada foi enviado. */
+    suspend fun laudo(): String? {
+        val entradas = _log.value.takeIf { it.isNotEmpty() } ?: return null
+        return LaudoTerminal.gerar(
+            entradas, tradutor, LocalDateTime.now(),
+            veiculo = descricaoVeiculo.await(),
+            protocolo = cliente.infoConexao.value.protocolo,
+            conversor = conversorAtual(),
+        )
+    }
+
     // ---------------------------------------------------------------- varredura
 
     /** Valida os campos e inicia a varredura; erro de validação vira mensagem. */
@@ -151,8 +184,12 @@ class TerminalObdViewModel(
             sessao?.join()
             inicioVarreduraMs = SystemClock.elapsedRealtime()
             duracaoVarreduraMs = null
-            _varredura.value = _varredura.value.copy(rodando = true, config = config, progresso = null, resultados = emptyList(), final = null)
+            _varredura.value = _varredura.value.copy(
+                rodando = true, config = config, progresso = null, resultados = emptyList(), identificacoes = emptyList(), final = null,
+            )
             val acumulados = ArrayList<ResultadoPid>()
+            val identificados = ArrayList<IdentificacaoPid>()
+            val conversor = conversorAtual()
             pararSolicitado = false
             val final = try {
                 VarreduraPids.executar(
@@ -160,8 +197,13 @@ class TerminalObdViewModel(
                     enviar = { cliente.enviarComandoManual(it, ObdClient.TIMEOUT_MANUAL_MS, registrar = false) },
                     deveParar = { pararSolicitado },
                 ) { progresso, resultado ->
-                    resultado?.let(acumulados::add)
-                    _varredura.value = _varredura.value.copy(progresso = progresso, resultados = acumulados.toList())
+                    resultado?.let {
+                        acumulados += it
+                        identificados += identificador.identificar(it, config.cabecalho, conversor)
+                    }
+                    _varredura.value = _varredura.value.copy(
+                        progresso = progresso, resultados = acumulados.toList(), identificacoes = identificados.toList(),
+                    )
                 }
             } catch (e: CancellationException) {
                 concluir(ResultadoVarredura(config, acumulados.toList(), config.quantidade, VarreduraPids.PARADA_USUARIO))
@@ -174,7 +216,8 @@ class TerminalObdViewModel(
 
     private fun concluir(final: ResultadoVarredura) {
         duracaoVarreduraMs = SystemClock.elapsedRealtime() - inicioVarreduraMs
-        _varredura.value = _varredura.value.copy(rodando = false, resultados = final.resultados, final = final)
+        val identificacoes = identificador.identificarTodos(final.resultados, final.config.cabecalho, conversorAtual())
+        _varredura.value = _varredura.value.copy(rodando = false, resultados = final.resultados, identificacoes = identificacoes, final = final)
     }
 
     /** Parada cooperativa: a varredura termina depois do comando em andamento. */
@@ -198,6 +241,7 @@ class TerminalObdViewModel(
             veiculo = descricaoVeiculo.await(),
             protocolo = cliente.infoConexao.value.protocolo,
             duracaoMs = duracaoVarreduraMs,
+            identificacoes = estado.identificacoes,
         )
     }
 
@@ -222,6 +266,9 @@ class TerminalObdViewModel(
                 TerminalObdViewModel(
                     cliente = app.obdClientDe(app.modoObd),
                     veiculo = { app.veiculoRepository.buscarPorId(veiculoId) },
+                    identificador = app.identificadorPids,
+                    tradutor = TradutorTerminal(app.catalogoPids, app.identificadorPids),
+                    conversorAtual = { app.preferenciasApp.config.value.conversor },
                 )
             }
         }

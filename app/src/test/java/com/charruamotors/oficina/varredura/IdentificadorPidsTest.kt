@@ -108,6 +108,20 @@ class IdentificadorPidsTest {
     }
 
     @Test
+    fun `relatorio da varredura traz o nome e o valor dos identificados`() {
+        val config = ConfigVarredura("7E0", "21", 0x0C, 0x0E)
+        val resultados = listOf(resultado("210C", "610C0D48\r>"), resultado("210D", "NO DATA\r>"), resultado("210E", "610E01\r>"))
+        val texto = RelatorioVarredura.gerar(
+            ResultadoVarredura(config, resultados, 3),
+            java.time.LocalDateTime.of(2026, 11, 23, 9, 0),
+            identificacoes = identificador.identificarTodos(resultados, "7E0"),
+        )
+        assertTrue(texto, texto.contains("210C → 61 0C 0D 48  [2 bytes de dados]  = Rotação do motor: 850 rpm"))
+        assertTrue(texto, texto.contains("210E → 61 0E 01  [1 byte de dados]\n"))
+        assertTrue(texto, texto.contains("Identificados no catálogo: 1 · desconhecidos (candidatos a mapear): 1"))
+    }
+
+    @Test
     fun `abreviar corta respostas longas`() {
         assertEquals("610C0D48", IdentificadorPids.abreviar("61 0C 0D 48"))
         assertEquals("61D4A1B2C3D4...", IdentificadorPids.abreviar("61 D4 A1 B2 C3 D4 E5 F6"))

@@ -274,15 +274,15 @@ class SessaoManualTest {
 
         assertEquals("A6\r\r", cmd("ATDPN"))
         assertTrue("OK" in cmd("ATSH 7E0"))
-        // 10 bytes não cabem num quadro CAN: multi-frame com ATH0, como no adaptador real.
-        assertEquals("00A\r0:611381A47ECA\r1:873A7F88\r\r", cmd("2113"))
+        // 13 bytes não cabem num quadro CAN: multi-frame com ATH0, como no adaptador real (bicos +0,45/+0,44/+0,66/0).
+        assertEquals("00D\r0:61AD00E600E1\r1:01520000000000\r\r", cmd("21AD"))
         assertTrue(cmd("2101").startsWith("012\r0:6101")) // multi-frame CAN com ATH0
         assertEquals("7F2131\r\r", cmd("21A0"))
         assertEquals("7F2211\r\r", cmd("22F40C"))
         // 3 DTCs (P0300, P0171, P0420) = 8 bytes: multi-frame.
         assertEquals("008\r0:530303000171\r1:0420\r\r", cmd("13"))
         assertTrue("OK" in cmd("ATSH 7E1"))
-        assertTrue(cmd("2182").startsWith("6182"))
+        assertTrue(cmd("21D9").startsWith("00D\r0:61D9"))
         assertTrue("OK" in cmd("ATSH 7E2"))
         assertEquals("NO DATA\r\r", cmd("2101"))
         assertEquals("?\r\r", cmd("21G1"))
@@ -297,7 +297,7 @@ class SessaoManualTest {
 
         assertTrue(resultado.completa)
         assertEquals(256, resultado.resultados.size)
-        val esperados = (EcuSimulada.IDS_MOTOR + setOf(0x01, 0x05, 0x0C, 0x13, 0x49, 0x4A)).map { "21%02X".format(it) }.toSet()
+        val esperados = (EcuSimulada.IDS_MOTOR + setOf(0x01, 0x05, 0x0C, 0x33, 0x42, 0xAD, 0x49, 0x4A)).map { "21%02X".format(it) }.toSet()
         assertEquals(esperados, resultado.positivas.map { it.comando }.toSet())
         assertTrue(resultado.resultados.filterNot { it.respondeu }.all { it.tipo == TipoRespostaPid.NEGATIVA && it.nrc == "31" })
 
@@ -324,6 +324,6 @@ class SessaoManualTest {
         assertTrue(leituras.size > pausadas)
         obd.iniciarSessaoManual()
         // De volta ao funcional 7DF: o serviço 21 só atende o endereço físico.
-        assertEquals("NO DATA\r\r", obd.enviarComandoManual("2113").getOrThrow().resposta)
+        assertEquals("NO DATA\r\r", obd.enviarComandoManual("21AD").getOrThrow().resposta)
     }
 }

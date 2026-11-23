@@ -64,6 +64,9 @@
     <string name="oficina_card_falhas_desc">Ler e apagar as falhas da injeção: confirmadas, pendentes, permanentes e Freeze Frame.</string>
     <string name="oficina_card_varredura">📡 Varredura de PIDs</string>
     <string name="oficina_card_varredura_desc">Busca de sensores extras: cruza cada resposta com o catálogo e mostra o que é cada PID.</string>
+    <string name="oficina_bicos_titulo">Bicos Injetores (1KD-FTV)</string>
+    <string name="oficina_bicos_descricao">Correção de vazão de cada cilindro (7E0 · 21AD). Verde: dentro de ±3,0 mm³/st.</string>
+    <string name="oficina_bicos_unidade">mm³/st</string>
     <string name="oficina_card_terminal">💻 Terminal ELM327</string>
     <string name="oficina_card_terminal_desc">Terminal manual para engenharia, com atalhos de um toque e respostas traduzidas.</string>
 

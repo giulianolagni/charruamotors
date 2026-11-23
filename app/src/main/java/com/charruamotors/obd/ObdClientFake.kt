@@ -421,20 +421,20 @@ class ObdClientFake(
 
     /**
      * Valores dos PIDs de montadora simulados: ATF segue o óleo; injetores com desvios fixos; pedal
-     * APP D/E (o E ~16 pontos acima); marcha pela velocidade com a alavanca em D; VSC atuando nas
-     * frenagens fortes.
+     * APP D/E (o E ~16 pontos acima); marcha pela velocidade (0xFF = parado) com a alavanca em D.
      */
     private fun leituraEstendida(map: Double, pedal: Double, aceleracao: Double): Map<String, Double> = mapOf(
         "TOYOTA_PEDAL_D" to pedal.arredondar(1),
         "TOYOTA_PEDAL_E" to (pedal + EcuSimulada.DESVIO_APP_E).coerceAtMost(100.0).arredondar(1),
         "TOYOTA_MARCHA" to EcuSimulada.marchaSimulada(velocidade).toDouble(),
         "TOYOTA_ALAVANCA" to EcuSimulada.ALAVANCA_D.toDouble(),
-        "TOYOTA_VSC" to if (aceleracao < FRENAGEM_FORTE_KMH_S) VSC_ATUANDO else EcuSimulada.VSC_NORMAL.toDouble(),
-        "TOYOTA_ATF" to (temperaturaOleo - 4.0 + random.nextDouble(-0.5, 0.5)).roundToInt().toDouble(),
-        "TOYOTA_INJ1" to (0.42 + random.nextDouble(-0.05, 0.05)).arredondar(2),
-        "TOYOTA_INJ2" to (-0.31 + random.nextDouble(-0.05, 0.05)).arredondar(2),
-        "TOYOTA_INJ3" to (1.85 + random.nextDouble(-0.05, 0.05)).arredondar(2), // injetor 3 desgastado
-        "TOYOTA_INJ4" to (-0.12 + random.nextDouble(-0.05, 0.05)).arredondar(2),
+        "TOYOTA_ATF_CAMBIO" to (temperaturaOleo - 4.0 + random.nextDouble(-0.5, 0.5)).roundToInt().toDouble(),
+        "TOYOTA_TENSAO_ECU" to (14.18 + random.nextDouble(-0.1, 0.1)).arredondar(2),
+        "TOYOTA_BARO" to PRESSAO_BAROMETRICA - 3.0, // 92 kPa, como na captura real da SW4
+        "TOYOTA_INJ1" to (0.45 + random.nextDouble(-0.02, 0.02)).arredondar(2),
+        "TOYOTA_INJ2" to (0.44 + random.nextDouble(-0.02, 0.02)).arredondar(2),
+        "TOYOTA_INJ3" to (0.66 + random.nextDouble(-0.02, 0.02)).arredondar(2),
+        "TOYOTA_INJ4" to (random.nextDouble(-0.02, 0.02)).arredondar(2),
         "VW_TEMP_OLEO" to temperaturaOleo.roundToInt().toDouble(),
         "VW_TURBO_REAL" to map.roundToInt().toDouble(),
         "VW_TURBO_ALVO" to (map + random.nextDouble(0.0, 3.0)).roundToInt().toDouble(),
@@ -459,10 +459,11 @@ class ObdClientFake(
          * demonstra que só entram no painel os PIDs a que a ECU responde (um Gol não tem DSG).
          */
         val SIMULADOS_ESTENDIDOS: Set<String> = setOf(
-            "TOYOTA_ATF", "TOYOTA_INJ1", "TOYOTA_INJ2", "TOYOTA_INJ3", "TOYOTA_INJ4",
-            // SW4: pedal (2149/214A), marcha (2130) e alavanca (21D9) no câmbio, VSC no 7B0. O 4x4 (7C0)
-            // e as variantes pelo motor (_ECM) ficam de fora: mostram "—" como num carro sem o módulo.
-            "TOYOTA_PEDAL_D", "TOYOTA_PEDAL_E", "TOYOTA_MARCHA", "TOYOTA_ALAVANCA", "TOYOTA_VSC",
+            "TOYOTA_ATF_CAMBIO", "TOYOTA_INJ1", "TOYOTA_INJ2", "TOYOTA_INJ3", "TOYOTA_INJ4",
+            // SW4 (1KD-FTV + A750F): motor 7E0 (pedal, tensão da ECU, barômetro, bicos) e câmbio 7E1
+            // (marcha, alavanca + ATF). O 4x4 (7C0), o VSC (7B0) e as variantes pelo motor (_ECM) ficam
+            // de fora: mostram "N/D" como na SW4 real, onde esses módulos não respondem.
+            "TOYOTA_PEDAL_D", "TOYOTA_PEDAL_E", "TOYOTA_TENSAO_ECU", "TOYOTA_BARO", "TOYOTA_MARCHA", "TOYOTA_ALAVANCA",
             "VW_TEMP_OLEO", "VW_TURBO_REAL", "VW_TURBO_ALVO",
         )
 

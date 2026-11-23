@@ -106,7 +106,7 @@ class Elm327CascataTest {
         "7E0:210B" to "610B4A\r\r", // 74 kPa
         "7E0:13" to "5300\r\r", // nenhuma falha
         "7E0:213C" to "NO DATA\r\r",
-        "7E0:2113" to "NO DATA\r\r",
+        "7E0:21AD" to "NO DATA\r\r",
         "7E0:03" to "NO DATA\r\r",
         "7E0:1800FF00" to "7F1811\r\r",
         "7E0:0902" to "NO DATA\r\r",
@@ -206,7 +206,7 @@ class Elm327CascataTest {
         assertEquals(listOf("ATDP", "ATRV", "ATSH7E0", "210C"), t.enviados.subList(i0100 + 1, i0100 + 5))
         assertEquals("ATSH 7E0 uma vez só", 1, t.enviados.count { it.startsWith("ATSH") })
         assertFalse("7F 01 11 é resposta da ECU: sem fallback de protocolo", t.enviados.any { it.startsWith("ATSP") && it != "ATSP0" })
-        val proibidos = listOf("0120", "0140", "01001", "0902", "2101", "213C", "2113", "03", "13", "1800FF00", "ATSH7E1", "2182")
+        val proibidos = listOf("0120", "0140", "01001", "0902", "2101", "213C", "21AD", "03", "13", "1800FF00", "ATSH7E1", "2182")
         proibidos.forEach { assertFalse("$it não é sondado no handshake", it in t.enviados) }
         assertFalse("o modo 21 respondeu: o 22 nem é tentado", t.enviados.any { it.startsWith("22") })
 
@@ -263,18 +263,18 @@ class Elm327CascataTest {
         val vin = obd.lerVin()
 
         assertTrue(perfil is ResultadoPerfil.Indisponivel)
-        // Só as requisições do motor (7E0 · 21) do perfil: injetores, pedal, ATF, marcha e alavanca pelo motor.
-        assertEquals("só o 7E0 · 21xx do perfil é compatível", listOf("2113", "2149", "214A", "2182", "2130", "21D9"), t.enviados)
+        // Só as requisições do motor (7E0 · 21) do perfil: bicos, tensão da ECU, barômetro, marcha, pedal, ATF e alavanca.
+        assertEquals("só o 7E0 · 21xx do perfil é compatível", listOf("21AD", "2142", "2133", "2130", "2149", "214A", "2182", "21D9"), t.enviados)
         assertTrue(vin.isFailure)
         assertTrue(vin.exceptionOrNull()!!.message!!, "Modo 21" in vin.exceptionOrNull()!!.message!!)
         assertTrue(obd.lerCodigosPendentes().isFailure)
         assertTrue(obd.lerFreezeFrame().isFailure)
-        assertEquals(listOf("2113", "2149", "214A", "2182", "2130", "21D9"), t.enviados) // VIN, 07 e 02 não gastaram comando
+        assertEquals(listOf("21AD", "2142", "2133", "2130", "2149", "214A", "2182", "21D9"), t.enviados) // VIN, 07 e 02 não gastaram comando
     }
 
     @Test
     fun `perfil Toyota que responde no modo 21 entra na telemetria`() = runTest {
-        val t = EcuSimulada(sw4().apply { put("7E0:2113", "6113807F806480008000\r\r") })
+        val t = EcuSimulada(sw4().apply { put("7E0:21AD", "61AD00E600E1015200000000\r\r") })
         val obd = cliente(t)
         obd.conectar(dispositivo, "Toyota")
 

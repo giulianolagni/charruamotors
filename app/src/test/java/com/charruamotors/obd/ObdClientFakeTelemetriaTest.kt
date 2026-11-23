@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.withIndex
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
@@ -99,10 +100,12 @@ class ObdClientFakeTelemetriaTest {
     fun `perfil Toyota simula ATF e correcao dos injetores`() = runTest {
         val obd = conectado()
         val r = obd.ativarPerfilFabricante("Toyota Hilux") as ResultadoPerfil.Ativo
-        assertEquals(10, r.pids.size) // ATF, 4 injetores, pedal D/E, marcha, alavanca e VSC (sem o 4x4 e os _ECM)
+        assertEquals(11, r.pids.size) // ATF (21D9), 4 bicos, pedal D/E, tensão da ECU, barômetro, marcha e alavanca (sem VSC, 4x4 e _ECM)
         val dados = obd.lerTelemetria(250, lentosPorVez = 50, ciclosPorLento = 1).take(1).toList().last()
-        assertTrue(dados["TOYOTA_INJ3"]!! > 1.5) // injetor com desvio simulado
-        assertTrue(dados["TOYOTA_ATF"]!! in 20.0..120.0)
+        assertEquals(0.66, dados["TOYOTA_INJ3"]!!, 0.05) // bicos como na captura real da SW4
+        assertTrue(dados["TOYOTA_ATF_CAMBIO"]!! in 20.0..120.0)
+        assertEquals(92.0, dados["TOYOTA_BARO"]!!, 0.0)
+        assertNull(dados["TOYOTA_VSC"])
     }
 
     @Test

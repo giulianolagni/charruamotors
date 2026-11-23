@@ -37,9 +37,11 @@ class ObdParserEstendidoTest {
     fun `resposta multi frame ISO-TP e unida`() {
         val inj1 = CatalogoTeste.estendido["TOYOTA_INJ1"]!!
         val inj3 = CatalogoTeste.estendido["TOYOTA_INJ3"]!!
-        val bruto = "00A\r0: 61 13 80 64 7F 9C\r1: 87 3A 80 00 00 00 00\r\r>"
-        assertEquals(0.1, ObdParser.parsePid(bruto, inj1).valor(), 1e-9) // 0x8064 − 32768 = 100 → 0,1 mm³
-        assertEquals(1.85, ObdParser.parsePid(bruto, inj3).valor(), 1e-9) // 0x873A − 32768 = 1850
+        val bruto = "00D\r0: 61 AD 00 E6 00 E1\r1: 01 52 00 00 00 00 00\r\r>"
+        assertEquals(230 / 512.0, ObdParser.parsePid(bruto, inj1).valor(), 1e-9) // 0x00E6 / 512 = +0,45
+        assertEquals(338 / 512.0, ObdParser.parsePid(bruto, inj3).valor(), 1e-9) // 0x0152 / 512 = +0,66
+        // signed short: 0xFF38 = −200 → −0,39 mm³/st
+        assertEquals(-200 / 512.0, ObdParser.parsePid("61 AD FF 38 00 00 00 00 00 00\r>", inj1).valor(), 1e-9)
     }
 
     @Test

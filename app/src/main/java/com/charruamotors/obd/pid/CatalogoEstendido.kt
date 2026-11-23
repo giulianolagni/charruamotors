@@ -28,6 +28,13 @@ data class RequisicaoEstendida(val cabecalho: String, val servico: String, val i
     /** Início da resposta positiva (ex.: `6182`, `62F40C`). */
     val prefixoResposta: String get() = "%02X".format(servico.toInt(16) + RESPOSTA_POSITIVA) + identificador
 
+    /**
+     * A resposta vem em vários quadros ISO-TP (`21D9` do câmbio A750F, `21AD` dos bicos injetores
+     * da 1KD-FTV): o sufixo `1` de resposta única faz o ELM327 descartar ou truncar a resposta,
+     * então essas requisições nunca o recebem.
+     */
+    val multiFrame: Boolean get() = servico == "21" && identificador in IDS_MULTI_FRAME_TOYOTA
+
     /** Início da resposta negativa (`7F21`, `7F22`). */
     val prefixoNegativa: String get() = "7F$servico"
 
@@ -35,6 +42,7 @@ data class RequisicaoEstendida(val cabecalho: String, val servico: String, val i
         private val REGEX_CABECALHO = Regex("^[0-7][0-9A-F]{2}$")
         private val TAMANHO_IDENTIFICADOR = mapOf("21" to 1, "22" to 2)
         private const val RESPOSTA_POSITIVA = 0x40
+        private val IDS_MULTI_FRAME_TOYOTA = setOf("D9", "AD")
 
         /** Cabeçalho funcional (broadcast) padrão do OBD2 em CAN de 11 bits. */
         const val CABECALHO_FUNCIONAL = "7DF"

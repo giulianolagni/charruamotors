@@ -1136,9 +1136,9 @@ class Elm327BluetoothClient(
     private fun comandoDe(definicao: DefinicaoPid): String =
         if (usaSufixoRespostaUnica && definicao.ehModo01) definicao.comando + SUFIXO_RESPOSTA_UNICA else definicao.comando
 
-    /** Requisição de montadora com o sufixo `1` (`210C1`), salvo as que voltaram incompletas com ele. */
+    /** Requisição de montadora com o sufixo `1` (`210C1`), salvo as multi-frame (`21D9`, `21AD`) e as que voltaram incompletas com ele. */
     private fun comandoDe(requisicao: RequisicaoEstendida): String =
-        if (usaSufixoRespostaUnica && requisicao !in requisicoesSemSufixo) {
+        if (usaSufixoRespostaUnica && !requisicao.multiFrame && requisicao !in requisicoesSemSufixo) {
             requisicao.comando + SUFIXO_RESPOSTA_UNICA
         } else {
             requisicao.comando

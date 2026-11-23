@@ -226,7 +226,7 @@ class TerminalObdViewModel(
     }
 
     /**
-     * Varredura multi-módulo (Varredura Completa SW4: 7E0 + 7E1 + 7B0 + 7C0): os cabeçalhos em
+     * Varredura multi-módulo (Varredura Completa SW4: 7E0 + 7E1): os cabeçalhos em
      * sequência, com a lista ao vivo acumulando todos e um relatório consolidado no fim.
      */
     fun iniciarVarreduraModulos(modulos: List<ConfigVarredura>) {

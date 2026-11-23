@@ -18,7 +18,13 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.databinding.FragmentOficinaBinding
+import com.charruamotors.databinding.ItemBicoInjetorBinding
 import com.charruamotors.databinding.ItemCardOficinaBinding
+import com.charruamotors.direcao.painel.SensorPainel
+import com.charruamotors.obd.DadosObd
+import com.charruamotors.oficina.bicos.AvaliacaoBicos
+import com.charruamotors.oficina.bicos.SituacaoBico
+import com.charruamotors.sistema.unidades.ConversorUnidades
 import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.diagnostico.DiagnosticoPagerAdapter
@@ -69,7 +75,8 @@ class OficinaFragment : Fragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                app.sessaoObd.estado.collect(::mostrarConexao)
+                launch { app.sessaoObd.estado.collect(::mostrarConexao) }
+                launch { app.sessaoObd.dados.collect { mostrarBicos(it) } }
             }
         }
     }
@@ -91,6 +98,29 @@ class OficinaFragment : Fragment() {
             card.textoRequisito.isVisible = !conectado
             card.root.alpha = if (conectado) 1f else ALFA_INDISPONIVEL
         }
+    }
+
+    /** Os 4 cilindros lado a lado: correção em mm³/st com a cor da situação (verde dentro de ±3,0). */
+    private fun mostrarBicos(dados: DadosObd?) {
+        val bicos = listOf(binding.bico1, binding.bico2, binding.bico3, binding.bico4)
+        val sensores = listOf(SensorPainel.BICO_1, SensorPainel.BICO_2, SensorPainel.BICO_3, SensorPainel.BICO_4)
+        bicos.forEachIndexed { i, bico ->
+            val valor = sensores[i].ler(dados)
+            preencherBico(bico, i + 1, sensores[i].texto(valor, ConversorUnidades.PADRAO), AvaliacaoBicos.avaliar(valor))
+        }
+    }
+
+    private fun preencherBico(bico: ItemBicoInjetorBinding, numero: Int, valor: String, situacao: SituacaoBico) {
+        val cor = when (situacao) {
+            SituacaoBico.OK -> R.color.status_ok
+            SituacaoBico.ATENCAO -> R.color.veredito_atencao
+            SituacaoBico.FORA -> R.color.veredito_ruim
+            SituacaoBico.SEM_LEITURA -> R.color.status_espera
+        }
+        bico.textoNome.text = "#$numero"
+        bico.textoValor.text = if (situacao == SituacaoBico.SEM_LEITURA) SensorPainel.NAO_DISPONIVEL else valor
+        bico.textoSituacao.text = situacao.texto
+        bico.textoSituacao.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), cor))
     }
 
     private fun abrirConectada(intent: () -> Intent) {

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Um bico injetor no bloco "Bicos Injetores (1KD-FTV)" da aba Oficina: nome, correção e situação. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight="1"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingVertical="@dimen/espaco_pequeno">
+
+    <TextView
+        android:id="@+id/texto_nome"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?attr/textAppearanceLabelLarge"
+        tools:text="#1" />
+
+    <TextView
+        android:id="@+id/texto_valor"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textAppearance="?attr/textAppearanceTitleMedium"
+        tools:text="+0,45" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/oficina_bicos_unidade"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="@color/texto_secundario" />
+
+    <TextView
+        android:id="@+id/texto_situacao"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/fundo_pilula_status"
+        android:minWidth="48dp"
+        android:gravity="center"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="2dp"
+        android:textAppearance="?attr/textAppearanceLabelMedium"
+        android:textColor="@android:color/white"
+        tools:text="OK" />
+</LinearLayout>

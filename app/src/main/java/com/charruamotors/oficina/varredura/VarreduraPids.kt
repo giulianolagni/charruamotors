@@ -109,10 +109,16 @@ object VarreduraPids {
     private val ABS_VSC_21 = ConfigVarredura("7B0", "21", 0x00, 0xFF)
     private val PAINEL_4WD_21 = ConfigVarredura("7C0", "21", 0x00, 0xFF)
 
-    /** Os 4 módulos da SW4 que interessam ao Painel: motor, câmbio, ABS/VSC e painel/4WD. */
+    /** Os módulos que respondem na SW4 1KD-FTV + A750F e alimentam o Painel: motor e câmbio. */
     val PRESET_COMPLETA_SW4 = PresetVarredura(
-        "Varredura Completa SW4 (7E0 + 7E1 + 7B0 + 7C0)",
-        listOf(MOTOR_21, CAMBIO_21, ABS_VSC_21, PAINEL_4WD_21),
+        "Varredura Completa SW4 (7E0 + 7E1)",
+        listOf(MOTOR_21, CAMBIO_21),
+    )
+
+    /** ABS/VSC e painel/4WD não responderam na SW4: ficam como varredura manual opcional. */
+    val PRESET_CHASSI_SW4 = PresetVarredura(
+        "Chassi SW4 — opcional (7B0 + 7C0)",
+        listOf(ABS_VSC_21, PAINEL_4WD_21),
     )
 
     val PRESETS = listOf(
@@ -121,6 +127,7 @@ object VarreduraPids {
         PresetVarredura("Toyota ABS / VSC / Estabilidade (7B0 · 2100–21FF)", ABS_VSC_21),
         PresetVarredura("Toyota Painel / 4WD / Carroceria (7C0 · 2100–21FF)", PAINEL_4WD_21),
         PRESET_COMPLETA_SW4,
+        PRESET_CHASSI_SW4,
         PresetVarredura("OBD2 padrão (7DF · 0100–01FF)", ConfigVarredura("7DF", "01", 0x00, 0xFF)),
         PresetVarredura("UDS motor (7E0 · 22F400–22F4FF)", ConfigVarredura("7E0", "22", 0xF400, 0xF4FF)),
     )

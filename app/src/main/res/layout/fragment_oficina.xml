@@ -81,6 +81,59 @@
             android:id="@+id/card_terminal"
             layout="@layout/item_card_oficina" />
 
+        <!-- Correção dos 4 bicos injetores (Toyota 1KD-FTV): verde/amarelo/vermelho por cilindro -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_bicos"
+            style="@style/Widget.Material3.CardView.Elevated"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_medio"
+            app:cardCornerRadius="20dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/espaco_medio">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/oficina_bicos_titulo"
+                    android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/oficina_bicos_descricao"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="@color/texto_secundario" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:orientation="horizontal">
+
+                    <include
+                        android:id="@+id/bico_1"
+                        layout="@layout/item_bico_injetor" />
+
+                    <include
+                        android:id="@+id/bico_2"
+                        layout="@layout/item_bico_injetor" />
+
+                    <include
+                        android:id="@+id/bico_3"
+                        layout="@layout/item_bico_injetor" />
+
+                    <include
+                        android:id="@+id/bico_4"
+                        layout="@layout/item_bico_injetor" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

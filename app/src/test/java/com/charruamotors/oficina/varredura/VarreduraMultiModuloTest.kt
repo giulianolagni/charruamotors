@@ -15,11 +15,12 @@ import org.junit.Test
 import java.time.LocalDateTime
 import kotlin.random.Random
 
-/** Presets 7B0/7C0, Varredura Completa SW4 (7E0 + 7E1 + 7B0 + 7C0) e o relatório consolidado. */
+/** Presets 7B0/7C0 (opcionais), Varredura Completa SW4 (7E0 + 7E1) e o relatório consolidado. */
 class VarreduraMultiModuloTest {
 
     private val identificador = IdentificadorPids.de(CatalogoTeste.padrao, CatalogoTeste.estendido, CatalogoTeste.cascata)
     private val quando = LocalDateTime.of(2026, 11, 23, 14, 30)
+    private val TODOS_OS_MODULOS = VarreduraPids.PRESET_COMPLETA_SW4.modulos + VarreduraPids.PRESET_CHASSI_SW4.modulos
 
     private suspend fun fakeConectado(): ObdClientFake {
         val obd = ObdClientFake(random = Random(11), latenciaMs = 0, latenciaComandoMs = 0)
@@ -33,9 +34,13 @@ class VarreduraMultiModuloTest {
         val nomes = VarreduraPids.PRESETS.map { it.nome }
         assertTrue("Toyota ABS / VSC / Estabilidade (7B0 · 2100–21FF)" in nomes)
         assertTrue("Toyota Painel / 4WD / Carroceria (7C0 · 2100–21FF)" in nomes)
-        val completa = VarreduraPids.PRESETS.single { it.multiModulo }
-        assertEquals("Varredura Completa SW4 (7E0 + 7E1 + 7B0 + 7C0)", completa.nome)
-        assertEquals(listOf("7E0", "7E1", "7B0", "7C0"), completa.modulos.map { it.cabecalho })
+        val completa = VarreduraPids.PRESET_COMPLETA_SW4
+        assertEquals("Varredura Completa SW4 (7E0 + 7E1)", completa.nome)
+        assertEquals(listOf("7E0", "7E1"), completa.modulos.map { it.cabecalho })
+        // 7B0 e 7C0 não respondem na SW4: preset manual opcional, fora da varredura completa.
+        val chassi = VarreduraPids.PRESET_CHASSI_SW4
+        assertEquals(listOf("7B0", "7C0"), chassi.modulos.map { it.cabecalho })
+        assertEquals(listOf(completa, chassi), VarreduraPids.PRESETS.filter { it.multiModulo })
         assertTrue(completa.modulos.all { it.servico == "21" && it.inicio == 0x00 && it.fim == 0xFF })
         assertTrue("7B0" in VarreduraPids.CABECALHOS && "7C0" in VarreduraPids.CABECALHOS)
         assertEquals("ABS / VSC / Estabilidade", VarreduraPids.nomeModulo("7b0"))
@@ -81,11 +86,11 @@ class VarreduraMultiModuloTest {
     }
 
     @Test
-    fun `varredura completa no simulador encontra os 4 modulos da SW4`() = runTest {
+    fun `varredura dos 4 modulos no simulador encontra motor, cambio, ABS e painel`() = runTest {
         val obd = fakeConectado()
         val etapas = mutableListOf<String>()
         val multi = VarreduraPids.executarModulos(
-            VarreduraPids.PRESET_COMPLETA_SW4.modulos,
+            TODOS_OS_MODULOS,
             enviar = { obd.enviarComandoManual(it, registrar = false) },
             aoIniciarModulo = { i, c -> etapas += "${i + 1}:${c.cabecalho}" },
         )
@@ -97,8 +102,8 @@ class VarreduraMultiModuloTest {
         assertEquals(4 * 256, multi.consultados)
 
         fun positivos(cabecalho: String) = multi.modulos.single { it.config.cabecalho == cabecalho }.positivas.map { it.comando }.toSet()
-        assertTrue(positivos("7E0").containsAll(listOf("2149", "214A", "2113")))
-        assertTrue(positivos("7E1").containsAll(listOf("2182", "2130", "21D9")))
+        assertTrue(positivos("7E0").containsAll(listOf("2149", "214A", "21AD", "2142", "2133")))
+        assertTrue(positivos("7E1").containsAll(listOf("2130", "21D9")))
         assertEquals((EcuSimulada.IDS_ABS + setOf(0x01, 0x03)).map { "21%02X".format(it) }.toSet(), positivos("7B0"))
         assertEquals((EcuSimulada.IDS_PAINEL + setOf(0x01)).map { "21%02X".format(it) }.toSet(), positivos("7C0"))
         // Ao fim, o simulador está de volta ao filtro padrão (o ATCRA foi desfeito).
@@ -137,7 +142,7 @@ class VarreduraMultiModuloTest {
     fun `relatorio consolidado traz uma secao por modulo com os bytes brutos`() = runTest {
         val obd = fakeConectado()
         val multi = VarreduraPids.executarModulos(
-            VarreduraPids.PRESET_COMPLETA_SW4.modulos,
+            TODOS_OS_MODULOS,
             enviar = { obd.enviarComandoManual(it, registrar = false) },
         )
         val identificacoes = multi.modulos.associate { m ->
@@ -158,7 +163,7 @@ class VarreduraMultiModuloTest {
         assertTrue(texto.contains("=== 7B0 · ABS / VSC / Estabilidade (7B0 · 2100–21FF) ==="))
         // Bytes brutos e cruzamento com o catálogo: pedal no motor, alavanca no câmbio, VSC no ABS, 4x4 no painel.
         assertTrue(texto.contains("2149 → 61 49"))
-        assertTrue(Regex("21D9 → 61 D9 03 00 .*= Posição da alavanca do câmbio.*: D").containsMatchIn(texto))
+        assertTrue(Regex("21D9 → 61 D9 00 00 00 04 .*= Posição da alavanca do câmbio.*: D").containsMatchIn(texto))
         assertTrue(Regex("2103 → 61 03 00 00 00 02 .*= VSC / controle de estabilidade: Normal").containsMatchIn(texto))
         assertTrue(Regex("2101 → 61 01 00 00 00 00 .*= Tração 4x4 / bloqueio do diferencial: 4x2 \\(H2\\)").containsMatchIn(texto))
         assertTrue(texto.contains("Respostas negativas: 7F 21 31"))
@@ -183,12 +188,12 @@ class VarreduraMultiModuloTest {
 
     @Test
     fun `identificacao guarda o cabecalho e o rotulo do estado`() {
-        val r = ResultadoPid("21D9", TipoRespostaPid.POSITIVA, bytes = listOf(0x61, 0xD9, 0x05, 0x00))
+        val r = ResultadoPid("21D9", TipoRespostaPid.POSITIVA, bytes = listOf(0x61, 0xD9, 0x00, 0x00, 0x00, 0x04, 0x42, 0xE0))
         val id = identificador.identificar(r, "7e1")
         assertEquals("7E1", id.cabecalho)
         assertEquals(StatusIdentificacao.IDENTIFICADO, id.status)
-        assertEquals("2", id.rotulo)
-        assertEquals("2", id.valorTexto)
+        assertEquals("D", id.rotulo)
+        assertEquals("D", id.valorTexto)
         assertEquals("7E0", identificador.identificar(r.copy(tipo = TipoRespostaPid.SEM_DADOS, bytes = emptyList()), "7E0").cabecalho)
     }
 

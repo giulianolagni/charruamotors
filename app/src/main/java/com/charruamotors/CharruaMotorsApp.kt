@@ -18,7 +18,18 @@ import com.charruamotors.obd.dtc.CatalogoDtc
 import com.charruamotors.obd.pid.CatalogoCascata
 import com.charruamotors.obd.pid.CatalogoEstendido
 import com.charruamotors.obd.pid.CatalogoPids
+import com.charruamotors.obd.sessao.DestinoLogsDownloads
+import com.charruamotors.obd.sessao.ObdSessaoService
+import com.charruamotors.obd.sessao.OrigemSessao
+import com.charruamotors.obd.sessao.PreferenciasAutoConexao
+import com.charruamotors.obd.sessao.SessaoObd
+import com.charruamotors.obd.sessao.VeiculoSessao
 import com.charruamotors.ui.util.ExportadorCsv
+import com.charruamotors.ui.util.PermissoesBluetooth
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import java.io.File
 
 /**
  * Classe Application: criada uma única vez quando o processo do app inicia,
@@ -50,12 +61,12 @@ class CharruaMotorsApp : Application() {
     // ---------------------------------------------------------------- OBD2
 
     /**
-     * Modo atual do scanner. Para alternar facilmente: troque o valor inicial abaixo
-     * (SIMULADO no emulador/apresentação, BLUETOOTH com o scanner ELM327 real) ou chame
-     * [selecionarModoObd] — de preferência com o scanner desconectado.
+     * Modo atual do scanner, guardado na [sessaoObd] (SIMULADO no emulador/apresentação, BLUETOOTH
+     * com o ELM327 real; a sessão automática do carro troca para BLUETOOTH sozinha). Só muda com o
+     * scanner desconectado — ver [selecionarModoObd].
      */
-    var modoObd: ModoObd = ModoObd.SIMULADO
-        private set
+    val modoObd: ModoObd
+        get() = sessaoObd.modo.value
 
     /** Catálogo de PIDs (fórmulas, unidades, faixas), lido uma vez de `assets/pids_padrao.json`. */
     val catalogoPids: CatalogoPids by lazy {
@@ -121,7 +132,34 @@ class CharruaMotorsApp : Application() {
         ModoObd.BLUETOOTH -> obdBluetooth
     }
 
-    fun selecionarModoObd(modo: ModoObd) {
-        modoObd = modo
+    fun selecionarModoObd(modo: ModoObd): Boolean = sessaoObd.selecionarModo(modo)
+
+    // ---------------------------------------------------------------- caixa-preta
+
+    /** Auto-conexão pelo Bluetooth do carro, logs automáticos e vínculos (scanner e veículo). */
+    val preferenciasAutoConexao: PreferenciasAutoConexao by lazy { PreferenciasAutoConexao(this) }
+
+    /**
+     * Sessão OBD2 única do app (conexão, polling e logs automáticos), compartilhada pela aba OBD2,
+     * pelo HUD flutuante e pelo `ObdSessaoService` em primeiro plano. Ver [SessaoObd].
+     */
+    val sessaoObd: SessaoObd by lazy {
+        SessaoObd(
+            clientePorModo = ::obdClientDe,
+            modoInicial = ModoObd.SIMULADO,
+            catalogoPids = catalogoPids,
+            catalogoDtc = catalogoDtc,
+            config = { preferenciasAutoConexao.config.value },
+            buscarVeiculo = { id -> veiculoRepository.buscarPorId(id)?.let(VeiculoSessao::de) },
+            destinoLogs = DestinoLogsDownloads(this),
+            pastaTemporaria = File(cacheDir, "sessoes_obd"),
+            escopo = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+            telemetria = telemetriaCompartilhada,
+            aoAtivar = { origem ->
+                // A automática já nasce dentro do serviço. No modo simulado sem a permissão de
+                // Bluetooth (emulador), o tipo connectedDevice do Android 14+ recusaria o serviço.
+                if (origem == OrigemSessao.MANUAL && PermissoesBluetooth.concedidas(this)) ObdSessaoService.iniciar(this)
+            },
+        )
     }
 }

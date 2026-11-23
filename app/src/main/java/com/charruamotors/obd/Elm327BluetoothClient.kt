@@ -215,6 +215,10 @@ class Elm327BluetoothClient(
 
     override fun registroComunicacao(): List<EntradaRegistro> = registro.entradas()
 
+    override fun definirLogCompleto(ativo: Boolean) {
+        registro.logCompleto = ativo
+    }
+
     override fun observarRegistro(ouvinte: ((EntradaRegistro) -> Unit)?) {
         registro.ouvinte = ouvinte
     }
@@ -1313,6 +1317,7 @@ class Elm327BluetoothClient(
         val cabecalho = cabecalhoDe(requisicao)
         val bruto = enviar(comando, timeoutComandoMs, cabecalho, registrar = false)
         val resultados = grupo.associateWith { ObdParser.parsePid(bruto, it, comando) }
+        registrarDecodificados(comando, resultados)
         if (comando == requisicao.comando || requisicao in requisicoesConferidas) return bruto to resultados
         val erro = ObdParser.erroElm(bruto)
         val suspeita = (erro == null || erro == "?") &&
@@ -1390,6 +1395,19 @@ class Elm327BluetoothClient(
         }
     }
 
+    /** Log completo: o valor decodificado de cada PID ao lado da resposta bruta do [comando]. */
+    private fun registrarDecodificados(comando: String, resultados: Map<DefinicaoPid, RespostaObd<Double>>) {
+        if (!registro.logCompleto) return
+        for ((def, r) in resultados) {
+            val texto = when (r) {
+                is RespostaObd.Ok -> "${r.valor} ${def.unidade}".trim()
+                RespostaObd.SemDados -> "NO DATA"
+                else -> "sem valor válido"
+            }
+            registro.decodificado("$comando ${def.nome} = $texto")
+        }
+    }
+
     /** Resposta de um PID e a mensagem de erro do ELM327, se houve. */
     private class Lido(val resposta: RespostaObd<Double>, val erro: String?)
 
@@ -1398,6 +1416,7 @@ class Elm327BluetoothClient(
         val comando = comandoDe(definicao)
         val bruto = enviar(comando, registrar = false)
         val r = ObdParser.parsePid(bruto, definicao, comando)
+        registrarDecodificados(comando, mapOf(definicao to r))
         if (r == RespostaObd.ComandoInvalido && comando != definicao.comando) {
             // Recusou o sufixo: confere sem ele. Só desliga o sufixo se o comando puro funcionar
             // (um "?" isolado pode ser resíduo de um comando interrompido, não falta de suporte).
@@ -1544,7 +1563,7 @@ class Elm327BluetoothClient(
         }
         timeoutsSeguidos = 0
         val erro = ObdParser.erroElm(resposta)
-        if (registrar || erro != null) registro.comando(comando, resposta, duracao())
+        if (registrar || erro != null) registro.comando(comando, resposta, duracao()) else registro.comandoSomenteLog(comando, resposta, duracao())
         if (erro == "STOPPED" || erro == "BUFFER FULL") ativarRespiroSeguro("$erro no $comando")
         return resposta
     }

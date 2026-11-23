@@ -89,10 +89,12 @@ class ClusterPainelActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         aberto = true
+        app.sessaoObd.registrarEvento("Cluster horizontal ABERTO")
     }
 
     override fun onStop() {
         aberto = false
+        app.sessaoObd.registrarEvento("Cluster horizontal FECHADO")
         super.onStop()
     }
 
@@ -170,6 +172,7 @@ class ClusterPainelActivity : AppCompatActivity() {
     private fun trocarSensor(indice: Int) {
         val atual = ClusterPainel.sensorDaBolinha(indice, escolhidos[indice], dados)
         escolhidos[indice] = ClusterPainel.proximo(atual, dados)
+        app.sessaoObd.registrarEvento("Cluster: bolinha ${indice + 1} trocou de ${atual.titulo} para ${escolhidos[indice]?.titulo}")
         salvarEscolhas()
         desenhar(conversor)
     }

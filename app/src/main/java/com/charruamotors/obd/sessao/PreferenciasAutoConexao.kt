@@ -22,6 +22,8 @@ class PreferenciasAutoConexao(context: Context) {
 
     fun definirGravarLogs(ativo: Boolean) = atualizar { it.copy(gravarLogsAutomaticos = ativo) }
 
+    fun definirLogCompleto(ativo: Boolean) = atualizar { it.copy(logCompletoTrafego = ativo) }
+
     /** Bluetooth do carro: [endereco] null = reconhecer só pelo nome. */
     fun definirGatilho(nome: String, endereco: String?) = atualizar { it.copy(gatilhoNome = nome.trim(), gatilhoEndereco = endereco) }
 
@@ -55,6 +57,7 @@ class PreferenciasAutoConexao(context: Context) {
         prefs.edit {
             putBoolean(AUTO, nova.autoConexaoAtiva)
             putBoolean(LOGS, nova.gravarLogsAutomaticos)
+            putBoolean(LOG_COMPLETO, nova.logCompletoTrafego)
             putString(GATILHO_NOME, nova.gatilhoNome)
             putString(GATILHO_ENDERECO, nova.gatilhoEndereco)
             putString(SCANNER_NOME, nova.scanner?.nome)
@@ -71,6 +74,7 @@ class PreferenciasAutoConexao(context: Context) {
         return ConfigAutoConexao(
             autoConexaoAtiva = prefs.getBoolean(AUTO, padrao.autoConexaoAtiva),
             gravarLogsAutomaticos = prefs.getBoolean(LOGS, padrao.gravarLogsAutomaticos),
+            logCompletoTrafego = prefs.getBoolean(LOG_COMPLETO, padrao.logCompletoTrafego),
             gatilhoNome = prefs.getString(GATILHO_NOME, null)?.takeIf { it.isNotBlank() } ?: padrao.gatilhoNome,
             gatilhoEndereco = prefs.getString(GATILHO_ENDERECO, null),
             scanner = scannerEndereco?.let { DispositivoObd(prefs.getString(SCANNER_NOME, null) ?: it, it) },
@@ -83,6 +87,7 @@ class PreferenciasAutoConexao(context: Context) {
         const val ARQUIVO = "auto_conexao"
         const val AUTO = "auto_conexao_ativa"
         const val LOGS = "gravar_logs_automaticos"
+        const val LOG_COMPLETO = "log_completo_trafego"
         const val GATILHO_NOME = "gatilho_nome"
         const val GATILHO_ENDERECO = "gatilho_endereco"
         const val SCANNER_NOME = "scanner_nome"

@@ -92,6 +92,13 @@
                         android:layout_height="wrap_content"
                         android:text="@string/config_logs" />
 
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switch_log_completo"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/config_log_completo"
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
+
                     <include
                         android:id="@+id/linha_gatilho"
                         layout="@layout/item_config_valor" />

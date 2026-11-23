@@ -50,6 +50,7 @@ class EstatisticasViagem(
     val temperaturaMotor = Extremos()
     val rail = Extremos()
     val tensao = Extremos()
+    val temperaturaAtf = Extremos()
 
     fun registrar(dados: ValoresSensores, instanteMs: Long? = null) {
         amostras++
@@ -62,8 +63,12 @@ class EstatisticasViagem(
         temperaturaMotor.registrar(dados[Pids.TEMPERATURA_MOTOR])
         rail.registrar(dados[Pids.PRESSAO_RAIL])
         tensao.registrar(dados[Pids.TENSAO_BATERIA])
+        temperaturaAtf.registrar(COMANDOS_ATF.firstNotNullOfOrNull { c -> dados[c]?.takeIf { it.isFinite() } })
     }
 }
+
+/** Chaves do ATF (câmbio `7E1` ou espelho no motor `7E0`), na ordem de preferência. */
+private val COMANDOS_ATF = listOf("TOYOTA_ATF_CAMBIO", "TOYOTA_ATF", "TOYOTA_ATF_ECM")
 
 /** Dados fixos do cabeçalho do relatório, conhecidos no início da sessão. */
 data class CabecalhoSessao(
@@ -192,13 +197,14 @@ object RelatorioSessaoTxt {
             campo("Pico de MAP/Turbo", e.map.maximo?.let(::descreverMap) ?: "—")
             campo("Temperatura máx. do motor", e.temperaturaMotor.maximo?.let { "${numero(it, 0)} °C" } ?: "—")
             campo("Pressão máx. Common Rail", e.rail.maximo?.let { "${numero(it, 0)} kPa (${numero(it / 100, 0)} bar)" } ?: "—")
+            campo("Temp. máx. do câmbio (ATF)", e.temperaturaAtf.maximo?.let { "${numero(it, 0)} °C" } ?: "—")
             val tMin = e.tensao.minimo
             val tMax = e.tensao.maximo
             campo("Tensão mín. / máx.", if (tMin != null && tMax != null) "${numero(tMin, 1)} V / ${numero(tMax, 1)} V" else "—")
             val viagem = e.consumo
             campo("Distância percorrida", if (viagem.distanciaKm > 0.0) "${numero(viagem.distanciaKm, 1)} km" else "—")
-            campo("Consumo médio", viagem.mediaKmPorLitro?.let { "${numero(it, 1)} km/L" } ?: "—")
-            campo("Combustível estimado", if (viagem.litros > 0.0) "${numero(viagem.litros, 2)} L (via MAF)" else "—")
+            campo("Consumo médio (km/L)", viagem.mediaKmPorLitro?.let { "${numero(it, 1)} km/L" } ?: "—")
+            campo("Combustível estimado (L)", if (viagem.litros > 0.0) "${numero(viagem.litros, 2)} L (via MAF)" else "—")
         }
         saida.append('\n').append(LINHA).append('\n')
         saida.append(TITULO_LOG_BRUTO).append('\n')

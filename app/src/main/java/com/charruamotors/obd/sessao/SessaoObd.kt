@@ -334,6 +334,7 @@ class SessaoObd(
             if (config().gravarLogsAutomaticos) {
                 g = withContext(io) { criarGravador(dispositivo, veiculo, origem, gatilho, inicioMs) }
                 gravador = g
+                cli.definirLogCompleto(config().logCompletoTrafego)
                 cli.observarRegistro(g::registrarEntrada)
             }
             _sessao.update { it.copy(veiculo = veiculo?.nomeCurto, gravandoLogs = g != null) }
@@ -435,6 +436,7 @@ class SessaoObd(
         if (g != null) {
             g.evento("Encerrada: $motivo", relogio())
             cli.observarRegistro(null)
+            cli.definirLogCompleto(false)
             val logs = withContext(io) { g.finalizar(relogio(), conectou, motivo) }
             _eventos.tryEmit(EventoSessao.LogsSalvos(logs))
         }

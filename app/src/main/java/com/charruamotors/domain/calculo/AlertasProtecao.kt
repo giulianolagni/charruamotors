@@ -99,9 +99,22 @@ class CentralAlertas(
     @Volatile
     var limites: LimitesProtecao = LimitesProtecao()
 
+    /** Chamado uma vez a cada alerta que *entra* em vigor (para o log da sessão); rearma ao sair. */
+    @Volatile
+    var aoEntrarEmAlerta: ((AlertaProtecao) -> Unit)? = null
+    private var tiposAtivos: Set<TipoAlertaProtecao> = emptySet()
+
+    @Synchronized
+    private fun registrarEntradas(alertas: List<AlertaProtecao>) {
+        val agora = alertas.map { it.tipo }.toSet()
+        alertas.filter { it.tipo !in tiposAtivos }.forEach { a -> aoEntrarEmAlerta?.let { runCatching { it(a) } } }
+        tiposAtivos = agora
+    }
+
     /** Alertas ativos em [dados]; toca o [som] quando algum entra em alerta (ou persiste além da repetição). */
     fun processar(dados: ValoresSensores?): List<AlertaProtecao> {
         val alertas = AlertasProtecao.avaliar(dados, limites)
+        registrarEntradas(alertas)
         if (disparador.avaliar(alertas.map { it.tipo }, relogio()).isNotEmpty()) som()
         return alertas
     }

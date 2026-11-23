@@ -136,14 +136,16 @@ enum class SensorPainel(
     ),
     MARCHA_ALAVANCA(
         "TOYOTA_ALAVANCA", "Alavanca (P/R/D)", "ALAVANCA", "", 0,
-        mapOf("" to EscalaGauge(0f, 6f, null, 6, 1)),
+        mapOf("" to EscalaGauge(0f, 7f, null, 7, 1)),
+        // O 7E1 · 21D9 (bytes C/D) vem primeiro: o 7E0 · 21D9 devolve sempre 00 (P) na SW4 2013.
         alternativos = listOf("TOYOTA_ALAVANCA_ECM"),
-        rotulos = mapOf(0 to "P", 1 to "R", 2 to "N", 3 to "D", 4 to "3", 5 to "2", 6 to "L"),
+        rotulos = mapOf(0 to "P", 1 to "R", 2 to "N", 3 to "D", 4 to "3", 5 to "2", 6 to "L", 7 to "P/N"),
     ),
     MARCHA_ATUAL(
         "TOYOTA_MARCHA", "Marcha (1ª–5ª)", "MARCHA", "", 0,
         mapOf("" to EscalaGauge(0f, 6f, null, 6, 1)),
-        rotulos = mapOf(0 to "N", 1 to "1ª", 2 to "2ª", 3 to "3ª", 4 to "4ª", 5 to "5ª", 255 to "Parado"),
+        // 1..5 do 2130 ou estimada pela razão rpm/velocidade (CambioA750f); 254 = R, 255 = parado.
+        rotulos = mapOf(0 to "N", 1 to "1ª", 2 to "2ª", 3 to "3ª", 4 to "4ª", 5 to "5ª", 254 to "R", 255 to "Parado"),
     ),
     TRACAO_4X4(
         "TOYOTA_4WD", "Tração 4x4", "4X4", "", 0,

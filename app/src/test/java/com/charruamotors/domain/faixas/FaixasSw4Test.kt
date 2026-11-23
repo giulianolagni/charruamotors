@@ -31,7 +31,8 @@ class FaixasSw4Test {
         assertEquals(13.4 to 14.6, faixa(ParametroFaixa.TENSAO).let { it.min to it.max })
         assertEquals(280.0 to 1_800.0, faixa(ParametroFaixa.RAIL).let { it.min to it.max })
         assertEquals(280.0 to 380.0, faixa(ParametroFaixa.RAIL_LENTA).let { it.min to it.max })
-        assertEquals(95.0 to 215.0, faixa(ParametroFaixa.MAP_TURBO).let { it.min to it.max })
+        // 60 kPa (v2.1.1): em altitude a marcha lenta fica em 73–75 kPa e não pode acender o vermelho.
+        assertEquals(60.0 to 215.0, faixa(ParametroFaixa.MAP_TURBO).let { it.min to it.max })
         assertEquals(-3.0 to 3.0, faixa(ParametroFaixa.BICOS).let { it.min to it.max })
         assertEquals(9, sw4.faixas.size)
     }
@@ -43,7 +44,7 @@ class FaixasSw4Test {
         assertEquals("13,4 – 14,6 V", faixa(ParametroFaixa.TENSAO).texto)
         assertEquals("280 – 1.800 bar", faixa(ParametroFaixa.RAIL).texto)
         assertEquals("-3,00 a +3,00 mm³/st", faixa(ParametroFaixa.BICOS).texto)
-        assertTrue(sw4.linhasFicha().contains("Pressão Turbo (MAP): 95 – 215 kPa"))
+        assertTrue(sw4.linhasFicha().contains("Pressão Turbo (MAP): 60 – 215 kPa"))
     }
 
     @Test

@@ -1,7 +1,9 @@
 package com.charruamotors.obd.sessao
 
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
+import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.calculo.EstequiometriaFlex
+import com.charruamotors.domain.calculo.EstimadorCambioA750f
 import com.charruamotors.domain.calculo.ParametrosMotor
 import com.charruamotors.domain.faixas.FaixasVeiculo
 import com.charruamotors.domain.model.EstadoConexaoObd
@@ -224,6 +226,9 @@ class SessaoObd(
     /** Combustível do veículo da sessão (Auto Flex por padrão): decide a estequiometria da A/F real. */
     @Volatile private var combustivelAtual: TipoCombustivel? = null
 
+    /** Alavanca P/N → P ou N e marcha estimada da A750F (SW4), com a memória do último movimento. */
+    private val estimadorCambio = EstimadorCambioA750f()
+
     // ------------------------------------------------------------------ modo
 
     /** Só troca de modo sem sessão ativa e com o scanner desconectado. */
@@ -329,12 +334,14 @@ class SessaoObd(
 
     /**
      * Colunas de log que não vêm da ECU: a velocidade GPS (quando ativa) e a relação A/F real
-     * calculada (motores de ciclo Otto com λ suportado: `0124`/`0134` ou `0144`).
+     * calculada (motores de ciclo Otto com λ suportado: `0124`/`0134` ou `0144`) e a marcha estimada
+     * da A750F (alavanca do `7E1 · 21D9` lida e o `2130` fora do polling).
      */
     fun colunasDoAparelho(suportados: Set<String> = emptySet()): List<DefinicaoPid> = buildList {
         if (gpsAtivo()) add(DefinicaoPid.VELOCIDADE_GPS)
         val temLambda = (Pids.COMANDOS_LAMBDA_MEDIDO + Pids.LAMBDA_COMANDADO).any { it in suportados }
         if (temLambda && combustivelAtual != TipoCombustivel.DIESEL) add(DefinicaoPid.RELACAO_AF_REAL)
+        if (CambioA750f.CHAVE_ALAVANCA in suportados && CambioA750f.CHAVE_MARCHA !in suportados) add(DefinicaoPid.MARCHA_ESTIMADA_A750F)
     }
 
     // ------------------------------------------------------------------ execução
@@ -355,6 +362,7 @@ class SessaoObd(
             val veiculo = if (veiculoId > 0) runCatching { buscarVeiculo(veiculoId) }.getOrNull() else null
             marcaAtual = veiculo?.marca
             combustivelAtual = veiculo?.combustivel
+            estimadorCambio.reiniciar()
             if (config().gravarLogsAutomaticos) {
                 g = withContext(io) { criarGravador(dispositivo, veiculo, origem, gatilho, inicioMs) }
                 gravador = g
@@ -428,7 +436,7 @@ class SessaoObd(
     }
 
     private fun receberAmostra(daEcu: DadosObd, g: GravadorLogsSessao?) {
-        val dados = comCalculados(comVelocidadeGps(daEcu), combustivelAtual)
+        val dados = estimadorCambio.aplicar(comCalculados(comVelocidadeGps(daEcu), combustivelAtual), relogio())
         _dados.value = dados
         _amostras.tryEmit(dados)
         telemetria.publicar(dados, conectado = true)

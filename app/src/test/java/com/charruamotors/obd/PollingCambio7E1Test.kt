@@ -81,9 +81,9 @@ class PollingCambio7E1Test {
         "7E0:2130" to "6130 23\r\r", // 7E0 2130 = contador de aquecimentos (35): nunca é marcha
     ).apply {
         if (comCambio) {
-            // 21D9 (11 bytes): alavanca em D (bit 2 de b3) e ATF em b4:b5; 2130: 4ª marcha.
+            // 21D9 (11 bytes): alavanca em D (C = 00, D = 04) e ATF em b4:b5; 2130: 0xFF fixo (log real).
             put("7E1:21D9", "61D90000000442E000000000\r\r")
-            put("7E1:2130", "6130040000\r\r")
+            put("7E1:2130", "6130FF\r\r")
         }
     }
 
@@ -109,15 +109,18 @@ class PollingCambio7E1Test {
         assertTrue(perfil is ResultadoPerfil.Ativo)
         val i = t.enviados.indexOf("ATSH7E1")
         assertTrue(t.enviados.toString(), i >= 0)
-        assertEquals(listOf("ATSH7E1", "ATCRA7E9", "21D9", "2130"), t.enviados.subList(i, i + 4))
+        // O 2130 ficou fora (0xFF fixo na SW4 2013): só o 21D9 é sondado.
+        assertEquals(listOf("ATSH7E1", "ATCRA7E9", "21D9"), t.enviados.subList(i, i + 3))
+        assertTrue(t.enviados.none { it == "2130" })
         // Logo depois da visita: ATSH 7E0 e o ATCRA padrão (sem endereço).
-        assertEquals(listOf("ATSH7E0", "ATCRA"), t.enviados.subList(i + 4, i + 6))
+        assertEquals(listOf("ATSH7E0", "ATCRA"), t.enviados.subList(i + 3, i + 5))
         assertEquals("7E0", t.cabecalho)
         assertNull(t.filtro)
         assertTrue(t.enviados.none { it == "21D91" || it == "21AD1" })
 
         val suportados = obd.pidsSuportados.value
-        assertTrue(setOf("TOYOTA_ALAVANCA", "TOYOTA_ATF_CAMBIO", "TOYOTA_MARCHA").all { it in suportados })
+        assertTrue(setOf("TOYOTA_ALAVANCA", "TOYOTA_ATF_CAMBIO").all { it in suportados })
+        assertFalse("TOYOTA_MARCHA" in suportados) // estimada pelo app (CambioA750f), não lida
         assertFalse("TOYOTA_MARCHA_ECM" in suportados)
         assertTrue(obd.eventos().any { "Câmbio 7E1 respondeu" in it })
     }
@@ -154,12 +157,12 @@ class PollingCambio7E1Test {
         assertEquals(3, t.enviados.count { it == "ATSH7E1" })
         assertEquals(3, t.enviados.count { it == "ATCRA7E9" })
         assertEquals(3, t.enviados.count { it == "21D9" })
-        assertEquals(3, t.enviados.count { it == "2130" })
+        assertEquals(0, t.enviados.count { it == "2130" }) // ~150 ms a menos por visita
         assertTrue(t.enviados.none { it == "21D91" || it == "21AD1" })
         // Toda visita ao 7E1 é seguida logo por ATSH 7E0 + ATCRA, antes de qualquer PID do motor.
         t.enviados.forEachIndexed { i, c ->
             if (c == "21D9") {
-                assertEquals(listOf("2130", "ATSH7E0", "ATCRA"), t.enviados.subList(i + 1, i + 4))
+                assertEquals(listOf("ATSH7E0", "ATCRA"), t.enviados.subList(i + 1, i + 3))
             }
         }
         assertEquals("7E0", t.cabecalho)
@@ -169,8 +172,8 @@ class PollingCambio7E1Test {
         // O câmbio aparece no primeiro ciclo e o valor persiste nos ciclos sem visita.
         val primeira = leituras.first()
         assertEquals(3.0, primeira["TOYOTA_ALAVANCA"]!!, 1e-9) // D
-        assertEquals(4.0, primeira["TOYOTA_MARCHA"]!!, 1e-9)
-        assertNotNull(leituras[1]["TOYOTA_MARCHA"])
+        assertNotNull(leituras[1]["TOYOTA_ALAVANCA"])
+        assertTrue(leituras.none { "TOYOTA_MARCHA" in it.valores })
         assertNotNull(primeira["TOYOTA_ATF_CAMBIO"])
     }
 
@@ -190,7 +193,7 @@ class PollingCambio7E1Test {
         assertEquals(3, t.enviados.count { it == "ATCRA7E9" })
         // ...e a volta ao motor recorre ao ATAR quando o ATCRA puro é recusado.
         t.enviados.forEachIndexed { i, c ->
-            if (c == "21D9") assertEquals(listOf("2130", "ATSH7E0", "ATCRA", "ATAR"), t.enviados.subList(i + 1, i + 5))
+            if (c == "21D9") assertEquals(listOf("ATSH7E0", "ATCRA", "ATAR"), t.enviados.subList(i + 1, i + 4))
         }
         assertNull(t.filtro)
         assertTrue(leituras.all { it[Pids.RPM] != null })

@@ -264,17 +264,17 @@ class Elm327CascataTest {
 
         assertTrue(perfil is ResultadoPerfil.Indisponivel)
         // Requisições do motor (7E0 · 21) do perfil: bicos, tensão da ECU, barômetro, pedal, ATF e alavanca (o 7E0 2130 não é marcha);
-        // depois a visita ao câmbio (7E1 · 21D9 e 2130) e a volta ao 7E0.
+        // depois a visita ao câmbio (só o 7E1 · 21D9: o 2130 devolve 0xFF fixo) e a volta ao 7E0.
         assertEquals(
             "7E0 · 21xx do perfil + sondagem do câmbio",
-            listOf("21AD", "2142", "2133", "2149", "214A", "2182", "21D9", "ATSH7E1", "ATCRA7E9", "21D9", "2130", "ATSH7E0", "ATCRA"),
+            listOf("21AD", "2142", "2133", "2149", "214A", "2182", "21D9", "ATSH7E1", "ATCRA7E9", "21D9", "ATSH7E0", "ATCRA"),
             t.enviados,
         )
         assertTrue(vin.isFailure)
         assertTrue(vin.exceptionOrNull()!!.message!!, "Modo 21" in vin.exceptionOrNull()!!.message!!)
         assertTrue(obd.lerCodigosPendentes().isFailure)
         assertTrue(obd.lerFreezeFrame().isFailure)
-        assertEquals(13, t.enviados.size) // VIN, 07 e 02 não gastaram comando
+        assertEquals(12, t.enviados.size) // VIN, 07 e 02 não gastaram comando
     }
 
     @Test

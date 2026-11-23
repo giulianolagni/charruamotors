@@ -154,7 +154,7 @@ class Elm327BluetoothClient(
     private val cabecalhoDiagnostico: String? get() = if (modoServico != null) cabecalhoServico else null
 
     /**
-     * O câmbio `7E1` respondeu à sondagem (`21D9`/`2130`) no modo 21: o polling o lê em cadência
+     * O câmbio `7E1` respondeu à sondagem (`21D9`) no modo 21: o polling o lê em cadência
      * leve, alternando `ATSH 7E1`/`ATCRA 7E9` e restaurando o cabeçalho do motor logo em seguida.
      */
     @Volatile private var cambioAtivo = false
@@ -401,7 +401,7 @@ class Elm327BluetoothClient(
         }
     }
 
-    /** Requisições do câmbio (`7E1 · 21D9`, `7E1 · 2130`) que o polling lê no modo 21, vindas do perfil. */
+    /** Requisições do câmbio (`7E1 · 21D9`) que o polling lê no modo 21, vindas do perfil. */
     private fun requisicoesCambio(modo: ModoServico, perfil: PerfilFabricante): Map<RequisicaoEstendida, List<DefinicaoPid>> =
         if (modo.cabecalho == CABECALHO_CAMBIO) {
             emptyMap()
@@ -412,7 +412,7 @@ class Elm327BluetoothClient(
         }
 
     /**
-     * Sondagem do câmbio no modo 21: `ATSH 7E1` + `ATCRA 7E9` + `21D9` e `2130`. Se o `7E1` responder,
+     * Sondagem do câmbio no modo 21: `ATSH 7E1` + `ATCRA 7E9` + `21D9`. Se o `7E1` responder,
      * [cambioAtivo] liga e o polling passa a lê-lo; em qualquer caso o cabeçalho do motor volta
      * (`ATSH 7E0` + `ATCRA`) antes de seguir, e um módulo mudo não atrapalha a conexão.
      */
@@ -433,7 +433,7 @@ class Elm327BluetoothClient(
             if (cambioAtivo) {
                 "Câmbio 7E1 respondeu (${ativos.joinToString { it.comando }}): lido em cadência leve no polling"
             } else {
-                "Câmbio 7E1 não respondeu ao 21D9/2130: polling segue só no motor"
+                "Câmbio 7E1 não respondeu ao 21D9: polling segue só no motor"
             },
         )
         return ativos
@@ -1730,8 +1730,12 @@ class Elm327BluetoothClient(
         /** Volta ao filtro padrão: `ATCRA` sem endereço; `ATAR` para clones que só aceitam a forma com endereço. */
         private val COMANDOS_FILTRO_PADRAO = listOf("ATCRA", "ATAR")
 
-        /** Requisições do câmbio lidas no polling do modo 21: alavanca + ATF (`21D9`) e marcha (`2130`). */
-        private val IDS_CAMBIO_POLLING = setOf("D9", "30")
+        /**
+         * Requisições do câmbio lidas no polling do modo 21: alavanca + ATF (`21D9`). O `2130` ficou
+         * de fora (v2.1.1): na SW4 2013 ele devolve `0xFF` fixo mesmo a 110 km/h e custava ~150 ms por
+         * ciclo; a marcha é estimada pelo app (`CambioA750f`).
+         */
+        private val IDS_CAMBIO_POLLING = setOf("D9")
 
         /** Sensores do câmbio lidos em cadência leve (ver [EscalonadorPolling]). */
         private val CHAVES_CAMBIO = setOf("TOYOTA_ALAVANCA", "TOYOTA_ATF_CAMBIO", "TOYOTA_MARCHA")

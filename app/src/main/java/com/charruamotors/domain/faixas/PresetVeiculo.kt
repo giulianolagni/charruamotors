@@ -53,7 +53,8 @@ enum class PresetVeiculo(
                 FaixaEsperada(ParametroFaixa.TENSAO, 13.4, 14.6),
                 FaixaEsperada(ParametroFaixa.RAIL, 280.0, 1_800.0),
                 FaixaEsperada(ParametroFaixa.RAIL_LENTA, 280.0, 380.0),
-                FaixaEsperada(ParametroFaixa.MAP_TURBO, 95.0, 215.0),
+                // Em altitude a marcha lenta fica em 73–75 kPa: 95 dava falso alerta vermelho.
+                FaixaEsperada(ParametroFaixa.MAP_TURBO, 60.0, 215.0),
                 FaixaEsperada(ParametroFaixa.BICOS, -3.0, 3.0),
             ),
         ),

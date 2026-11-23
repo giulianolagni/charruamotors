@@ -7,6 +7,7 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -45,6 +46,7 @@ import com.charruamotors.direcao.painel.SecaoPainel
 import com.charruamotors.sistema.StatusConexaoPainel
 import com.charruamotors.sistema.unidades.ConversorUnidades
 import com.charruamotors.ui.componentes.GaugeView
+import com.charruamotors.ui.painel.ClusterPainelActivity
 import com.charruamotors.ui.painel.EditorConfigHud
 import com.charruamotors.ui.painel.MontadorMostradores
 import com.charruamotors.domain.calculo.EstadoCronometro
@@ -428,6 +430,22 @@ class ObdFragment : Fragment() {
      * em primeiro plano. A flag é da janela: sai em [onPause] (troca de aba, app em segundo plano)
      * e ao desconectar, então a tela volta a apagar normalmente.
      */
+    /**
+     * Modo Painel Automotivo: com a aba em primeiro plano, o scanner conectado (ou o Modo Simulado)
+     * e o celular na horizontal, abre o cluster em tela cheia. Na vertical libera a dispensa do
+     * Voltar, para o próximo giro abrir de novo.
+     */
+    private fun avaliarCluster() {
+        val horizontal = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        if (!horizontal) {
+            ClusterPainelActivity.dispensado = false
+            return
+        }
+        if (!emPrimeiroPlano || ClusterPainelActivity.aberto || ClusterPainelActivity.dispensado) return
+        if (viewModel.estado.value !is EstadoConexaoObd.Conectado) return
+        startActivity(ClusterPainelActivity.intent(requireContext()))
+    }
+
     private fun aplicarTelaAcesa() {
         val janela = activity?.window ?: return
         if (emPrimeiroPlano && viewModel.manterTelaAcesa.value) {
@@ -479,6 +497,7 @@ class ObdFragment : Fragment() {
     // ------------------------------------------------------------------ renderização
 
     private fun mostrarEstado(estado: EstadoConexaoObd) {
+        avaliarCluster()
         mostrarInfoEcu(viewModel.infoEcu.value)
         val sessao = viewModel.estadoSessao.value
         val aguardandoSessao = sessao.ativa && estado !is EstadoConexaoObd.Conectado && estado !is EstadoConexaoObd.Conectando
@@ -809,6 +828,7 @@ class ObdFragment : Fragment() {
         super.onResume()
         emPrimeiroPlano = true
         aplicarTelaAcesa()
+        avaliarCluster()
     }
 
     override fun onPause() {

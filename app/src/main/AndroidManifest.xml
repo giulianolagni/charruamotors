@@ -88,6 +88,15 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- v1.6: Modo Painel Automotivo (cluster em tela cheia), aberto pela aba Painel ao girar o celular
+             para a horizontal. Trata a rotação sozinho: ao voltar à vertical, fecha. -->
+        <activity
+            android:name=".ui.painel.ClusterPainelActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.CharruaMotors.Cluster" />
+
         <!-- Ferramentas de Oficina (abertas pelo hub da aba OBD2) -->
         <activity
             android:name=".ui.oficina.bateria.TesteBateriaActivity"

@@ -10,6 +10,7 @@ import com.charruamotors.obd.pid.CatalogoEstendido
 import com.charruamotors.obd.pid.CatalogoPids
 import com.charruamotors.obd.pid.DefinicaoPid
 import com.charruamotors.obd.pid.ModoServico
+import com.charruamotors.obd.pid.PerfilFabricante
 import com.charruamotors.obd.pid.Pids
 import com.charruamotors.obd.pid.ProtocoloFisico
 import com.charruamotors.obd.pid.RequisicaoEstendida
@@ -151,6 +152,12 @@ class Elm327BluetoothClient(
 
     /** Cabeçalho dos pedidos de diagnóstico (DTC, freeze frame): o do modo de serviço, ou o funcional no padrão. */
     private val cabecalhoDiagnostico: String? get() = if (modoServico != null) cabecalhoServico else null
+
+    /**
+     * O câmbio `7E1` respondeu à sondagem (`21D9`/`2130`) no modo 21: o polling o lê em cadência
+     * leve, alternando `ATSH 7E1`/`ATCRA 7E9` e restaurando o cabeçalho do motor logo em seguida.
+     */
+    @Volatile private var cambioAtivo = false
 
     /** Canal da sessão atual; null = desconectado. Comparado por identidade para descartar falhas de sessões encerradas. */
     @Volatile private var transporte: ObdTransport? = null
@@ -295,7 +302,7 @@ class Elm327BluetoothClient(
         ciclosPorLento: Int,
     ): Flow<DadosObd> = flow {
         val sessao = transporte ?: return@flow
-        val escalonador = EscalonadorPolling(lentosPorVez, ciclosPorLento, Pids.candidatosFilaRapida(consumoPorMaf))
+        val escalonador = EscalonadorPolling(lentosPorVez, ciclosPorLento, Pids.candidatosFilaRapida(consumoPorMaf), CHAVES_CAMBIO)
         var ciclosSemEcu = 0
         while (_estado.value == EstadoConexaoObd.Conectado && transporte === sessao) {
             if (_sessaoManual.value) {
@@ -365,7 +372,7 @@ class Elm327BluetoothClient(
     private suspend fun ativarPerfilNoModoServico(modo: ModoServico, marca: String?): ResultadoPerfil {
         val perfil = catalogoEstendido.perfilPara(marca) ?: return ResultadoPerfil.SemPerfil
         val compativeis = perfil.requisicoes.filterKeys { it.cabecalho == modo.cabecalho && it.servico == modo.servico }
-        if (compativeis.isEmpty()) {
+        if (compativeis.isEmpty() && requisicoesCambio(modo, perfil).isEmpty()) {
             registro.evento("Perfil ${perfil.nome}: nenhuma requisição ${modo.cabecalho} · ${modo.servico}xx para o ${modo.nome}")
             return ResultadoPerfil.Indisponivel(perfil.nome, "o perfil não tem PIDs do ${modo.nome} no módulo do motor")
         }
@@ -376,6 +383,7 @@ class Elm327BluetoothClient(
                     val bruto = sondar(requisicao.comando, cabecalhoServico) ?: continue
                     addAll(definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok })
                 }
+                addAll(sondarCambio(modo, perfil))
             }
             if (ativos.isEmpty()) {
                 registro.evento("Perfil ${perfil.nome}: nenhuma requisição respondeu no ${modo.nome}")
@@ -386,6 +394,74 @@ class Elm327BluetoothClient(
             ResultadoPerfil.Ativo(perfil.nome, ativos, perfil.observacao)
         } catch (e: ObdException) {
             ResultadoPerfil.Indisponivel(perfil.nome, e.message ?: "falha de comunicação")
+        }
+    }
+
+    /** Requisições do câmbio (`7E1 · 21D9`, `7E1 · 2130`) que o polling lê no modo 21, vindas do perfil. */
+    private fun requisicoesCambio(modo: ModoServico, perfil: PerfilFabricante): Map<RequisicaoEstendida, List<DefinicaoPid>> =
+        if (modo.cabecalho == CABECALHO_CAMBIO) {
+            emptyMap()
+        } else {
+            perfil.requisicoes.filterKeys {
+                it.cabecalho == CABECALHO_CAMBIO && it.servico == modo.servico && it.identificador in IDS_CAMBIO_POLLING
+            }
+        }
+
+    /**
+     * Sondagem do câmbio no modo 21: `ATSH 7E1` + `ATCRA 7E9` + `21D9` e `2130`. Se o `7E1` responder,
+     * [cambioAtivo] liga e o polling passa a lê-lo; em qualquer caso o cabeçalho do motor volta
+     * (`ATSH 7E0` + `ATCRA`) antes de seguir, e um módulo mudo não atrapalha a conexão.
+     */
+    private suspend fun sondarCambio(modo: ModoServico, perfil: PerfilFabricante): List<DefinicaoPid> {
+        val requisicoes = requisicoesCambio(modo, perfil)
+        if (requisicoes.isEmpty() || cabecalhoServico == null) return emptyList()
+        val ativos = mutableListOf<DefinicaoPid>()
+        try {
+            for ((requisicao, definicoes) in requisicoes) {
+                val bruto = sondar(requisicao.comando, CABECALHO_CAMBIO) ?: continue
+                ativos += definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok }
+            }
+        } finally {
+            withContext(NonCancellable) { restaurarCabecalhoServico() }
+        }
+        cambioAtivo = ativos.isNotEmpty()
+        registro.evento(
+            if (cambioAtivo) {
+                "Câmbio 7E1 respondeu (${ativos.joinToString { it.comando }}): lido em cadência leve no polling"
+            } else {
+                "Câmbio 7E1 não respondeu ao 21D9/2130: polling segue só no motor"
+            },
+        )
+        return ativos
+    }
+
+    /**
+     * Devolve o adaptador ao cabeçalho do [modoServico] (`ATSH 7E0` e `ATCRA` padrão) depois de uma
+     * visita ao câmbio. Só age se o cabeçalho ativo for outro. Se o `ATSH` não confirmar, o
+     * cabeçalho fica indefinido e o próximo comando o reenvia.
+     */
+    private suspend fun restaurarCabecalhoServico() {
+        val alvo = cabecalhoServico
+        if (modoServico == null || alvo == null || cabecalhoAtivo == alvo) return
+        mutexComandos.withLock {
+            val canal = transporte ?: return
+            try {
+                val resposta = try {
+                    trocar(canal, "ATSH$alvo", timeoutComandoMs, false)
+                } catch (_: ObdTimeoutException) {
+                    ""
+                }
+                if ("OK" in resposta.uppercase()) {
+                    cabecalhoAtivo = alvo
+                    ajustarFiltroRecepcao(canal, alvo, false)
+                } else {
+                    cabecalhoAtivo = CABECALHO_INDEFINIDO
+                }
+            } catch (e: IOException) {
+                if (transporte !== canal) throw ObdException("Scanner desconectado", e)
+                perderConexao(canal, "Conexão Bluetooth com o scanner perdida")
+                throw ObdException("Conexão com o scanner perdida", e)
+            }
         }
     }
 
@@ -609,7 +685,7 @@ class Elm327BluetoothClient(
             }
             if ("OK" in resposta.uppercase()) cabecalhoAtivo = alvo
         }
-        if (filtroRecepcaoAtivo != RequisicaoEstendida.filtroRecepcao(alvo)) ajustarFiltroRecepcao(canal, alvo, registrar = true)
+        if (filtroRecepcaoAtivo != filtroRecepcaoPara(alvo)) ajustarFiltroRecepcao(canal, alvo, registrar = true)
         configuracaoAlteradaManual = false
         registro.evento(
             "Sessão manual encerrada: polling retomado" +
@@ -618,13 +694,17 @@ class Elm327BluetoothClient(
         )
     }
 
+    /** Filtro do [cabecalho]: o do catálogo, mais `7E9` explícito para o câmbio `7E1` no modo 21 (o A750F responde nele). */
+    private fun filtroRecepcaoPara(cabecalho: String?): String? =
+        if (cabecalho == CABECALHO_CAMBIO && modoServico != null) FILTRO_CAMBIO else RequisicaoEstendida.filtroRecepcao(cabecalho)
+
     /**
      * Ajusta o `ATCRA` ao [cabecalho] recém-fixado (só se mudar): `ATCRA 7B8` para o ABS/VSC,
      * `ATCRA` (sem endereço = filtro padrão) ao voltar ao motor/funcional. Um clone que não aceite
      * o comando segue sem o filtro: as requisições desse módulo apenas não respondem.
      */
     private suspend fun ajustarFiltroRecepcao(canal: ObdTransport, cabecalho: String?, registrar: Boolean) {
-        val alvo = RequisicaoEstendida.filtroRecepcao(cabecalho)
+        val alvo = filtroRecepcaoPara(cabecalho)
         if (alvo == filtroRecepcaoAtivo || semFiltroRecepcao) return
         val resposta = try {
             trocar(canal, "ATCRA" + alvo.orEmpty(), timeoutComandoMs, registrar)
@@ -1144,9 +1224,13 @@ class Elm327BluetoothClient(
             requisicao.comando
         }
 
-    /** Cabeçalho de uma requisição de montadora: no modo 21/22, sempre o da sessão (null fora do CAN 11 bits). */
-    private fun cabecalhoDe(requisicao: RequisicaoEstendida): String? =
-        if (modoServico != null) cabecalhoServico else requisicao.cabecalho
+    /** Cabeçalho de uma requisição de montadora: no modo 21/22, o da sessão (null fora do CAN 11 bits), salvo o câmbio `7E1` já sondado. */
+    private fun cabecalhoDe(requisicao: RequisicaoEstendida): String? {
+        val modo = modoServico ?: return requisicao.cabecalho
+        val visitaAoCambio = cambioAtivo && requisicao.cabecalho == CABECALHO_CAMBIO &&
+            requisicao.servico == modo.servico && requisicao.identificador in IDS_CAMBIO_POLLING
+        return if (visitaAoCambio) CABECALHO_CAMBIO else cabecalhoServico
+    }
 
     /**
      * Resultado de um ciclo: o que foi pedido, o que respondeu e se a ECU ficou calada
@@ -1277,6 +1361,7 @@ class Elm327BluetoothClient(
                 coletor.lerEstendido(requisicao, estendidas.values.filter { it.estendida == requisicao })
             }
         }
+        if (cambioAtivo) restaurarCabecalhoServico()
         return coletor.ciclo()
     }
 
@@ -1547,6 +1632,7 @@ class Elm327BluetoothClient(
         semFiltroRecepcao = false
         modoServico = null
         cabecalhoServico = null
+        cambioAtivo = false
         usaSufixoRespostaUnica = false
         requisicoesSemSufixo = emptySet()
         requisicoesConferidas = emptySet()
@@ -1569,6 +1655,16 @@ class Elm327BluetoothClient(
 
         /** Bitmask que também inicia a busca de protocolo. */
         private const val COMANDO_BUSCA = "0100"
+
+        /** Câmbio automático (A750F): cabeçalho `7E1`, resposta em `7E9`. */
+        private const val CABECALHO_CAMBIO = "7E1"
+        private const val FILTRO_CAMBIO = "7E9"
+
+        /** Requisições do câmbio lidas no polling do modo 21: alavanca + ATF (`21D9`) e marcha (`2130`). */
+        private val IDS_CAMBIO_POLLING = setOf("D9", "30")
+
+        /** Sensores do câmbio lidos em cadência leve (ver [EscalonadorPolling]). */
+        private val CHAVES_CAMBIO = setOf("TOYOTA_ALAVANCA", "TOYOTA_ATF_CAMBIO", "TOYOTA_MARCHA")
 
         /** Marcador de "qualquer cabeçalho" (comandos AT) em [ordenarPorCabecalho]. */
         private const val NEUTRO = "*"

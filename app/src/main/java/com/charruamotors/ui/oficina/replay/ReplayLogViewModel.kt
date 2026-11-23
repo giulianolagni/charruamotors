@@ -45,6 +45,9 @@ data class ResumoReplay(val janela: JanelaReplay, val series: List<ResumoSerie>,
 sealed interface EventoReplay {
     data class Erro(val detalhe: String) : EventoReplay
     data object MaximoSensores : EventoReplay
+
+    /** Relatório `.txt` da sessão lido: a tela mostra no diálogo (aberto no topo). */
+    data class Texto(val arquivo: ArquivoLogCsv, val texto: TextoLog) : EventoReplay
 }
 
 /**
@@ -105,7 +108,26 @@ class ReplayLogViewModel(private val repositorio: RepositorioLogsCsv) : ViewMode
         viewModelScope.launch { _arquivos.value = runCatching { repositorio.listar() }.getOrDefault(emptyList()) }
     }
 
-    fun abrir(arquivo: ArquivoLogCsv) = carregar(arquivo.uri) { arquivo.nome }
+    /** CSV → replay no gráfico; `.txt` (relatório da caixa-preta) → diálogo de texto. */
+    fun abrir(arquivo: ArquivoLogCsv) {
+        if (!arquivo.texto) return carregar(arquivo.uri) { arquivo.nome }
+        carregamento?.cancel()
+        carregamento = viewModelScope.launch {
+            _carregando.value = true
+            try {
+                _eventos.send(EventoReplay.Texto(arquivo, repositorio.lerTexto(arquivo.uri)))
+            } catch (e: IOException) {
+                _eventos.send(EventoReplay.Erro(e.message ?: "falha de leitura"))
+            } catch (e: SecurityException) {
+                _eventos.send(EventoReplay.Erro("sem permissão para ler o arquivo"))
+            } finally {
+                _carregando.value = false
+            }
+        }
+    }
+
+    /** URI que outro app consegue ler, para compartilhar o arquivo. */
+    fun uriCompartilhavel(arquivo: ArquivoLogCsv): Uri = repositorio.uriCompartilhavel(arquivo)
 
     /** Documento escolhido em "Abrir outro CSV" (Storage Access Framework). */
     fun abrirDocumento(uri: Uri) = carregar(uri) { repositorio.nomeDe(uri) }

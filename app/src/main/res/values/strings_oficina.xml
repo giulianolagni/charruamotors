@@ -4,7 +4,7 @@
     <string name="oficina_titulo">Ferramentas de Oficina</string>
     <string name="oficina_descricao">Testes guiados e engenharia reversa sobre a conexão ativa. Enquanto uma ferramenta estiver aberta, o polling dos sensores fica pausado (sem derrubar o Bluetooth) e volta sozinho ao sair.</string>
     <string name="oficina_bateria">Teste de Bateria e Alternador</string>
-    <string name="oficina_replay">Visualizador de Logs CSV</string>
+    <string name="oficina_replay">Visualizador de Logs (CSV e TXT)</string>
     <string name="oficina_terminal">Terminal ELM327 e Varredura de PIDs</string>
     <string name="oficina_requer_conexao">Conecte o scanner para usar o teste de bateria e o terminal.</string>
     <string name="oficina_sem_conexao">Scanner não conectado. Conecte-o na aba OBD2 e abra a ferramenta de novo.</string>
@@ -59,9 +59,9 @@
     <string name="bateria_laudo_assunto">Laudo do teste de bateria e alternador</string>
 
     <!-- Ferramenta 2: Visualizador de Logs CSV (Replay) -->
-    <string name="replay_titulo">Visualizador de Logs CSV</string>
+    <string name="replay_titulo">Visualizador de Logs</string>
     <string name="replay_lista_titulo">Logs em Downloads/CharruaOBD</string>
-    <string name="replay_lista_vazia">Nenhum log CSV encontrado. Grave um na aba OBD2 (Gravar Log CSV) ou toque em Abrir outro CSV.</string>
+    <string name="replay_lista_vazia">Nenhum log encontrado. Conecte ao scanner com os logs automáticos ligados, grave um na aba OBD2 (Gravar Log CSV) ou toque em Abrir outro CSV.</string>
     <string name="replay_abrir_outro">Abrir outro CSV</string>
     <string name="replay_atualizar">Atualizar lista</string>
     <string name="replay_carregando">Carregando…</string>

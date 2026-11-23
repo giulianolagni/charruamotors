@@ -41,15 +41,16 @@ object CambioA750f {
     }
 
     /**
-     * Marcha exibida para a [alavanca]: R → [MARCHA_RE]; D, 2/3 e L andando (≥ 5 km/h) → 1..5 pela
+     * Marcha exibida para a [alavanca]: R → [MARCHA_RE]; D, 4, 3, 2 e L andando (≥ 5 km/h) → 1..5 pela
      * razão; P/N andando → [MARCHA_NEUTRO]; P/N, M ou abaixo de 5 km/h → [MARCHA_PARADO].
-     * Null em D/2/3/L andando sem RPM (não dá para estimar).
+     * Null em D/4/3/2/L andando sem RPM (não dá para estimar).
      */
     fun marchaExibida(alavanca: Double, rpm: Double?, velocidadeKmh: Double?): Int? {
         val andando = velocidadeKmh != null && velocidadeKmh.isFinite() && velocidadeKmh >= VELOCIDADE_MINIMA_KMH
         return when (alavanca) {
             Decodificadores.ALAVANCA_R -> MARCHA_RE
-            Decodificadores.ALAVANCA_D, Decodificadores.ALAVANCA_2_3, Decodificadores.ALAVANCA_L ->
+            Decodificadores.ALAVANCA_D, Decodificadores.ALAVANCA_4, Decodificadores.ALAVANCA_3,
+            Decodificadores.ALAVANCA_2, Decodificadores.ALAVANCA_L ->
                 if (andando) marchaPorRazao(rpm, velocidadeKmh) else MARCHA_PARADO
             Decodificadores.ALAVANCA_P_N, Decodificadores.ALAVANCA_N -> if (andando) MARCHA_NEUTRO else MARCHA_PARADO
             else -> MARCHA_PARADO

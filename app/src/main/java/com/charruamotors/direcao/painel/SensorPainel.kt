@@ -136,10 +136,10 @@ enum class SensorPainel(
     ),
     MARCHA_ALAVANCA(
         "TOYOTA_ALAVANCA", "Alavanca (P/R/D)", "ALAVANCA", "", 0,
-        mapOf("" to EscalaGauge(0f, 7f, null, 7, 1)),
+        mapOf("" to EscalaGauge(0f, 9f, null, 9, 1)),
         // O 7E1 · 21D9 (bytes C/D) vem primeiro: o 7E0 · 21D9 devolve sempre 00 (P) na SW4 2013.
         alternativos = listOf("TOYOTA_ALAVANCA_ECM"),
-        rotulos = mapOf(0 to "P", 1 to "R", 2 to "N", 3 to "D", 4 to "2/3", 5 to "M", 6 to "L", 7 to "P/N"),
+        rotulos = mapOf(0 to "P", 1 to "R", 2 to "N", 3 to "D", 4 to "3", 5 to "M", 6 to "L", 7 to "P/N", 8 to "4", 9 to "2"),
     ),
     MARCHA_ATUAL(
         "TOYOTA_MARCHA", "Marcha (1ª–5ª)", "MARCHA", "", 0,

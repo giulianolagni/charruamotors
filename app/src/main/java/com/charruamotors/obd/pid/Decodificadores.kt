@@ -13,10 +13,12 @@ object Decodificadores {
     const val ALAVANCA_N = 2.0
     const val ALAVANCA_D = 3.0
 
-    /** Posições `2/3` (`C = 00, D = 01`), manual/outra (`M`) e `L` (`C = 03, D = 00`) do A750F. */
-    const val ALAVANCA_2_3 = 4.0
+    /** Posições `3` (`C = 00, D = 01`), `M` (outra), `L` (`C = 03, D = 00`), `4` (`00 06`) e `2` (`02 00`) do A750F. */
+    const val ALAVANCA_3 = 4.0
     const val ALAVANCA_M = 5.0
     const val ALAVANCA_L = 6.0
+    const val ALAVANCA_4 = 8.0
+    const val ALAVANCA_2 = 9.0
 
     /** `P` ou `N`: o `21D9` não distingue as duas (`C = 00, D = 00`); o mostrador exibe `P/N`. */
     const val ALAVANCA_P_N = 7.0
@@ -24,8 +26,8 @@ object Decodificadores {
     /**
      * Alavanca do câmbio A750F pela resposta do `7E1` ao `21D9` (`0:61D9 A B C D ...`), lida nos
      * bytes C e D (índices 2 e 3), como no log real da SW4 2013: `00 00` = P/N; `04 00` = R;
-     * `00 04` = D; `00 01` = 2/3; `03 00` = L. Qualquer outro par diferente de zero (ex.: `00 02`,
-     * `02 00`) é uma posição ainda não mapeada e vira [ALAVANCA_M], em vez de ficar sem valor.
+     * `00 04` = D; `00 06` = 4; `00 01` = 3; `02 00` = 2; `03 00` = L. Qualquer outro par diferente
+     * de zero é uma posição ainda não mapeada e vira [ALAVANCA_M], em vez de ficar sem valor.
      */
     private fun alavancaA750f(b: List<Int>): Double {
         val c = b[2] and 0xFF
@@ -34,7 +36,9 @@ object Decodificadores {
             c == 0x00 && d == 0x00 -> ALAVANCA_P_N
             c == 0x04 && d == 0x00 -> ALAVANCA_R
             c == 0x00 && d == 0x04 -> ALAVANCA_D
-            c == 0x00 && d == 0x01 -> ALAVANCA_2_3
+            c == 0x00 && d == 0x06 -> ALAVANCA_4
+            c == 0x00 && d == 0x01 -> ALAVANCA_3
+            c == 0x02 && d == 0x00 -> ALAVANCA_2
             c == 0x03 && d == 0x00 -> ALAVANCA_L
             else -> ALAVANCA_M
         }

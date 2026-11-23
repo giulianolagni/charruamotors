@@ -53,16 +53,20 @@ class CambioA750fTest {
     }
 
     @Test
-    fun `21D9 do 7E1 com C D 00 01 e 2-3 e 03 00 e L`() {
-        assertEquals(Decodificadores.ALAVANCA_2_3, d9(0x00, 0x01), 0.0)
-        assertEquals("2/3", alavanca.rotulo(d9(0x00, 0x01)))
+    fun `21D9 do 7E1 mapeia exatamente 4 3 2 e L`() {
+        assertEquals(Decodificadores.ALAVANCA_4, d9(0x00, 0x06), 0.0)
+        assertEquals("4", alavanca.rotulo(d9(0x00, 0x06)))
+        assertEquals(Decodificadores.ALAVANCA_3, d9(0x00, 0x01), 0.0)
+        assertEquals("3", alavanca.rotulo(d9(0x00, 0x01)))
+        assertEquals(Decodificadores.ALAVANCA_2, d9(0x02, 0x00), 0.0)
+        assertEquals("2", alavanca.rotulo(d9(0x02, 0x00)))
         assertEquals(Decodificadores.ALAVANCA_L, d9(0x03, 0x00), 0.0)
         assertEquals("L", alavanca.rotulo(d9(0x03, 0x00)))
     }
 
     @Test
     fun `21D9 do 7E1 com qualquer outro par nao zero mostra M em vez de sem valor`() {
-        for ((c, d) in listOf(0x00 to 0x02, 0x02 to 0x00, 0x04 to 0x04, 0x01 to 0x01)) {
+        for ((c, d) in listOf(0x00 to 0x02, 0x01 to 0x00, 0x04 to 0x04, 0x01 to 0x01)) {
             assertEquals("C=$c D=$d", Decodificadores.ALAVANCA_M, d9(c, d), 0.0)
             assertEquals("M", alavanca.rotulo(d9(c, d)))
         }
@@ -150,16 +154,16 @@ class CambioA750fTest {
     }
 
     @Test
-    fun `2-3 e L andando calculam a marcha igual ao D e parados mostram Parado`() {
+    fun `4 3 2 e L andando calculam a marcha igual ao D e parados mostram Parado`() {
         val e = EstimadorCambioA750f()
-        for (posicao in listOf(Decodificadores.ALAVANCA_2_3, Decodificadores.ALAVANCA_L)) {
+        for (posicao in listOf(Decodificadores.ALAVANCA_4, Decodificadores.ALAVANCA_3, Decodificadores.ALAVANCA_2, Decodificadores.ALAVANCA_L)) {
             val andando = e.aplicar(dados("TOYOTA_ALAVANCA" to posicao, Pids.RPM to 1_800.0, Pids.VELOCIDADE to 40.0)) // 45
             assertEquals(3.0, andando["TOYOTA_MARCHA"]!!, 0.0)
             val parado = e.aplicar(dados("TOYOTA_ALAVANCA" to posicao, Pids.RPM to 800.0, Pids.VELOCIDADE to 3.0))
             assertEquals(CambioA750f.MARCHA_PARADO.toDouble(), parado["TOYOTA_MARCHA"]!!, 0.0)
         }
-        assertEquals(IndicadorMarcha("3ª", "2/3"), ClusterPainel.indicadorMarcha(
-            e.aplicar(dados("TOYOTA_ALAVANCA" to Decodificadores.ALAVANCA_2_3, Pids.RPM to 1_800.0, Pids.VELOCIDADE to 40.0)),
+        assertEquals(IndicadorMarcha("3ª", "3"), ClusterPainel.indicadorMarcha(
+            e.aplicar(dados("TOYOTA_ALAVANCA" to Decodificadores.ALAVANCA_3, Pids.RPM to 1_800.0, Pids.VELOCIDADE to 40.0)),
         ))
         assertEquals(IndicadorMarcha("3ª", "L"), ClusterPainel.indicadorMarcha(
             e.aplicar(dados("TOYOTA_ALAVANCA" to Decodificadores.ALAVANCA_L, Pids.RPM to 1_800.0, Pids.VELOCIDADE to 40.0)),

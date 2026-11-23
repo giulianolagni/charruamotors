@@ -24,7 +24,9 @@ import com.charruamotors.sistema.preferencias.ConfigApp
 import com.charruamotors.sistema.preferencias.TemaApp
 import com.charruamotors.sistema.unidades.SistemaUnidades
 import com.charruamotors.sistema.unidades.UnidadePressao
+import com.charruamotors.BuildConfig
 import com.charruamotors.ui.assistente.AssistenteActivity
+import com.charruamotors.ui.atualizacao.AtualizadorApp
 import com.charruamotors.ui.permissoes.ChecklistPermissoesActivity
 import com.charruamotors.ui.permissoes.SolicitadorPermissoes
 import com.charruamotors.ui.util.aplicarInsetsDoSistema
@@ -39,7 +41,8 @@ import kotlinx.coroutines.launch
  *   padrão e o atalho de bateria "Sem restrições";
  * - Aparência e Painel: tema (aplicado na hora), unidades globais (métrico ou imperial, que
  *   convertem na hora todo o app e o HUD) e a unidade de pressão do métrico (kPa/bar);
- * - Assistente: refazer o Assistente Inicial e abrir o Checklist de Permissões.
+ * - Assistente: refazer o Assistente Inicial e abrir o Checklist de Permissões;
+ * - Atualizações: "Verificar atualizações" no GitHub Releases (baixa e instala o APK novo).
  */
 class ConfiguracoesActivity : AppCompatActivity() {
 
@@ -49,6 +52,7 @@ class ConfiguracoesActivity : AppCompatActivity() {
     private val prefsApp get() = app.preferenciasApp
     private val solicitador = SolicitadorPermissoes(this) { atualizarBateria() }
     private val dialogos = DialogosCaixaPreta(this) { solicitador.solicitarBluetooth() }
+    private val atualizador = AtualizadorApp(this)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
@@ -66,6 +70,8 @@ class ConfiguracoesActivity : AppCompatActivity() {
             startActivity(AssistenteActivity.intent(this))
         }
         binding.botaoChecklist.setOnClickListener { startActivity(ChecklistPermissoesActivity.intent(this)) }
+        binding.textoVersaoInstalada.text = getString(R.string.config_atualizacoes_descricao, BuildConfig.VERSION_NAME)
+        binding.botaoVerificarAtualizacoes.setOnClickListener { atualizador.verificarManualmente() }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {

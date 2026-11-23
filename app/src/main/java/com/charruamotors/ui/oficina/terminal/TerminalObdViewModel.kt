@@ -27,6 +27,7 @@ import com.charruamotors.oficina.varredura.ProgressoVarredura
 import com.charruamotors.oficina.varredura.RelatorioVarredura
 import com.charruamotors.oficina.varredura.ResultadoPid
 import com.charruamotors.oficina.varredura.ResultadoVarredura
+import com.charruamotors.oficina.varredura.ResultadoVarreduraMulti
 import com.charruamotors.oficina.varredura.VarreduraPids
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import kotlinx.coroutines.CancellationException
@@ -54,12 +55,21 @@ data class EstadoVarredura(
     val mostrarTudo: Boolean = false,
     /** Varredura terminada (concluída, parada ou interrompida); null enquanto roda ou antes da primeira. */
     val final: ResultadoVarredura? = null,
+    /** Varredura multi-módulo (Completa SW4): os módulos na ordem; vazio numa varredura simples. */
+    val planejados: List<ConfigVarredura> = emptyList(),
+    /** Índice do módulo em andamento na multi-módulo. */
+    val moduloAtual: Int = 0,
+    /** Resultado consolidado da multi-módulo terminada. */
+    val multi: ResultadoVarreduraMulti? = null,
 ) {
+    val multiModulo: Boolean get() = planejados.size > 1
+
     /** Filtro "Ver apenas o que o carro respondeu": identificados e desconhecidos; com [mostrarTudo], tudo. */
     val visiveis: List<IdentificacaoPid>
         get() = if (mostrarTudo) identificacoes else identificacoes.filter { it.status != StatusIdentificacao.IGNORADO }
 
-    val metricas: MetricasVarredura get() = MetricasVarredura.de(identificacoes, config?.quantidade ?: 0)
+    val metricas: MetricasVarredura
+        get() = MetricasVarredura.de(identificacoes, if (multiModulo) planejados.sumOf { it.quantidade } else config?.quantidade ?: 0)
 }
 
 sealed interface EventoTerminal {
@@ -186,6 +196,7 @@ class TerminalObdViewModel(
             duracaoVarreduraMs = null
             _varredura.value = _varredura.value.copy(
                 rodando = true, config = config, progresso = null, resultados = emptyList(), identificacoes = emptyList(), final = null,
+                planejados = emptyList(), moduloAtual = 0, multi = null,
             )
             val acumulados = ArrayList<ResultadoPid>()
             val identificados = ArrayList<IdentificacaoPid>()
@@ -214,6 +225,67 @@ class TerminalObdViewModel(
         }
     }
 
+    /**
+     * Varredura multi-módulo (Varredura Completa SW4: 7E0 + 7E1 + 7B0 + 7C0): os cabeçalhos em
+     * sequência, com a lista ao vivo acumulando todos e um relatório consolidado no fim.
+     */
+    fun iniciarVarreduraModulos(modulos: List<ConfigVarredura>) {
+        if (_varredura.value.rodando || _enviando.value || modulos.isEmpty()) return
+        jobVarredura = viewModelScope.launch {
+            sessao?.join()
+            inicioVarreduraMs = SystemClock.elapsedRealtime()
+            duracaoVarreduraMs = null
+            _varredura.value = _varredura.value.copy(
+                rodando = true, config = modulos.first(), progresso = null, resultados = emptyList(), identificacoes = emptyList(),
+                final = null, planejados = modulos, moduloAtual = 0, multi = null,
+            )
+            val anteriores = ArrayList<ResultadoVarredura>() // módulos já concluídos
+            val acumulados = ArrayList<ResultadoPid>()
+            val identificados = ArrayList<IdentificacaoPid>()
+            val conversor = conversorAtual()
+            var atual = modulos.first()
+            pararSolicitado = false
+            val final = try {
+                VarreduraPids.executarModulos(
+                    modulos,
+                    enviar = { cliente.enviarComandoManual(it, ObdClient.TIMEOUT_MANUAL_MS, registrar = false) },
+                    deveParar = { pararSolicitado },
+                    aoIniciarModulo = { i, c ->
+                        atual = c
+                        _varredura.value = _varredura.value.copy(config = c, moduloAtual = i, progresso = null)
+                    },
+                    aoModuloConcluido = { anteriores += it },
+                ) { progresso, resultado ->
+                    resultado?.let {
+                        acumulados += it
+                        identificados += identificador.identificar(it, atual.cabecalho, conversor)
+                    }
+                    _varredura.value = _varredura.value.copy(
+                        progresso = progresso, resultados = acumulados.toList(), identificacoes = identificados.toList(),
+                    )
+                }
+            } catch (e: CancellationException) {
+                concluirModulos(ResultadoVarreduraMulti(modulos, anteriores.toList(), VarreduraPids.PARADA_USUARIO))
+                throw e
+            }
+            concluirModulos(final)
+            verificarConexao()
+        }
+    }
+
+    private fun concluirModulos(multi: ResultadoVarreduraMulti) {
+        duracaoVarreduraMs = SystemClock.elapsedRealtime() - inicioVarreduraMs
+        val conversor = conversorAtual()
+        val identificacoes = multi.modulos.flatMap { identificador.identificarTodos(it.resultados, it.config.cabecalho, conversor) }
+        _varredura.value = _varredura.value.copy(
+            rodando = false,
+            resultados = multi.modulos.flatMap { it.resultados },
+            identificacoes = identificacoes,
+            final = multi.modulos.lastOrNull(),
+            multi = multi,
+        )
+    }
+
     private fun concluir(final: ResultadoVarredura) {
         duracaoVarreduraMs = SystemClock.elapsedRealtime() - inicioVarreduraMs
         val identificacoes = identificador.identificarTodos(final.resultados, final.config.cabecalho, conversorAtual())
@@ -234,6 +306,17 @@ class TerminalObdViewModel(
         val estado = _varredura.value
         val config = estado.config ?: return null
         if (estado.resultados.isEmpty()) return null
+        if (estado.multiModulo) {
+            val multi = estado.multi ?: ResultadoVarreduraMulti(estado.planejados, parciais(estado), "em andamento")
+            return RelatorioVarredura.gerarConsolidado(
+                multi,
+                LocalDateTime.now(),
+                veiculo = descricaoVeiculo.await(),
+                protocolo = cliente.infoConexao.value.protocolo,
+                duracaoMs = duracaoVarreduraMs,
+                identificacoes = estado.identificacoes.groupBy { it.cabecalho.orEmpty() },
+            )
+        }
         val resultado = estado.final ?: ResultadoVarredura(config, estado.resultados, config.quantidade, "em andamento")
         return RelatorioVarredura.gerar(
             resultado,
@@ -243,6 +326,14 @@ class TerminalObdViewModel(
             duracaoMs = duracaoVarreduraMs,
             identificacoes = estado.identificacoes,
         )
+    }
+
+    /** Multi-módulo em andamento: os resultados acumulados, separados por cabeçalho, na ordem planejada. */
+    private fun parciais(estado: EstadoVarredura): List<ResultadoVarredura> {
+        val porCabecalho = estado.identificacoes.groupBy { it.cabecalho }
+        return estado.planejados.mapNotNull { c ->
+            porCabecalho[c.cabecalho]?.let { ids -> ResultadoVarredura(c, ids.map { it.resultado }, c.quantidade) }
+        }
     }
 
     private suspend fun verificarConexao() {

@@ -9,7 +9,8 @@ local.properties
 .externalNativeBuild
 .cxx
 *.apk
-!/dist/*.apk
+# APKs de release: publicados na GitHub Release (scripts/publicar-release.ps1), nunca no Git
+dist/*.apk
 *.aab
 
 # Instruções locais do Claude Code

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Atualizador pelo GitHub Releases (Sobre o App, Configurações e abertura da tela principal). -->
+<resources>
+    <string name="atualizacao_verificar">Verificar atualizações</string>
+    <string name="atualizacao_verificando">Consultando a última versão publicada no GitHub…</string>
+    <string name="atualizacao_ultima_versao">Você já está na última versão</string>
+    <string name="atualizacao_ultima_versao_detalhe">Versão instalada: v%1$s\nÚltima publicada: %2$s</string>
+    <string name="atualizacao_privado">Não foi possível consultar as releases pela API do GitHub (HTTP %1$d): o repositório é privado ou ainda não tem release publicada.\n\nAbra a página de Releases no navegador (com a sua conta do GitHub) para baixar o APK.</string>
+    <string name="atualizacao_sem_internet">Sem conexão com a internet. Conecte-se e tente de novo, ou abra a página de Releases mais tarde.</string>
+    <string name="atualizacao_falha">Não foi possível verificar agora: %1$s.</string>
+    <string name="atualizacao_abrir_releases">Abrir Releases no GitHub</string>
+    <string name="atualizacao_ver_github">Ver no GitHub</string>
+
+    <string name="atualizacao_nova_titulo">Nova versão disponível: %1$s</string>
+    <string name="atualizacao_nova_detalhe">Você está na v%1$s. A %2$s já está publicada</string>
+    <string name="atualizacao_sem_notas">Sem notas para esta versão.</string>
+    <string name="atualizacao_baixar_instalar">Baixar e instalar</string>
+    <string name="atualizacao_depois">Depois</string>
+
+    <string name="atualizacao_baixando_titulo">Baixando a %1$s</string>
+    <string name="atualizacao_baixando_inicio">Conectando ao GitHub…</string>
+    <string name="atualizacao_baixando_progresso">%1$d%% · %2$s de %3$s</string>
+    <string name="atualizacao_erro_download">Falha no download</string>
+    <string name="atualizacao_tentar_novamente">Tentar de novo</string>
+
+    <string name="atualizacao_permissao_titulo">Permitir a instalação</string>
+    <string name="atualizacao_permissao_mensagem">Para instalar a atualização, o Android precisa que o Charrua OBD Pro tenha a permissão \"Instalar apps desconhecidos\". Ative a chave na próxima tela e volte: a instalação continua sozinha.</string>
+    <string name="atualizacao_permissao_abrir">Abrir configuração</string>
+    <string name="atualizacao_permissao_negada">Sem a permissão \"Instalar apps desconhecidos\" o APK não pode ser instalado. Ative-a e toque em \"Baixar e instalar\" de novo.</string>
+    <string name="atualizacao_sem_instalador">Nenhum instalador de pacotes encontrado no aparelho.</string>
+    <string name="atualizacao_sem_navegador">Nenhum navegador encontrado para abrir o GitHub.</string>
+
+    <string name="config_secao_atualizacoes">Atualizações</string>
+    <string name="config_atualizacoes_descricao">Versão instalada: v%1$s. O app procura versões novas no GitHub Releases ao abrir; aqui você verifica na hora.</string>
+</resources>

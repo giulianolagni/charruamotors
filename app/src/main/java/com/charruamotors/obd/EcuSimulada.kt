@@ -87,14 +87,19 @@ internal class SimuladorBateria(
 
 /**
  * ECU simulada para o Terminal ELM327 e a Varredura de PIDs no modo simulado: um ELM327 v1.5 numa
- * Hilux SW4 D-4D com motor (`7E0`) e câmbio automático (`7E1`) que respondem ao serviço 21
- * (KWP2000 *readDataByLocalIdentifier*), sem módulo no `7E2`. Respostas no formato real da sessão
- * (`ATS0` sem espaços, `ATH0` sem cabeçalhos, multi-frame CAN `0:`/`1:` acima de 7 bytes).
+ * Hilux SW4 D-4D com motor (`7E0`), câmbio automático (`7E1`), ABS/VSC (`7B0`) e painel/4WD
+ * (`7C0`) que respondem ao serviço 21 (KWP2000 *readDataByLocalIdentifier*), sem módulo no `7E2`.
+ * Respostas no formato real da sessão (`ATS0` sem espaços, `ATH0` sem cabeçalhos, multi-frame CAN
+ * `0:`/`1:` acima de 7 bytes). Como num ELM327 de verdade, a resposta do ABS (`7B8`) e do painel
+ * (`7C8`) só passa com o filtro de recepção ajustado (`ATCRA 7B8`); sem ele, `NO DATA`.
  */
 internal class EcuSimulada(private val random: Random) {
 
     /** Cabeçalho configurado com `ATSH` (o funcional `7DF` depois de um reset). */
     @Volatile var cabecalho: String = CABECALHO_FUNCIONAL
+
+    /** Filtro de recepção do `ATCRA` (null = padrão, respostas `7E8`–`7EF`). */
+    @Volatile var filtroRecepcao: String? = null
 
     /**
      * Resposta crua a [compacto] (comando em maiúsculas sem espaços). [leitura] dá os valores
@@ -115,12 +120,27 @@ internal class EcuSimulada(private val random: Random) {
     private fun responderAt(c: String): String = when {
         c == "ATZ" || c == "ATWS" || c == "ATD" -> {
             cabecalho = CABECALHO_FUNCIONAL
+            filtroRecepcao = null
             if (c == "ATD") "OK" else "\r\rELM327 v1.5"
         }
         c == "ATI" -> "ELM327 v1.5"
         c == "AT@1" -> "OBDII to RS232 Interpreter"
         c == "ATDP" -> "AUTO, ISO 15765-4 (CAN 11/500)"
         c == "ATDPN" -> "A6"
+        c.startsWith("ATCRA") -> {
+            val filtro = c.removePrefix("ATCRA")
+            when {
+                filtro.isEmpty() -> {
+                    filtroRecepcao = null
+                    "OK"
+                }
+                filtro.length == 3 && filtro.all { it in '0'..'9' || it in 'A'..'F' } -> {
+                    filtroRecepcao = filtro
+                    "OK"
+                }
+                else -> "?"
+            }
+        }
         c.startsWith("ATSH") -> {
             val novo = c.removePrefix("ATSH")
             if ((novo.length == 3 || novo.length == 6) && novo.all { it in '0'..'9' || it in 'A'..'F' }) {
@@ -137,8 +157,12 @@ internal class EcuSimulada(private val random: Random) {
     private fun responderEcu(pedido: String, leitura: () -> Map<String, Double>, codigos: () -> List<String>): List<Int>? {
         val servico = pedido.take(2).toInt(16)
         val motor = cabecalho == CABECALHO_FUNCIONAL || cabecalho == MOTOR
+        val chassi = cabecalho in MODULOS_CHASSI
         return when {
             cabecalho == MODULO_AUSENTE -> null
+            chassi && filtroRecepcao != respostaDe(cabecalho) -> null // respondeu em 7B8/7C8, mas o ELM327 filtrou
+            chassi && servico == 0x21 -> servico21(pedido, leitura())
+            chassi -> listOf(0x7F, servico, NRC_SERVICO_NAO_SUPORTADO)
             servico == 0x01 && motor -> modo01(pedido, leitura())
             servico == 0x03 && motor -> listOf(0x43, codigos().size) + codigos().flatMap(::bytesDtc)
             servico == 0x13 && cabecalho == MOTOR -> listOf(0x53, codigos().size) + codigos().flatMap(::bytesDtc)
@@ -170,7 +194,12 @@ internal class EcuSimulada(private val random: Random) {
     private fun servico21(pedido: String, valores: Map<String, Double>): List<Int> {
         if (pedido.length != 4) return listOf(0x7F, 0x21, NRC_FORMATO_INVALIDO)
         val id = pedido.substring(2).toInt(16)
-        val dados = if (cabecalho == MOTOR) blocoMotor(id, valores) else blocoCambio(id)
+        val dados = when (cabecalho) {
+            MOTOR -> blocoMotor(id, valores)
+            CAMBIO -> blocoCambio(id, valores)
+            ABS_VSC -> blocoAbs(id, valores)
+            else -> blocoPainel(id)
+        }
         return dados?.let { listOf(0x61, id) + it } ?: listOf(0x7F, 0x21, NRC_FORA_DA_FAIXA)
     }
 
@@ -184,16 +213,44 @@ internal class EcuSimulada(private val random: Random) {
         }
         0x0C -> ((valores["010C"] ?: 780.0) * 4).roundToInt().let { listOf(it shr 8, it and 0xFF) }
         0x05 -> listOf(((valores["0105"] ?: 85.0) + 40).roundToInt().coerceIn(0, 0xFF))
+        // Pedal do acelerador (APP D/E, % = A*100/255): o E lê ~16 pontos acima do D, como no D-4D.
+        0x49 -> listOf(percentual(pedal(valores)))
+        0x4A -> listOf(percentual((pedal(valores) + DESVIO_APP_E).coerceAtMost(100.0)))
         in IDS_MOTOR -> blocoFixo(id, 2 + id % 9)
         else -> null
     }
 
-    private fun blocoCambio(id: Int): List<Int>? = when (id) {
+    private fun blocoCambio(id: Int, valores: Map<String, Double>): List<Int>? = when (id) {
         // ATF a ~70 °C pela fórmula ((256C+D)*7/100-400)/10: C,D = 0x3D62 (+ oscilação no último byte).
         0x82 -> listOf(0x00, 0x00, 0x3D, 0x62 + random.nextInt(-2, 3))
+        // Marcha engatada (A = 1..6) seguida de bytes de estado; alavanca em D (A = 3).
+        0x30 -> listOf(marchaSimulada(valores["010D"] ?: 0.0), 0x00, 0x1C)
+        0xD9 -> listOf(ALAVANCA_D, 0x00)
         in IDS_CAMBIO -> blocoFixo(id, 3 + id % 5)
         else -> null
     }
+
+    /** ABS/VSC: velocidades das 4 rodas (km/h), estado do VSC (A = 0 normal) e blocos de calibração. */
+    private fun blocoAbs(id: Int, valores: Map<String, Double>): List<Int>? = when (id) {
+        0x01 -> {
+            val v = (valores["010D"] ?: 0.0).roundToInt().coerceIn(0, 0xFF)
+            listOf(v, v, (v + random.nextInt(0, 2)).coerceAtMost(0xFF), v, 0x00, 0x00, 0x80, 0x00)
+        }
+        0x03 -> listOf(VSC_NORMAL, 0x00, 0x00, 0x02)
+        in IDS_ABS -> blocoFixo(id, 3 + id % 6)
+        else -> null
+    }
+
+    /** Painel/4WD: modo de tração (A = 0, 4x2 H2) e blocos da carroceria. */
+    private fun blocoPainel(id: Int): List<Int>? = when (id) {
+        0x01 -> listOf(TRACAO_H2, 0x00, 0x00, 0x00)
+        in IDS_PAINEL -> blocoFixo(id, 2 + id % 7)
+        else -> null
+    }
+
+    private fun pedal(valores: Map<String, Double>) = valores["0149"] ?: PEDAL_REPOUSO
+
+    private fun percentual(p: Double) = (p * 255 / 100).roundToInt().coerceIn(0, 0xFF)
 
     /** Bytes estáveis por identificador (mesma resposta a cada leitura) com o último oscilando. */
     private fun blocoFixo(id: Int, tamanho: Int): List<Int> {
@@ -223,6 +280,9 @@ internal class EcuSimulada(private val random: Random) {
         const val MOTOR = "7E0"
         const val CAMBIO = "7E1"
         const val MODULO_AUSENTE = "7E2"
+        const val ABS_VSC = "7B0"
+        const val PAINEL_4WD = "7C0"
+        private val MODULOS_CHASSI = setOf(ABS_VSC, PAINEL_4WD)
         private const val FIM = "\r\r"
         private const val NRC_SERVICO_NAO_SUPORTADO = 0x11
         private const val NRC_FORMATO_INVALIDO = 0x13
@@ -231,7 +291,32 @@ internal class EcuSimulada(private val random: Random) {
         /** Identificadores do serviço 21 que o motor simulado responde (além de 01, 05, 0C e 13). */
         val IDS_MOTOR: Set<Int> = setOf(0x02, 0x03, 0x04, 0x06, 0x07, 0x08, 0x10, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x30, 0x31, 0x40, 0x51)
 
-        /** Identificadores do serviço 21 que o câmbio simulado responde (além do 82, ATF). */
-        val IDS_CAMBIO: Set<Int> = setOf(0x01, 0x02, 0x30, 0x83, 0x91)
+        /** Identificadores do serviço 21 que o câmbio simulado responde (além do 82 ATF, 30 marcha e D9 alavanca). */
+        val IDS_CAMBIO: Set<Int> = setOf(0x01, 0x02, 0x83, 0x91)
+
+        /** Identificadores do serviço 21 do ABS/VSC simulado (além do 01 rodas e 03 VSC). */
+        val IDS_ABS: Set<Int> = setOf(0x02, 0x05, 0x10, 0x21)
+
+        /** Identificadores do serviço 21 do painel/4WD simulado (além do 01 tração). */
+        val IDS_PAINEL: Set<Int> = setOf(0x21, 0x22, 0x40)
+
+        const val ALAVANCA_D = 3
+        const val VSC_NORMAL = 0
+        const val TRACAO_H2 = 0
+        const val DESVIO_APP_E = 16.0
+        private const val PEDAL_REPOUSO = 0.0
+
+        /** Endereço de resposta de um módulo (`7B0` → `7B8`). */
+        private fun respostaDe(cabecalho: String) = "%03X".format(cabecalho.toInt(16) + 8)
+
+        /** Marcha do automático de 6 velocidades pela velocidade (1ª parado e arrancando). */
+        fun marchaSimulada(velocidadeKmh: Double): Int = when {
+            velocidadeKmh < 18 -> 1
+            velocidadeKmh < 32 -> 2
+            velocidadeKmh < 48 -> 3
+            velocidadeKmh < 66 -> 4
+            velocidadeKmh < 88 -> 5
+            else -> 6
+        }
     }
 }

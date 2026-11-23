@@ -266,6 +266,7 @@ class ObdClientFake(
     override suspend fun encerrarSessaoManual() {
         if (!_sessaoManual.value) return
         ecu.cabecalho = cabecalhoEntradaManual
+        ecu.filtroRecepcao = null
         bateria.definir(null)
         _sessaoManual.value = false
         registro.evento("Sessão manual encerrada: polling retomado")
@@ -411,13 +412,24 @@ class ObdClientFake(
             Pids.CONSUMO_ECU to consumoLh.arredondar(1),
             Pids.TENSAO_BATERIA to tensao.arredondar(1),
         )
-        if (estendidosAtivos.isNotEmpty()) leitura += leituraEstendida(map).filterKeys { it in estendidosAtivos }
+        if (estendidosAtivos.isNotEmpty()) {
+            leitura += leituraEstendida(map, pedal, aceleracao).filterKeys { it in estendidosAtivos }
+        }
         ultimaLeitura = leitura
         return leitura
     }
 
-    /** Valores dos PIDs de montadora simulados (ATF segue o óleo; injetores com desvios fixos). */
-    private fun leituraEstendida(map: Double): Map<String, Double> = mapOf(
+    /**
+     * Valores dos PIDs de montadora simulados: ATF segue o óleo; injetores com desvios fixos; pedal
+     * APP D/E (o E ~16 pontos acima); marcha pela velocidade com a alavanca em D; VSC atuando nas
+     * frenagens fortes.
+     */
+    private fun leituraEstendida(map: Double, pedal: Double, aceleracao: Double): Map<String, Double> = mapOf(
+        "TOYOTA_PEDAL_D" to pedal.arredondar(1),
+        "TOYOTA_PEDAL_E" to (pedal + EcuSimulada.DESVIO_APP_E).coerceAtMost(100.0).arredondar(1),
+        "TOYOTA_MARCHA" to EcuSimulada.marchaSimulada(velocidade).toDouble(),
+        "TOYOTA_ALAVANCA" to EcuSimulada.ALAVANCA_D.toDouble(),
+        "TOYOTA_VSC" to if (aceleracao < FRENAGEM_FORTE_KMH_S) VSC_ATUANDO else EcuSimulada.VSC_NORMAL.toDouble(),
         "TOYOTA_ATF" to (temperaturaOleo - 4.0 + random.nextDouble(-0.5, 0.5)).roundToInt().toDouble(),
         "TOYOTA_INJ1" to (0.42 + random.nextDouble(-0.05, 0.05)).arredondar(2),
         "TOYOTA_INJ2" to (-0.31 + random.nextDouble(-0.05, 0.05)).arredondar(2),
@@ -448,6 +460,9 @@ class ObdClientFake(
          */
         val SIMULADOS_ESTENDIDOS: Set<String> = setOf(
             "TOYOTA_ATF", "TOYOTA_INJ1", "TOYOTA_INJ2", "TOYOTA_INJ3", "TOYOTA_INJ4",
+            // SW4: pedal (2149/214A), marcha (2130) e alavanca (21D9) no câmbio, VSC no 7B0. O 4x4 (7C0)
+            // e as variantes pelo motor (_ECM) ficam de fora: mostram "—" como num carro sem o módulo.
+            "TOYOTA_PEDAL_D", "TOYOTA_PEDAL_E", "TOYOTA_MARCHA", "TOYOTA_ALAVANCA", "TOYOTA_VSC",
             "VW_TEMP_OLEO", "VW_TURBO_REAL", "VW_TURBO_ALVO",
         )
 
@@ -462,6 +477,8 @@ class ObdClientFake(
 
         const val MENSAGEM_ECU_MUDA = "A ECU parou de responder (NO DATA). A ignição foi desligada? (simulado)"
         private const val CHANCE_NOVO_ALVO_POR_S = 0.12
+        private const val FRENAGEM_FORTE_KMH_S = -10.0
+        private const val VSC_ATUANDO = 1.0
         private const val BORBOLETA_FECHADA = 8.0 // % de abertura da borboleta em marcha lenta
         private const val PRESSAO_BAROMETRICA = 95.0 // kPa (~600 m de altitude)
         private const val PRESSAO_LINHA_COMBUSTIVEL = 380.0 // kPa, injeção indireta

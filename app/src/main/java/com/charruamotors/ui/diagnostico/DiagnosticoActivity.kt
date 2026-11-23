@@ -60,6 +60,7 @@ class DiagnosticoActivity : AppCompatActivity() {
         menuLateral.ligar(binding.gaveta, binding.menuLateral, binding.toolbar, binding.root) {
             startActivity(DashboardActivity.intent(this, viewModel.veiculoId))
         }
+        menuLateral.verificarAtualizacaoAoAbrir(savedInstanceState == null)
         binding.seletorVeiculo.setOnClickListener { escolherVeiculoRapido() }
         binding.toolbar.setOnMenuItemClickListener { item ->
             if (item.itemId == R.id.acao_personalizar_painel) {

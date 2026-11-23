@@ -48,6 +48,7 @@ class SensorAdapter : ListAdapter<LeituraSensor, SensorAdapter.ViewHolder>(Diff)
             val contexto = binding.root.context
             val def = leitura.definicao
             binding.textoValor.text = leitura.valor?.let { valor ->
+                def.rotulo(valor)?.let { return@let it }
                 val v = conversor().converter(valor, def.unidade, def.casasDecimais)
                 contexto.getString(R.string.obd_valor_unidade, v.valor.comoNumero(v.casas), v.unidade)
             } ?: contexto.getString(R.string.valor_indisponivel)

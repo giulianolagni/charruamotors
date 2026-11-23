@@ -72,7 +72,11 @@ object FormatadorHud {
         val escala = sensor.escala(conversor)
         return CelulaHud(
             sensor = sensor,
-            valor = exibicao?.let { it.valor.comoNumero(it.casas) } ?: SEM_VALOR,
+            valor = when {
+                bruto == null -> SEM_VALOR
+                sensor.ehEstado -> sensor.texto(bruto, conversor)
+                else -> exibicao?.let { it.valor.comoNumero(it.casas) } ?: SEM_VALOR
+            },
             rotulo = sensor.rotuloHud(conversor),
             fracao = exibicao?.let { escala.fracao(it.valor.toFloat()) },
         )

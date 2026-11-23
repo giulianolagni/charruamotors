@@ -103,6 +103,8 @@
     <string name="varredura_progresso">%1$d/%2$d · %3$d responderam · %4$s</string>
     <string name="varredura_concluida">Concluída: %1$d de %2$d responderam</string>
     <string name="varredura_parada">Parada: %1$s</string>
+    <string name="varredura_modulo_etapa">Módulo %1$d/%2$d · %3$s %4$s</string>
+    <string name="varredura_multi_concluida">Concluída: %1$d de %2$d responderam · %3$d de %4$d módulos presentes</string>
     <string name="varredura_relatorio">Copiar / Compartilhar relatório da varredura</string>
     <string name="varredura_relatorio_titulo">Relatório da varredura</string>
     <string name="varredura_vazia">Escolha um preset ou configure cabeçalho, serviço e faixa e toque em Iniciar. Os PIDs que responderem aparecem aqui com os bytes brutos.</string>

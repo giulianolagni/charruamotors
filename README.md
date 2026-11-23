@@ -28,6 +28,7 @@ Disciplina: Desenvolvimento Mobile II. Professor: Jaqson.
 - [Menu lateral, Configurações e Assistente (v1.3)](#menu-lateral-configurações-e-assistente-v13)
 - [Abas, personalização do Painel e unidades globais (v1.4)](#abas-personalização-do-painel-e-unidades-globais-v14)
 - [Veículo favorito, navegação limpa e Painel livre (v1.5)](#veículo-favorito-navegação-limpa-e-painel-livre-v15)
+- [GitHub Releases, atualizador e sensores da SW4 (v1.5)](#github-releases-atualizador-e-sensores-da-sw4-v15)
 - [Regras de negócio e cálculos](#regras-de-negócio-e-cálculos)
 - [Arquitetura e stack](#arquitetura-e-stack)
 - [Como executar](#como-executar)
@@ -402,6 +403,58 @@ para a barra `● Conectado · OBDII · 7E0` com Desconectar (`StatusConexaoPain
   globais. Backups antigos sem esses campos restauram sem mexer neles; as preferências da v1.4 migram sozinhas (o estilo
   global vira o estilo de cada relógio).
 
+---
+
+## GitHub Releases, atualizador e sensores da SW4 (v1.5)
+
+**APKs fora do Git.** O `dist/*.apk` saiu do repositório (`.gitignore`). O APK de release assinado continua sendo gerado
+em `dist/CharruaOBDPro-<versão>-release.apk` (e copiado para `G:\Meu Drive\CharruaOBD`, se existir), mas é publicado
+como anexo da GitHub Release `v<versão>` pelo `scripts/publicar-release.ps1`:
+
+```powershell
+.\scripts\publicar-release.ps1            # assembleRelease + gh release create v1.5 (ou upload --clobber se já existir)
+.\scripts\publicar-release.ps1 -SemBuild  # só publica o APK que já está em dist/
+```
+
+O script exige o GitHub CLI autenticado (`winget install --id GitHub.cli` e `gh auth login`). Mudanças grandes sobem
+`versionCode` e `versionName`; ajustes pequenos mantêm a versão e só substituem o APK da release.
+
+**Atualizador automático e manual** (`sistema/atualizacao`, `ui/atualizacao/AtualizadorApp`):
+
+- Na abertura da tela principal, o `VerificadorAtualizacao` consulta `releases/latest` da API do GitHub em
+  `Dispatchers.IO` e compara a tag com o `BuildConfig.VERSION_NAME` (`VersaoSemantica`, `major.minor.patch` com
+  pré-release). Sem internet, `404`/`401` (repositório privado ou sem release) ou já atualizado: nada aparece. Com
+  versão nova: diálogo com a versão, as notas da release e **Baixar e instalar** / **Depois** (o "Depois" vale para a
+  sessão).
+- **Verificar atualizações** no Sobre o App e nas Configurações: responde "Você já está na última versão" ou, no
+  `404/401`, oferece **Abrir Releases no GitHub**.
+- **Baixar e instalar**: o APK vai para `cacheDir/updates/` com barra de progresso; sem a permissão "Instalar apps
+  desconhecidos" (`REQUEST_INSTALL_PACKAGES`), o app abre a tela do sistema e continua a instalação na volta; o
+  instalador nativo recebe o APK pelo `FileProvider` (`ACTION_VIEW` + `FLAG_GRANT_READ_URI_PERMISSION`).
+
+**Sensores estendidos da Toyota SW4** (perfil Toyota de `pids_estendidos.json`, sondados na conexão; só entra o que o
+módulo responder dentro da faixa):
+
+| Sensor | Requisição | No Painel |
+|---|---|---|
+| Pedal do acelerador APP D / APP E (%) | `7E0 · 2149` / `7E0 · 214A` | "Pedal Acelerador" (usa o `0149` ou, sem ele, o `2149`); separado da Borboleta (`2111`/`0111`) |
+| Marcha engatada (N, 1ª–6ª) | `7E1 · 2130` (ou `7E0 · 2130`) | "Marcha" |
+| Alavanca (P R N D 3 2 L) | `7E1 · 21D9` (ou `7E0 · 21D9`) | "Marcha / Alavanca" |
+| Temperatura do ATF (°C) | `7E1 · 2182` (ou `7E0 · 2182`) | "Câmbio ATF" |
+| Tração 4x4 / bloqueio | `7C0 · 2101` (provisório) | "Tração 4x4" |
+| VSC / estabilidade | `7B0 · 2103` (provisório) | "VSC / Estabilidade" |
+
+Sensores de estado mostram o rótulo (`D`, `4x4 (H4)`, `VSC OFF`) no mostrador, no HUD e na Lista Rápida (o campo
+opcional `rotulos` do catálogo). Sem resposta do módulo, o mostrador fica em "—" e a Lista Rápida o esconde. Módulos
+fora de `7E0`–`7E7` respondem no endereço + 8 (ABS `7B8`, painel `7C8`), fora do filtro padrão do ELM327: o cliente
+ajusta o `ATCRA` junto do `ATSH` e volta ao padrão no motor (e desiste se o clone recusar o comando).
+
+**Varredura multi-módulo** (aba Oficina → Varredura de PIDs): presets **Toyota ABS / VSC / Estabilidade (`7B0`)**,
+**Toyota Painel / 4WD / Carroceria (`7C0`)** e **Varredura Completa SW4 (7E0 + 7E1 + 7B0 + 7C0)**, que testa os 4
+cabeçalhos em sequência (pulando cedo o módulo ausente) e gera um relatório único, com uma seção por módulo e os bytes
+brutos de cada identificador, para copiar e decodificar marcha, alavanca, 4x4 e VSC na SW4 real. No modo simulado, a
+ECU da Hilux responde também ao pedal (`2149`/`214A`), à marcha/alavanca e aos módulos `7B0`/`7C0`.
+
 
 ---
 
@@ -569,7 +622,7 @@ Recursos em `app/src/main/res`:
 
 ## Testes unitários
 
-São **643 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./gradlew test`. Alguns destaques:
+São **681 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./gradlew test`. Alguns destaques:
 
 | Classe de teste | Testes | O que cobre |
 |---|---:|---|
@@ -599,6 +652,10 @@ São **643 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./g
 | `UnidadePressaoTest` | 9 | Conversão kPa → bar / psi, casas decimais, escala do mostrador e o Turbo/MAP do HUD na unidade escolhida |
 | `ChecklistPermissoesTest` | 8 | Status verde/vermelho por versão do Android (Bluetooth no 12+, notificações no 13+), essenciais e recursos de direção |
 | `PreferenciasAppTest` | 8 | Persistência do Assistente Inicial (primeira abertura, concluir, refazer), tema e unidade |
+| `VersaoSemanticaTest` | 6 | Tags `v1.5`/`1.6.0-beta`, comparação numérica por parte (`1.10` > `1.9`) e pré-release antes da final |
+| `InterpretadorReleaseGithubTest` | 10 | JSON da API de Releases (APK, notas, `null`), `404/401` de repositório privado, `403`, JSON quebrado e sem internet |
+| `SensoresSw4Test` | 10 | Pedal `2149`/`214A` em %, marcha/alavanca/4x4/VSC com rótulos, `ATCRA`, mostradores com PID alternativo e o simulador |
+| `VarreduraMultiModuloTest` | 10 | Presets `7B0`/`7C0`, Varredura Completa SW4, `ATCRA`, módulo ausente, conexão perdida e o relatório consolidado |
 | `StatusCaixaPretaTest` | 8 | Cabeçalho do menu lateral, faixa da aba OBD2 e pré-seleção do `OBDII` e do `Toyota SW4` no assistente |
 
 ---

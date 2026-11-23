@@ -1,15 +1,20 @@
 package com.charruamotors.direcao.painel
 
 import com.charruamotors.obd.ValoresSensores
+import com.charruamotors.obd.pid.DefinicaoPid
 import com.charruamotors.sistema.unidades.ConversorUnidades
 import com.charruamotors.sistema.unidades.UnidadePressao
 import com.charruamotors.sistema.unidades.ValorExibicao
 import com.charruamotors.ui.componentes.EscalaGauge
+import com.charruamotors.ui.util.comoNumero
 
 /**
  * Sensores que podem ocupar um dos 4 mostradores do Painel ou uma célula do HUD flutuante, com a
  * escala de cada unidade de exibição (métrica e imperial). [comando] é a chave do PID canônico no
- * catálogo (`010C`, `ATRV`...): os espelhos dos modos 21/22 publicam no mesmo lugar.
+ * catálogo (`010C`, `ATRV`...): os espelhos dos modos 21/22 publicam no mesmo lugar. Os
+ * [alternativos] são lidos quando o principal não vem (ex.: o pedal pelo `2149` Toyota quando a
+ * ECU não tem o `0149`; a alavanca pelo motor `7E0` quando o câmbio `7E1` não responde). Sensores
+ * de estado (alavanca, 4x4, VSC) mostram o [rotulos] do valor em vez do número; sem leitura, "—".
  */
 enum class SensorPainel(
     val comando: String,
@@ -21,6 +26,8 @@ enum class SensorPainel(
     val unidadeCatalogo: String,
     val casas: Int,
     private val escalas: Map<String, EscalaGauge>,
+    val alternativos: List<String> = emptyList(),
+    val rotulos: Map<Int, String> = emptyMap(),
 ) {
     RPM(
         "010C", "RPM", "RPM", "rpm", 0,
@@ -71,8 +78,9 @@ enum class SensorPainel(
         mapOf("%" to EscalaGauge(0f, 100f, null, 5, 4)),
     ),
     ACELERADOR(
-        "0149", "Acelerador", "PEDAL", "%", 0,
+        "0149", "Pedal Acelerador", "PEDAL", "%", 0,
         mapOf("%" to EscalaGauge(0f, 100f, null, 5, 4)),
+        alternativos = listOf("TOYOTA_PEDAL_D"),
     ),
     TENSAO(
         "ATRV", "Bateria", "BATERIA", "V", 1,
@@ -100,7 +108,53 @@ enum class SensorPainel(
             "gal/h" to EscalaGauge(0f, 8f, null, 4, 4),
         ),
     ),
+
+    // ---- Toyota SW4 / Hilux (perfil de montadora, pids_estendidos.json): só leem se o módulo responder.
+    TEMP_CAMBIO(
+        "TOYOTA_ATF", "Câmbio ATF", "ATF", "°C", 0,
+        mapOf(
+            "°C" to EscalaGauge(40f, 150f, 120f, 11, 2),
+            "°F" to EscalaGauge(100f, 300f, 250f, 10, 2),
+        ),
+        alternativos = listOf("TOYOTA_ATF_ECM"),
+    ),
+    MARCHA_ALAVANCA(
+        "TOYOTA_ALAVANCA", "Marcha / Alavanca", "ALAVANCA", "", 0,
+        mapOf("" to EscalaGauge(0f, 6f, null, 6, 1)),
+        alternativos = listOf("TOYOTA_ALAVANCA_ECM"),
+        rotulos = mapOf(0 to "P", 1 to "R", 2 to "N", 3 to "D", 4 to "3", 5 to "2", 6 to "L"),
+    ),
+    MARCHA_ATUAL(
+        "TOYOTA_MARCHA", "Marcha", "MARCHA", "", 0,
+        mapOf("" to EscalaGauge(0f, 6f, null, 6, 1)),
+        alternativos = listOf("TOYOTA_MARCHA_ECM"),
+        rotulos = mapOf(0 to "N", 1 to "1ª", 2 to "2ª", 3 to "3ª", 4 to "4ª", 5 to "5ª", 6 to "6ª"),
+    ),
+    TRACAO_4X4(
+        "TOYOTA_4WD", "Tração 4x4", "4X4", "", 0,
+        mapOf("" to EscalaGauge(0f, 4f, null, 4, 1)),
+        rotulos = mapOf(0 to "4x2 (H2)", 1 to "4x4 (H4)", 2 to "H4 bloqueado", 3 to "Reduzida (L4)", 4 to "L4 + bloqueio traseiro"),
+    ),
+    VSC(
+        "TOYOTA_VSC", "VSC / Estabilidade", "VSC", "", 0,
+        mapOf("" to EscalaGauge(0f, 4f, 3f, 4, 1)),
+        rotulos = mapOf(0 to "Normal", 1 to "Atuando", 2 to "VSC OFF", 3 to "TRC OFF", 4 to "Falha"),
+    ),
     ;
+
+    /** Todas as chaves que alimentam o mostrador, na ordem de preferência. */
+    val comandos: List<String> get() = listOf(comando) + alternativos
+
+    /** Sensor de estado (P/R/N/D, 4x2/4x4...): o texto vem de [rotulos]. */
+    val ehEstado: Boolean get() = rotulos.isNotEmpty()
+
+    /** Texto de exibição: o rótulo do estado (`D`, `4x4 (H4)`) ou o número já convertido; "—" sem leitura. */
+    fun texto(valor: Double?, conversor: ConversorUnidades): String {
+        if (valor == null || !valor.isFinite()) return SEM_LEITURA
+        DefinicaoPid.rotuloDe(rotulos, valor)?.let { return it }
+        val v = exibir(valor, conversor)
+        return v.valor.comoNumero(v.casas)
+    }
 
     /**
      * Valor na unidade de exibição do [conversor]. O rail sai em bar no métrico (kPa teria 6
@@ -123,15 +177,21 @@ enum class SensorPainel(
     /** `TURBO/MAP bar`, `MOTOR °F`; o RPM dispensa a unidade. */
     fun rotuloHud(conversor: ConversorUnidades): String {
         val unidade = unidade(conversor)
-        return if (unidade.equals(rotuloHud, ignoreCase = true)) rotuloHud else "$rotuloHud $unidade"
+        return if (unidade.isBlank() || unidade.equals(rotuloHud, ignoreCase = true)) rotuloHud else "$rotuloHud $unidade"
     }
 
-    /** Leitura do sensor no instantâneo [dados] (ainda na unidade do catálogo). */
-    fun ler(dados: ValoresSensores?): Double? = dados?.get(comando)?.takeIf { it.isFinite() }
+    /** Leitura do sensor no instantâneo [dados] (ainda na unidade do catálogo): o principal ou o 1º alternativo lido. */
+    fun ler(dados: ValoresSensores?): Double? {
+        if (dados == null) return null
+        return comandos.firstNotNullOfOrNull { c -> dados[c]?.takeIf { it.isFinite() } }
+    }
 
     companion object {
+        const val SEM_LEITURA = "—"
+
         fun deCodigo(codigo: String?): SensorPainel? = entries.firstOrNull { it.name.equals(codigo?.trim(), ignoreCase = true) }
 
-        fun doComando(comando: String): SensorPainel? = entries.firstOrNull { it.comando.equals(comando, ignoreCase = true) }
+        fun doComando(comando: String): SensorPainel? =
+            entries.firstOrNull { s -> s.comandos.any { it.equals(comando, ignoreCase = true) } }
     }
 }

@@ -99,7 +99,7 @@ class ObdClientFakeTelemetriaTest {
     fun `perfil Toyota simula ATF e correcao dos injetores`() = runTest {
         val obd = conectado()
         val r = obd.ativarPerfilFabricante("Toyota Hilux") as ResultadoPerfil.Ativo
-        assertEquals(5, r.pids.size)
+        assertEquals(10, r.pids.size) // ATF, 4 injetores, pedal D/E, marcha, alavanca e VSC (sem o 4x4 e os _ECM)
         val dados = obd.lerTelemetria(250, lentosPorVez = 50, ciclosPorLento = 1).take(1).toList().last()
         assertTrue(dados["TOYOTA_INJ3"]!! > 1.5) // injetor com desvio simulado
         assertTrue(dados["TOYOTA_ATF"]!! in 20.0..120.0)

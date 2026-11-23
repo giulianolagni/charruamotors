@@ -1,5 +1,6 @@
 package com.charruamotors.domain.calculo
 
+import com.charruamotors.domain.faixas.FaixasVeiculo
 import com.charruamotors.domain.model.Veiculo
 import com.charruamotors.obd.ValoresSensores
 import com.charruamotors.obd.pid.Pids
@@ -45,7 +46,7 @@ object AlertasProtecao {
         return buildList {
             dados[Pids.TEMPERATURA_MOTOR]?.takeIf { it.isFinite() && it >= limites.aguaMaxC }
                 ?.let { add(AlertaProtecao(TipoAlertaProtecao.AGUA, it, limites.aguaMaxC)) }
-            COMANDOS_ATF.firstNotNullOfOrNull { c -> dados[c]?.takeIf { it.isFinite() } }
+            Pids.COMANDOS_ATF.firstNotNullOfOrNull { c -> dados[c]?.takeIf { it.isFinite() } }
                 ?.takeIf { it >= limites.atfMaxC }
                 ?.let { add(AlertaProtecao(TipoAlertaProtecao.ATF, it, limites.atfMaxC)) }
             val rpm = dados[Pids.RPM]
@@ -55,9 +56,6 @@ object AlertasProtecao {
             }
         }
     }
-
-    /** Chaves do ATF no catálogo (principal e alternativos do sensor Temp. Câmbio). */
-    private val COMANDOS_ATF = listOf("TOYOTA_ATF_CAMBIO", "TOYOTA_ATF", "TOYOTA_ATF_ECM")
 }
 
 /**
@@ -98,6 +96,13 @@ class CentralAlertas(
 ) {
     @Volatile
     var limites: LimitesProtecao = LimitesProtecao()
+
+    /** Faixas mínimas/máximas esperadas do veículo ativo (v2.1): destacam o mostrador fora da faixa. */
+    @Volatile
+    var faixas: FaixasVeiculo = FaixasVeiculo.genericas(null)
+
+    /** O mostrador com estes [comandos] está fora da faixa esperada em [dados]? (sem som: só destaque). */
+    fun foraDaFaixa(comandos: Collection<String>, dados: ValoresSensores?): Boolean = faixas.foraDaFaixa(comandos, dados)
 
     /** Chamado uma vez a cada alerta que *entra* em vigor (para o log da sessão); rearma ao sair. */
     @Volatile

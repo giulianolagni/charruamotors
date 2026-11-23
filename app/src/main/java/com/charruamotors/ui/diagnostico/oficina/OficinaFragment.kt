@@ -29,6 +29,7 @@ import com.charruamotors.sistema.unidades.ConversorUnidades
 import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.diagnostico.DiagnosticoPagerAdapter
+import com.charruamotors.ui.oficina.atuadores.TesteAtuadoresActivity
 import com.charruamotors.ui.oficina.bateria.TesteBateriaActivity
 import com.charruamotors.ui.oficina.falhas.DiagnosticoErrosActivity
 import com.charruamotors.ui.oficina.terminal.TerminalObdActivity
@@ -40,7 +41,7 @@ import kotlinx.coroutines.launch
 /**
  * Aba Oficina: as ferramentas de diagnóstico em cards grandes e ilustrados — Teste de Bateria
  * (guiado, com laudo), Diagnóstico de Erros (ler e apagar DTCs), Varredura de PIDs (busca de
- * sensores extras) e Terminal ELM327. Todas usam o scanner conectado no Painel; bateria, varredura
+ * sensores extras), Terminal ELM327 e Teste de Atuadores (UDS 2F, v2.1). Todas usam o scanner conectado no Painel; bateria, varredura
  * e terminal abrem uma sessão manual que pausa o polling até voltar.
  */
 class OficinaFragment : Fragment() {
@@ -63,6 +64,7 @@ class OficinaFragment : Fragment() {
             preencher(cardFalhas, R.string.oficina_card_falhas, R.string.oficina_card_falhas_desc, R.drawable.ic_falha, R.color.dtc_confirmado)
             preencher(cardVarredura, R.string.oficina_card_varredura, R.string.oficina_card_varredura_desc, R.drawable.ic_varredura, R.color.azul_primario)
             preencher(cardTerminal, R.string.oficina_card_terminal, R.string.oficina_card_terminal_desc, R.drawable.ic_terminal, R.color.terminal_card)
+            preencher(cardAtuadores, R.string.oficina_card_atuadores, R.string.oficina_card_atuadores_desc, R.drawable.ic_atuador, R.color.atuador_card)
 
             cardBateria.root.setOnClickListener { abrirConectada { TesteBateriaActivity.intent(requireContext(), veiculoId) } }
             // O DTC abre sempre: a tela mostra o estado e só habilita ler/apagar com o scanner ligado.
@@ -73,6 +75,7 @@ class OficinaFragment : Fragment() {
             cardTerminal.root.setOnClickListener {
                 abrirConectada { TerminalObdActivity.intent(requireContext(), veiculoId, TerminalObdActivity.ABA_TERMINAL) }
             }
+            cardAtuadores.root.setOnClickListener { abrirConectada { TesteAtuadoresActivity.intent(requireContext(), veiculoId) } }
             faixaConexao.setOnClickListener { irParaPainel() }
             cardDesempenho.root.setOnClickListener { app.telemetriaCompartilhada.cronometro.reiniciar() }
         }
@@ -109,7 +112,7 @@ class OficinaFragment : Fragment() {
         textoConexao.definirTexto(getString(if (conectado) R.string.oficina_conectado else R.string.oficina_desconectado))
         val cor = if (conectado) R.color.status_ok else R.color.status_espera
         pontoConexao.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), cor))
-        listOf(cardBateria, cardVarredura, cardTerminal).forEach { card ->
+        listOf(cardBateria, cardVarredura, cardTerminal, cardAtuadores).forEach { card ->
             card.textoRequisito.isVisible = !conectado
             card.root.alpha = if (conectado) 1f else ALFA_INDISPONIVEL
         }

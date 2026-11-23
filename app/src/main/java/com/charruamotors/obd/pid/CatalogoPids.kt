@@ -21,8 +21,9 @@ import kotlin.math.roundToInt
  *   [formula] em [converter]. Resultado `NaN` = leitura inválida (fora da faixa).
  * @property rotulos estados discretos (ex.: alavanca do câmbio `0` → `P`, `3` → `D`): o valor inteiro
  *   é exibido pelo rótulo em vez do número. Vazio nos sensores contínuos.
- * @property doAparelho leitura do próprio celular (ex.: velocidade do GPS, [VELOCIDADE_GPS]), não da
- *   ECU: nunca é enviada ao adaptador nem entra nos bitmasks; só existe para os logs (CSV).
+ * @property doAparelho leitura do próprio celular (ex.: velocidade do GPS, [VELOCIDADE_GPS]) ou calculada
+ *   pelo app (relação A/F real, [RELACAO_AF_REAL]), não da ECU: nunca é enviada ao adaptador nem entra
+ *   nos bitmasks; só existe para os logs (CSV).
  *
  * Um **espelho** é um PID dos modos 21/22 que lê o mesmo sensor de um PID padrão (`210C`,
  * `22F40C` ↔ `010C`): tem [estendida], [chave] e, como [comando], o do PID canônico — o valor
@@ -104,6 +105,21 @@ data class DefinicaoPid(
         valor.isFinite() && valor >= min - TOLERANCIA && valor <= max + TOLERANCIA
 
     companion object {
+        /** Coluna de log da relação A/F real calculada ([Pids.RELACAO_AF_REAL]), nos motores de ciclo Otto. */
+        val RELACAO_AF_REAL: DefinicaoPid by lazy {
+            DefinicaoPid(
+                comando = Pids.RELACAO_AF_REAL,
+                nome = "Relação A/F real (calculada)",
+                unidade = ":1",
+                bytes = 0,
+                formula = Formula.compilar("0"),
+                min = 0.0,
+                max = 40.0,
+                casasDecimais = 2,
+                doAparelho = true,
+            )
+        }
+
         /** Coluna de log da velocidade pelo GPS do celular ([Pids.VELOCIDADE_GPS]), quando ativa nas Configurações. */
         val VELOCIDADE_GPS: DefinicaoPid by lazy {
             DefinicaoPid(
@@ -232,11 +248,29 @@ object Pids {
     const val TEMPERATURA_AR_ADMISSAO = "010F"
     const val MAF = "0110"
     const val BORBOLETA = "0111"
+    const val AVANCO_IGNICAO = "010E"
+    const val SONDA_LAMBDA_TENSAO = "0114"
     const val PRESSAO_RAIL = "0123"
+    /** Sonda lambda de banda larga B1S1: λ medido (pelo modo tensão `0124` ou corrente `0134`). */
+    const val LAMBDA_BANDA_LARGA = "0124"
+    const val LAMBDA_BANDA_LARGA_CORRENTE = "0134"
+    const val TENSAO_ECU = "0142"
     const val LAMBDA_COMANDADO = "0144"
     const val PERCENTUAL_ETANOL = "0152"
     const val CONSUMO_ECU = "015E"
     const val TENSAO_BATERIA = "ATRV"
+
+    /**
+     * Não é PID: relação ar/combustível real (`:1`), calculada pela sessão em cada instantâneo a
+     * partir do λ medido (ou comandado) × a estequiometria do combustível em uso (flex pelo `0152`).
+     */
+    const val RELACAO_AF_REAL = "CALC_AFR"
+
+    /** Temperatura do ATF, na ordem de preferência: Toyota (câmbio 7E1 e espelho no motor) e GM (TCM 7E1/7E2). */
+    val COMANDOS_ATF: List<String> = listOf("TOYOTA_ATF_CAMBIO", "TOYOTA_ATF", "TOYOTA_ATF_ECM", "GM_ATF", "GM_ATF_7E2")
+
+    /** λ medido pela sonda de banda larga, na ordem de preferência. */
+    val COMANDOS_LAMBDA_MEDIDO: List<String> = listOf(LAMBDA_BANDA_LARGA, LAMBDA_BANDA_LARGA_CORRENTE)
 
     /**
      * Não é PID: velocidade (km/h) pelo GPS do celular, mesclada pela sessão em cada instantâneo

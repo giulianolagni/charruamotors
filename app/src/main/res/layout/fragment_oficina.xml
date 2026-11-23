@@ -82,6 +82,10 @@
             layout="@layout/item_card_oficina" />
 
         <include
+            android:id="@+id/card_atuadores"
+            layout="@layout/item_card_oficina" />
+
+        <include
             android:id="@+id/card_desempenho"
             layout="@layout/card_desempenho" />
 

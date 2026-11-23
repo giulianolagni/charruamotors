@@ -28,15 +28,15 @@ class ObdClientFakeTelemetriaTest {
     @Test
     fun `primeiro instantaneo tem os 4 rapidos e 1 lento e uma volta cobre todos os PIDs`() = runTest {
         val obd = conectado()
-        val leituras = obd.lerTelemetria(250).take(73).toList()
+        val leituras = obd.lerTelemetria(250).take(79).toList()
 
         assertEquals(
             setOf(Pids.RPM, Pids.VELOCIDADE, Pids.PRESSAO_COLETOR, Pids.MAF, Pids.CARGA_MOTOR),
             leituras.first().valores.keys,
         )
-        // 28 suportados − 4 rápidos = 24 lentos, 1 a cada 3 ciclos → 72 ciclos por volta.
-        assertFalse(ObdClientFake.COMANDOS_SIMULADOS == leituras[68].valores.keys)
-        assertEquals(ObdClientFake.COMANDOS_SIMULADOS, leituras[69].valores.keys)
+        // 30 suportados − 4 rápidos = 26 lentos, 1 a cada 3 ciclos → 78 ciclos por volta.
+        assertFalse(ObdClientFake.COMANDOS_SIMULADOS == leituras[74].valores.keys)
+        assertEquals(ObdClientFake.COMANDOS_SIMULADOS, leituras[75].valores.keys)
         leituras.last().valores.forEach { (cmd, v) ->
             assertTrue("$cmd = $v", CatalogoTeste.pid(cmd).dentroDaFaixa(v))
         }

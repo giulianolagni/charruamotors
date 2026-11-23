@@ -53,7 +53,7 @@
     <!-- Combustíveis -->
     <string name="combustivel_gasolina">Gasolina</string>
     <string name="combustivel_etanol">Etanol</string>
-    <string name="combustivel_flex">Flex</string>
+    <string name="combustivel_flex">Auto Flex</string>
     <string name="combustivel_diesel">Diesel</string>
     <string name="combustivel_gnv">GNV</string>
 
@@ -195,7 +195,7 @@
     <string name="obd_bordo_metodo_ecu">ECU (015E)</string>
     <string name="obd_bordo_sem_dados">Sem dados para calcular o consumo (a ECU não informa MAF nem RPM/MAP/temperatura do ar).</string>
     <string name="obd_bordo_motor">Motor %1$s L · %2$s</string>
-    <string name="obd_bordo_motor_etanol">Motor %1$s L · %2$s · %3$s%% de etanol (ECU)</string>
+    <string name="obd_bordo_motor_etanol">Motor %1$s L · %2$s · %3$s</string>
     <string name="obd_bordo_diesel_sem_ecu">Diesel: o consumo só é exibido se a ECU informar o PID 015E.</string>
 
     <!-- Cronômetro 0–100 km/h -->

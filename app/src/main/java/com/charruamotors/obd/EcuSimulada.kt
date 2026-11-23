@@ -92,8 +92,25 @@ internal class SimuladorBateria(
  * Respostas no formato real da sessão (`ATS0` sem espaços, `ATH0` sem cabeçalhos, multi-frame CAN
  * `0:`/`1:` acima de 7 bytes). Como num ELM327 de verdade, a resposta do ABS (`7B8`) e do painel
  * (`7C8`) só passa com o filtro de recepção ajustado (`ATCRA 7B8`); sem ele, `NO DATA`.
+ *
+ * Com [perfil] = [PerfilSimulacao.CRUZE_14T_FLEX] (v2.1) o motor `7E0` e o TCM `7E1` falam UDS:
+ * `10 01/03` (sessões), `3E 00` (Tester Present), `22 1940` (ATF no TCM) e `2F` nos DIDs de
+ * atuadores de referência — só na sessão estendida (`7F 2F 7F` fora dela), com as bobinas
+ * bloqueadas por Seed/Key (`7F 2F 33`) e os itens críticos recusados com o motor girando
+ * (`7F 2F 22`). No perfil padrão (SW4 KWP2000) o `2F` é `7F 2F 11` e o `10 03`, `7F 10 12`.
  */
 internal class EcuSimulada(private val random: Random) {
+
+    /** Carro simulado (decide os serviços UDS que o motor e o câmbio aceitam). */
+    @Volatile var perfil: PerfilSimulacao = PerfilSimulacao.PADRAO
+
+    /** Sessão de diagnóstico UDS ativa no motor (`0x01` padrão, `0x03` estendida). */
+    @Volatile var sessaoDiagnostico: Int = SESSAO_PADRAO
+        private set
+
+    fun reiniciarSessaoDiagnostico() {
+        sessaoDiagnostico = SESSAO_PADRAO
+    }
 
     /** Cabeçalho configurado com `ATSH` (o funcional `7DF` depois de um reset). */
     @Volatile var cabecalho: String = CABECALHO_FUNCIONAL
@@ -121,6 +138,7 @@ internal class EcuSimulada(private val random: Random) {
         c == "ATZ" || c == "ATWS" || c == "ATD" -> {
             cabecalho = CABECALHO_FUNCIONAL
             filtroRecepcao = null
+            sessaoDiagnostico = SESSAO_PADRAO
             if (c == "ATD") "OK" else "\r\rELM327 v1.5"
         }
         c == "ATI" -> "ELM327 v1.5"
@@ -158,6 +176,7 @@ internal class EcuSimulada(private val random: Random) {
         val servico = pedido.take(2).toInt(16)
         val motor = cabecalho == CABECALHO_FUNCIONAL || cabecalho == MOTOR
         val chassi = cabecalho in MODULOS_CHASSI
+        if (servico in SERVICOS_UDS && (cabecalho == MOTOR || cabecalho == CAMBIO)) return servicoUds(servico, pedido, leitura())
         return when {
             cabecalho == MODULO_AUSENTE -> null
             chassi && filtroRecepcao != respostaDe(cabecalho) -> null // respondeu em 7B8/7C8, mas o ELM327 filtrou
@@ -171,6 +190,48 @@ internal class EcuSimulada(private val random: Random) {
             cabecalho == MOTOR || cabecalho == CAMBIO || cabecalho == CABECALHO_FUNCIONAL ->
                 listOf(0x7F, servico, NRC_SERVICO_NAO_SUPORTADO)
             else -> null
+        }
+    }
+
+    /** Sessões, Tester Present, leitura por DID e controle de atuadores (UDS) no motor/câmbio. */
+    private fun servicoUds(servico: Int, pedido: String, valores: Map<String, Double>): List<Int> {
+        val gm = perfil == PerfilSimulacao.CRUZE_14T_FLEX
+        return when (servico) {
+            0x3E -> listOf(0x7E, 0x00)
+            0x10 -> {
+                val sub = pedido.drop(2).take(2).toIntOrNull(16) ?: return listOf(0x7F, 0x10, NRC_FORMATO_INVALIDO)
+                when {
+                    !gm -> listOf(0x7F, 0x10, NRC_SUBFUNCAO_NAO_SUPORTADA) // KWP2000 Toyota: sem a sessão 03 da UDS
+                    sub == SESSAO_PADRAO || sub == SESSAO_ESTENDIDA -> {
+                        if (cabecalho == MOTOR) sessaoDiagnostico = sub
+                        listOf(0x50, sub, 0x00, 0x32, 0x01, 0xF4) // P2 = 50 ms, P2* = 5 s
+                    }
+                    else -> listOf(0x7F, 0x10, NRC_SUBFUNCAO_NAO_SUPORTADA)
+                }
+            }
+            0x22 -> when {
+                !gm -> listOf(0x7F, 0x22, NRC_SERVICO_NAO_SUPORTADO)
+                cabecalho == CAMBIO && pedido == "221940" ->
+                    listOf(0x62, 0x19, 0x40, ((valores["GM_ATF"] ?: 60.0) + 40).roundToInt().coerceIn(0, 0xFF))
+                else -> listOf(0x7F, 0x22, NRC_FORA_DA_FAIXA)
+            }
+            else -> if (gm && cabecalho == MOTOR) atuador(pedido, valores) else listOf(0x7F, 0x2F, NRC_SERVICO_NAO_SUPORTADO)
+        }
+    }
+
+    /** `2F <DID> <controle> [estado]` no ECM do Cruze simulado. */
+    private fun atuador(pedido: String, valores: Map<String, Double>): List<Int> {
+        if (pedido.length < 8) return listOf(0x7F, 0x2F, NRC_FORMATO_INVALIDO)
+        if (sessaoDiagnostico != SESSAO_ESTENDIDA) return listOf(0x7F, 0x2F, NRC_SERVICO_FORA_DA_SESSAO)
+        val did = pedido.substring(2, 6).toInt(16)
+        val controle = pedido.substring(6, 8).toInt(16)
+        val estado = pedido.drop(8).chunked(2).map { it.toInt(16) }
+        return when {
+            did !in DIDS_ATUADORES_GM -> listOf(0x7F, 0x2F, NRC_FORA_DA_FAIXA)
+            did in DIDS_SEED_KEY_GM -> listOf(0x7F, 0x2F, NRC_SEGURANCA_NEGADA)
+            controle != 0x00 && did in DIDS_CRITICOS_GM && (valores["010C"] ?: 0.0) > 0.0 -> listOf(0x7F, 0x2F, NRC_CONDICOES_INCORRETAS)
+            controle != 0x00 && controle != 0x03 -> listOf(0x7F, 0x2F, NRC_FORA_DA_FAIXA)
+            else -> listOf(0x6F, did shr 8, did and 0xFF, controle) + estado
         }
     }
 
@@ -289,6 +350,24 @@ internal class EcuSimulada(private val random: Random) {
         private const val NRC_SERVICO_NAO_SUPORTADO = 0x11
         private const val NRC_FORMATO_INVALIDO = 0x13
         private const val NRC_FORA_DA_FAIXA = 0x31
+        private const val NRC_SUBFUNCAO_NAO_SUPORTADA = 0x12
+        private const val NRC_CONDICOES_INCORRETAS = 0x22
+        private const val NRC_SEGURANCA_NEGADA = 0x33
+        private const val NRC_SERVICO_FORA_DA_SESSAO = 0x7F
+        const val SESSAO_PADRAO = 0x01
+        const val SESSAO_ESTENDIDA = 0x03
+
+        /** Serviços UDS tratados à parte no motor/câmbio: sessão, Tester Present, DID e atuadores. */
+        private val SERVICOS_UDS = setOf(0x10, 0x22, 0x2F, 0x3E)
+
+        /** DIDs de atuador que o ECM do Cruze simulado reconhece (a tabela de referência do app). */
+        val DIDS_ATUADORES_GM: Set<Int> = (0x0101..0x0104).toSet() + (0x0111..0x0114) + (0x0121..0x0124)
+
+        /** Bobinas de ignição: protegidas por Seed/Key na simulação (demonstra o `7F 2F 33`). */
+        val DIDS_SEED_KEY_GM: Set<Int> = (0x0121..0x0124).toSet()
+
+        /** Bomba, embreagem do A/C e bicos: recusados com o motor girando (`7F 2F 22`). */
+        val DIDS_CRITICOS_GM: Set<Int> = setOf(0x0101, 0x0103) + (0x0111..0x0114)
 
         /** Identificadores do serviço 21 que o motor simulado responde (além de 01, 05, 0C, 33, 42 e AD). */
         val IDS_MOTOR: Set<Int> = setOf(0x02, 0x03, 0x04, 0x06, 0x07, 0x08, 0x10, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x30, 0x31, 0x40, 0x51)

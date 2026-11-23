@@ -131,7 +131,8 @@ enum class SensorPainel(
             "°C" to EscalaGauge(40f, 150f, 120f, 11, 2),
             "°F" to EscalaGauge(100f, 300f, 250f, 10, 2),
         ),
-        alternativos = listOf("TOYOTA_ATF", "TOYOTA_ATF_ECM"),
+        // GM (Cruze 1.4T): ATF por UDS 22 1940 no TCM 7E1 ou, na alternativa, no 7E2.
+        alternativos = listOf("TOYOTA_ATF", "TOYOTA_ATF_ECM", "GM_ATF", "GM_ATF_7E2"),
     ),
     MARCHA_ALAVANCA(
         "TOYOTA_ALAVANCA", "Alavanca (P/R/D)", "ALAVANCA", "", 0,
@@ -157,6 +158,8 @@ enum class SensorPainel(
     TENSAO_ECU(
         "TOYOTA_TENSAO_ECU", "Tensão ECU (V)", "ECU", "V", 2,
         mapOf("V" to EscalaGauge(8f, 16f, 15f, 8, 2)),
+        // OBD2 padrão (Cruze e a maioria dos carros a gasolina/flex) quando não há o 2142 Toyota.
+        alternativos = listOf(Pids.TENSAO_ECU),
     ),
     PRESSAO_BARO(
         "TOYOTA_BARO", "Pressão Barométrica", "BARO", "kPa", 0,
@@ -183,6 +186,42 @@ enum class SensorPainel(
             "mph" to EscalaGauge(0f, 160f, null, 8, 4),
         ),
     ),
+
+    // ---- Mistura, sonda lambda e Modo Flex (v2.1): no fim do enum, pelo mesmo motivo.
+    SONDA_LAMBDA_V(
+        Pids.SONDA_LAMBDA_TENSAO, "Sonda Lambda 1 (V)", "LAMBDA V", "V", 3,
+        mapOf("V" to EscalaGauge(0f, 1.2f, null, 6, 2)),
+    ),
+    /** λ medido pela sonda de banda larga (`0124`/`0134`); sem ela, o λ comandado pela ECU (`0144`). */
+    SONDA_LAMBDA(
+        Pids.LAMBDA_BANDA_LARGA, "Sonda Lambda 1 (λ)", "LAMBDA", "λ", 3,
+        mapOf("λ" to EscalaGauge(0.6f, 1.4f, null, 8, 2)),
+        alternativos = listOf(Pids.LAMBDA_BANDA_LARGA_CORRENTE, Pids.LAMBDA_COMANDADO),
+    ),
+    /** Relação ar/combustível real (λ × estequiometria do combustível em uso), calculada pela sessão. */
+    RELACAO_AF(
+        Pids.RELACAO_AF_REAL, "Relação A/F Real (:1)", "A/F", ":1", 1,
+        mapOf(":1" to EscalaGauge(6f, 18f, null, 6, 2)),
+    ),
+    ETANOL(
+        Pids.PERCENTUAL_ETANOL, "Teor de Etanol (%)", "ETANOL", "%", 0,
+        mapOf("%" to EscalaGauge(0f, 100f, null, 4, 5)),
+    ),
+    STFT(
+        Pids.STFT, "Correção Curto Prazo (STFT)", "STFT", "%", 1,
+        mapOf("%" to EscalaGauge(-25f, 25f, 20f, 5, 2)),
+        comSinal = true,
+    ),
+    LTFT(
+        Pids.LTFT, "Correção Longo Prazo (LTFT)", "LTFT", "%", 1,
+        mapOf("%" to EscalaGauge(-25f, 25f, 20f, 5, 2)),
+        comSinal = true,
+    ),
+    AVANCO_IGNICAO(
+        Pids.AVANCO_IGNICAO, "Avanço Ignição (°)", "AVANÇO", "°", 1,
+        mapOf("°" to EscalaGauge(-10f, 50f, null, 6, 2)),
+        comSinal = true,
+    ),
     ;
 
     /** Seção em que o sensor aparece nos chips de escolha. */
@@ -190,7 +229,8 @@ enum class SensorPainel(
         get() = when (this) {
             RPM, VELOCIDADE, VELOCIDADE_GPS, TURBO, CARGA, BORBOLETA, ACELERADOR, CONSUMO_KML -> GrupoSensor.PRINCIPAL
             TEMP_MOTOR, TEMP_ADMISSAO, TEMP_OLEO, TEMP_CAMBIO -> GrupoSensor.TEMPERATURAS
-            RAIL, MAF, COMBUSTIVEL, PRESSAO_BARO, BICO_1, BICO_2, BICO_3, BICO_4 -> GrupoSensor.INJECAO
+            RAIL, MAF, COMBUSTIVEL, PRESSAO_BARO, BICO_1, BICO_2, BICO_3, BICO_4, AVANCO_IGNICAO -> GrupoSensor.INJECAO
+            SONDA_LAMBDA_V, SONDA_LAMBDA, RELACAO_AF, ETANOL, STFT, LTFT -> GrupoSensor.MISTURA
             MARCHA_ALAVANCA, MARCHA_ATUAL, TRACAO_4X4, VSC -> GrupoSensor.CAMBIO_CHASSI
             TENSAO, TENSAO_ECU -> GrupoSensor.ELETRICA
         }
@@ -214,8 +254,8 @@ enum class SensorPainel(
     fun ler(dados: ValoresSensores?, consumoKmL: Double?): Double? =
         if (this == CONSUMO_KML) consumoKmL?.takeIf { it.isFinite() }?.coerceAtMost(MAX_KM_L) else ler(dados)
 
-    /** Leitura do próprio celular ou calculada (GPS, consumo): nunca vem da ECU, então nunca é "não suportada". */
-    val foraDaEcu: Boolean get() = this == CONSUMO_KML || this == VELOCIDADE_GPS
+    /** Leitura do próprio celular ou calculada (GPS, consumo, A/F real): nunca vem da ECU, então nunca é "não suportada". */
+    val foraDaEcu: Boolean get() = this == CONSUMO_KML || this == VELOCIDADE_GPS || this == RELACAO_AF
 
     /** Todas as chaves que alimentam o mostrador, na ordem de preferência. */
     val comandos: List<String> get() = listOf(comando) + alternativos
@@ -299,6 +339,7 @@ enum class GrupoSensor(val titulo: String) {
     PRINCIPAL("Principal"),
     TEMPERATURAS("Temperaturas"),
     INJECAO("Injeção & Diesel"),
+    MISTURA("Mistura & Flex"),
     CAMBIO_CHASSI("Câmbio & Chassi"),
     ELETRICA("Elétrica"),
 }

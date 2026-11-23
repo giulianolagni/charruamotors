@@ -20,7 +20,7 @@ class TelemetriaCalculadaTest {
     @Test
     fun `gasolina C tem AFR e densidade de E27`() {
         val c = Combustivel.GASOLINA_C
-        assertEquals(12.97, c.relacaoEstequiometrica, 0.01)
+        assertEquals(13.2, c.relacaoEstequiometrica, 1e-9) // referência do Modo Flex (v2.1)
         assertEquals(758.6, c.densidadeGL, 0.1)
         assertEquals(Combustivel.GASOLINA_PURA, Combustivel.mistura(0.0))
         assertEquals(Combustivel.ETANOL_HIDRATADO, Combustivel.mistura(1.0))
@@ -31,27 +31,27 @@ class TelemetriaCalculadaTest {
 
     @Test
     fun `consumo por MAF em L por hora e km por litro`() {
-        // 10 g/s de ar / 12,97 → 0,771 g/s de gasolina C → × 3600 / 758,6 g/L = 3,66 L/h
+        // 10 g/s de ar / 13,2 → 0,758 g/s de gasolina C → × 3600 / 758,6 g/L = 3,60 L/h
         val c = TelemetriaCalculada.consumoInstantaneo(dados(Pids.MAF to 10.0, Pids.VELOCIDADE to 60.0), gasolina)!!
         assertEquals(MetodoConsumo.MAF, c.metodo)
-        assertEquals(3.658, c.litrosPorHora, 0.005)
-        assertEquals(60.0 / 3.658, c.kmPorLitro!!, 0.03)
+        assertEquals(3.595, c.litrosPorHora, 0.005)
+        assertEquals(60.0 / 3.595, c.kmPorLitro!!, 0.03)
     }
 
     @Test
     fun `etanol gasta mais litros com a mesma massa de ar`() {
         val etanol = gasolina.copy(tipoCombustivel = TipoCombustivel.ETANOL)
         val c = TelemetriaCalculada.consumoInstantaneo(dados(Pids.MAF to 10.0), etanol)!!
-        assertEquals(10.0 / 8.7 * 3600 / 809.0, c.litrosPorHora, 1e-9) // 5,11 L/h
+        assertEquals(10.0 / 9.0 * 3600 / 809.0, c.litrosPorHora, 1e-9) // 4,94 L/h
     }
 
     @Test
     fun `flex usa o percentual de etanol informado pela ECU e sem ele assume E27`() {
         val flex = gasolina.copy(tipoCombustivel = TipoCombustivel.FLEX)
         val e100 = TelemetriaCalculada.consumoInstantaneo(dados(Pids.MAF to 10.0, Pids.PERCENTUAL_ETANOL to 100.0), flex)!!
-        assertEquals(10.0 / 8.7 * 3600 / 809.0, e100.litrosPorHora, 1e-9)
+        assertEquals(10.0 / 9.0 * 3600 / 809.0, e100.litrosPorHora, 1e-9)
         val semPid = TelemetriaCalculada.consumoInstantaneo(dados(Pids.MAF to 10.0), flex)!!
-        assertEquals(3.658, semPid.litrosPorHora, 0.005)
+        assertEquals(3.595, semPid.litrosPorHora, 0.005)
     }
 
     @Test
@@ -97,7 +97,7 @@ class TelemetriaCalculadaTest {
         val semMaf = dados(Pids.RPM to 3000.0, Pids.PRESSAO_COLETOR to 100.0, Pids.TEMPERATURA_AR_ADMISSAO to 26.85, Pids.VELOCIDADE to 100.0)
         val c = TelemetriaCalculada.consumoInstantaneo(semMaf, gasolina)!!
         assertEquals(MetodoConsumo.SPEED_DENSITY, c.metodo)
-        assertEquals(39.49 / 12.972 * 3600 / 758.63, c.litrosPorHora, 0.02) // ≈ 14,4 L/h em aceleração plena
+        assertEquals(39.49 / 13.2 * 3600 / 758.63, c.litrosPorHora, 0.02) // ≈ 14,2 L/h em aceleração plena
 
         // Com MAF presente, ele tem prioridade sobre a estimativa.
         val comMaf = TelemetriaCalculada.consumoInstantaneo(DadosObd(semMaf.valores + (Pids.MAF to 10.0)), gasolina)!!

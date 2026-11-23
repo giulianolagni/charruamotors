@@ -1,7 +1,9 @@
 package com.charruamotors.obd.sessao
 
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
+import com.charruamotors.domain.calculo.EstequiometriaFlex
 import com.charruamotors.domain.calculo.ParametrosMotor
+import com.charruamotors.domain.faixas.FaixasVeiculo
 import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.Veiculo
@@ -65,6 +67,8 @@ data class VeiculoSessao(
     /** Modelo (a cilindrada vem dele) e a calibração do consumo, para o resumo da viagem. */
     val modelo: String? = null,
     val calibracaoConsumo: Double = 1.0,
+    /** Faixas mínimas/máximas esperadas (preset SW4/Cruze ou genéricas do cadastro), para o relatório. */
+    val faixas: FaixasVeiculo? = null,
 ) {
     companion object {
         fun de(v: Veiculo) = VeiculoSessao(
@@ -76,6 +80,7 @@ data class VeiculoSessao(
             combustivel = v.tipoCombustivel,
             modelo = v.modelo,
             calibracaoConsumo = v.calibracaoConsumo,
+            faixas = FaixasVeiculo.paraVeiculo(v),
         )
     }
 }
@@ -216,6 +221,9 @@ class SessaoObd(
     @Volatile private var motivoPedido: String? = null
     @Volatile private var marcaAtual: String? = null
 
+    /** Combustível do veículo da sessão (Auto Flex por padrão): decide a estequiometria da A/F real. */
+    @Volatile private var combustivelAtual: TipoCombustivel? = null
+
     // ------------------------------------------------------------------ modo
 
     /** Só troca de modo sem sessão ativa e com o scanner desconectado. */
@@ -319,8 +327,15 @@ class SessaoObd(
         return (catalogoPids.pids.map { espelhos[it.comando] ?: it } + montadora).filter { it.comando in suportados }
     }
 
-    /** Colunas de log que vêm do próprio celular (hoje, a velocidade GPS quando ativa). */
-    fun colunasDoAparelho(): List<DefinicaoPid> = if (gpsAtivo()) listOf(DefinicaoPid.VELOCIDADE_GPS) else emptyList()
+    /**
+     * Colunas de log que não vêm da ECU: a velocidade GPS (quando ativa) e a relação A/F real
+     * calculada (motores de ciclo Otto com λ suportado: `0124`/`0134` ou `0144`).
+     */
+    fun colunasDoAparelho(suportados: Set<String> = emptySet()): List<DefinicaoPid> = buildList {
+        if (gpsAtivo()) add(DefinicaoPid.VELOCIDADE_GPS)
+        val temLambda = (Pids.COMANDOS_LAMBDA_MEDIDO + Pids.LAMBDA_COMANDADO).any { it in suportados }
+        if (temLambda && combustivelAtual != TipoCombustivel.DIESEL) add(DefinicaoPid.RELACAO_AF_REAL)
+    }
 
     // ------------------------------------------------------------------ execução
 
@@ -339,6 +354,7 @@ class SessaoObd(
         try {
             val veiculo = if (veiculoId > 0) runCatching { buscarVeiculo(veiculoId) }.getOrNull() else null
             marcaAtual = veiculo?.marca
+            combustivelAtual = veiculo?.combustivel
             if (config().gravarLogsAutomaticos) {
                 g = withContext(io) { criarGravador(dispositivo, veiculo, origem, gatilho, inicioMs) }
                 gravador = g
@@ -399,7 +415,8 @@ class SessaoObd(
                 _eventos.tryEmit(EventoSessao.Mensagem("Perfil ${perfil.fabricante} ativado: ${perfil.pids.size} PIDs da montadora"))
             }
             if (g != null) {
-                val colunas = definicoesSuportadas(cli.pidsSuportados.value, cli.infoConexao.value, perfil) + colunasDoAparelho()
+                val suportados = cli.pidsSuportados.value
+                val colunas = definicoesSuportadas(suportados, cli.infoConexao.value, perfil) + colunasDoAparelho(suportados)
                 withContext(io) { g.iniciarCsv(colunas) }
                 g.evento("CSV de telemetria aberto com ${colunas.size} sensores", relogio())
                 lerDtcsParaRelatorio(cli, g)
@@ -411,7 +428,7 @@ class SessaoObd(
     }
 
     private fun receberAmostra(daEcu: DadosObd, g: GravadorLogsSessao?) {
-        val dados = comVelocidadeGps(daEcu)
+        val dados = comCalculados(comVelocidadeGps(daEcu), combustivelAtual)
         _dados.value = dados
         _amostras.tryEmit(dados)
         telemetria.publicar(dados, conectado = true)
@@ -479,6 +496,7 @@ class SessaoObd(
             inicioMs = inicioMs,
             simulado = simulado,
             motor = veiculo?.let { ParametrosMotor.deVeiculo(it.modelo, it.combustivel, it.calibracaoConsumo) },
+            faixas = veiculo?.faixas,
         )
         return GravadorLogsSessao(destinoLogs, cabecalho, pastaTemporaria, zona)
     }
@@ -493,6 +511,16 @@ class SessaoObd(
 
     companion object {
         const val MOTIVO_USUARIO = "Desconectado pelo usuário"
+
+        /**
+         * Mescla os valores calculados pelo app ao instantâneo: a relação A/F real
+         * ([Pids.RELACAO_AF_REAL] = λ × estequiometria do combustível em uso, flex pelo `0152`).
+         * Sem λ (ou no diesel), o instantâneo segue igual.
+         */
+        fun comCalculados(dados: DadosObd, combustivel: TipoCombustivel?): DadosObd {
+            val af = EstequiometriaFlex.relacaoAfReal(dados, combustivel) ?: return dados
+            return DadosObd(dados.valores + (Pids.RELACAO_AF_REAL to af))
+        }
 
         /** Texto da notificação / do card: `Conectado · Toyota SW4 · Gravando log`. */
         fun descreverStatus(e: EstadoSessao): String {

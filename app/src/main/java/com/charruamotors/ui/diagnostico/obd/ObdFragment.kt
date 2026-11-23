@@ -54,6 +54,7 @@ import com.charruamotors.ui.painel.EditorConfigHud
 import com.charruamotors.ui.painel.MontadorMostradores
 import com.charruamotors.domain.calculo.AlertaProtecao
 import com.charruamotors.domain.calculo.EstadoCronometro
+import com.charruamotors.domain.calculo.EstequiometriaFlex
 import com.charruamotors.domain.calculo.MetodoConsumo
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.EstadoConexaoObd
@@ -482,6 +483,7 @@ class ObdFragment : Fragment() {
                     }
                 }
                 launch { viewModel.limites.collect { app.centralAlertas.limites = it } }
+                launch { viewModel.faixas.collect { app.centralAlertas.faixas = it } }
                 launch { viewModel.cronometro.collect { mostrarCronometro(it) } }
                 launch { viewModel.grafico.collect { mostrarGrafico(it) } }
                 launch { viewModel.manterTelaAcesa.collect { aplicarTelaAcesa() } }
@@ -571,7 +573,7 @@ class ObdFragment : Fragment() {
         val consumoKmL = viewModel.computador.value.consumo?.kmPorLitro
         configPainel.mostradores.forEachIndexed { i, m ->
             val gauge = gauges.getOrNull(i) ?: return@forEachIndexed
-            gauge.emAlerta = m.sensor.emAlerta(alertas)
+            gauge.emAlerta = m.sensor.emAlerta(alertas) || app.centralAlertas.foraDaFaixa(m.sensor.comandos, dados)
             gauge.definirValor(m.sensor.ler(dados, consumoKmL)?.let { m.sensor.exibir(it, conversor).valor })
         }
         atualizarBotoes()
@@ -771,8 +773,9 @@ class ObdFragment : Fragment() {
             conectado && consumo == null && ui.motor.tipoCombustivel == TipoCombustivel.DIESEL ->
                 getString(R.string.obd_bordo_diesel_sem_ecu)
             conectado && consumo == null -> getString(R.string.obd_bordo_sem_dados)
+            // Modo Flex Automático: classe do combustível e A/F de referência pelo 0152 (E27 13,2 → E100 9,0).
             ui.motor.tipoCombustivel == TipoCombustivel.FLEX && etanol != null ->
-                getString(R.string.obd_bordo_motor_etanol, cilindrada, combustivel, etanol.comoNumero(0))
+                getString(R.string.obd_bordo_motor_etanol, cilindrada, combustivel, EstequiometriaFlex.avaliar(TipoCombustivel.FLEX, etanol).resumo)
             else -> getString(R.string.obd_bordo_motor, cilindrada, combustivel)
         })
         botaoZerarViagem.isEnabled = ui.viagem.segundos > 0

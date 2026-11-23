@@ -63,7 +63,7 @@ class GravadorLogsSessao(
     private var desdeFlush = 0
     private var ultimoFlushMs = cabecalho.inicioMs
 
-    private val estatisticas = EstatisticasViagem(cabecalho.motor)
+    private val estatisticas = EstatisticasViagem(cabecalho.motor, cabecalho.faixas)
     private var tensaoInicial: Double? = null
     private var conexao: InfoConexao? = null
     private var dtcs: DtcsSessao? = null

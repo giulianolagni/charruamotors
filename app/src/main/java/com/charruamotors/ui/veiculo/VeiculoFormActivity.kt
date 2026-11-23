@@ -9,17 +9,22 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.R
 import com.charruamotors.databinding.ActivityVeiculoFormBinding
+import com.charruamotors.domain.calculo.LimitesProtecao
+import com.charruamotors.domain.faixas.FaixasVeiculo
+import com.charruamotors.domain.faixas.PresetVeiculo
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.Veiculo
 import com.charruamotors.domain.validacao.CampoVeiculo
 import com.charruamotors.domain.validacao.ErroValidacao
 import com.charruamotors.domain.validacao.FormularioVeiculo
+import com.charruamotors.domain.validacao.ValidadorVeiculo
 import com.charruamotors.ui.util.aplicarInsetsDoSistema
 import com.charruamotors.ui.util.mensagem
 import com.charruamotors.ui.util.rotulo
@@ -85,15 +90,20 @@ class VeiculoFormActivity : AppCompatActivity() {
     private fun configurarToolbar() = with(binding.toolbar) {
         setTitle(if (viewModel.modoEdicao) R.string.veiculo_titulo_editar else R.string.veiculo_titulo_novo)
         setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
-        if (viewModel.modoEdicao) {
-            inflateMenu(R.menu.menu_veiculo_form)
-            setOnMenuItemClickListener { item ->
-                if (item.itemId == R.id.acao_excluir) {
+        inflateMenu(R.menu.menu_veiculo_form)
+        // Excluir só existe na edição; os presets (SW4 2013 / Cruze 2018) valem também no cadastro.
+        menu.findItem(R.id.acao_excluir)?.isVisible = viewModel.modoEdicao
+        setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.acao_excluir -> {
                     confirmarExclusao()
                     true
-                } else {
-                    false
                 }
+                R.id.acao_preset -> {
+                    escolherPreset()
+                    true
+                }
+                else -> false
             }
         }
     }
@@ -103,9 +113,58 @@ class VeiculoFormActivity : AppCompatActivity() {
             ArrayAdapter(this, android.R.layout.simple_list_item_1, rotulosCombustivel),
         )
         camposTela.forEach { (campo, par) ->
-            par.second.doAfterTextChanged { viewModel.limparErro(campo) }
+            par.second.doAfterTextChanged {
+                viewModel.limparErro(campo)
+                atualizarFicha()
+            }
         }
+        binding.campoCombustivel.doAfterTextChanged { atualizarFicha() }
+        binding.botaoPreset.setOnClickListener { escolherPreset() }
         binding.botaoSalvar.setOnClickListener { salvar() }
+        atualizarFicha()
+    }
+
+    /** "Aplicar preset": preenche marca, modelo, ano, combustível e os limites de alerta do perfil. */
+    private fun escolherPreset() {
+        val presets = PresetVeiculo.entries
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.veiculo_preset_titulo)
+            .setItems(presets.map { it.titulo }.toTypedArray()) { _, i -> aplicarPreset(presets[i]) }
+            .setNegativeButton(R.string.botao_cancelar, null)
+            .show()
+    }
+
+    private fun aplicarPreset(p: PresetVeiculo) = with(binding) {
+        campoMarca.setText(p.marca)
+        campoModelo.setText(p.modelo)
+        campoAno.setText(p.ano.toString())
+        campoCombustivel.setText(p.combustivel.rotulo(this@VeiculoFormActivity), false)
+        campoLimiteAgua.setText(p.limiteAguaC.toString())
+        campoLimiteAtf.setText(p.limiteAtfC.toString())
+        campoLimiteTensao.setText("%.1f".format(LOCALE_BR, p.tensaoMinV))
+        Toast.makeText(this@VeiculoFormActivity, getString(R.string.veiculo_preset_aplicado, p.titulo), Toast.LENGTH_LONG).show()
+        atualizarFicha()
+    }
+
+    /** Ficha técnica ao vivo: o preset reconhecido pelo que está digitado (ou as faixas genéricas). */
+    private fun atualizarFicha() = with(binding) {
+        val ano = campoAno.text?.toString()?.trim()?.toIntOrNull()
+        val preset = PresetVeiculo.detectar(campoMarca.text?.toString(), campoModelo.text?.toString(), ano)
+        val faixas = preset?.faixas ?: run {
+            val indice = rotulosCombustivel.indexOf(campoCombustivel.text.toString())
+            val limites = LimitesProtecao(
+                aguaMaxC = ValidadorVeiculo.numero(campoLimiteAgua.text.toString()) ?: Veiculo.LIMITE_AGUA_PADRAO_C.toDouble(),
+                atfMaxC = ValidadorVeiculo.numero(campoLimiteAtf.text.toString()) ?: Veiculo.LIMITE_ATF_PADRAO_C.toDouble(),
+                tensaoMinV = ValidadorVeiculo.numero(campoLimiteTensao.text.toString()) ?: Veiculo.LIMITE_TENSAO_PADRAO_V,
+            )
+            // Limites ainda inválidos enquanto o usuário digita: a ficha mostra os padrões.
+            runCatching { FaixasVeiculo.genericas(TipoCombustivel.entries.getOrNull(indice), limites) }
+                .getOrElse { FaixasVeiculo.genericas(TipoCombustivel.entries.getOrNull(indice)) }
+        }
+        textoPerfilFicha.text = preset?.titulo ?: getString(R.string.veiculo_faixas_generico)
+        textoRedeFicha.text = preset?.linhasRede?.joinToString(QUEBRA).orEmpty()
+        textoRedeFicha.isVisible = preset != null
+        textoFaixasFicha.text = faixas.linhasFicha().joinToString(QUEBRA) { "• $it" }
     }
 
     private fun preencher(veiculo: Veiculo) = with(binding) {
@@ -177,6 +236,7 @@ class VeiculoFormActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_VEICULO_ID = "extra_veiculo_id"
         private val LOCALE_BR = java.util.Locale.forLanguageTag("pt-BR")
+        private const val QUEBRA = "\n"
 
         /** Cria o Intent de abertura; passe o id para editar ou null para cadastrar. */
         fun intent(context: Context, veiculoId: Long? = null): Intent =

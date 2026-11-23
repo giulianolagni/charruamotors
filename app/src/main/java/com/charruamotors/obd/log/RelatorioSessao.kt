@@ -1,9 +1,13 @@
 package com.charruamotors.obd.log
 
 import com.charruamotors.domain.calculo.ComputadorBordo
+import com.charruamotors.domain.calculo.EstequiometriaFlex
 import com.charruamotors.domain.calculo.ParametrosMotor
 import com.charruamotors.domain.calculo.ResumoViagem
 import com.charruamotors.domain.calculo.TelemetriaCalculada
+import com.charruamotors.domain.faixas.FaixaEsperada
+import com.charruamotors.domain.faixas.FaixasVeiculo
+import com.charruamotors.domain.faixas.SituacaoFaixa
 import com.charruamotors.obd.DtcLido
 import com.charruamotors.obd.ValoresSensores
 import com.charruamotors.obd.pid.Pids
@@ -29,6 +33,42 @@ class Extremos {
 }
 
 /**
+ * Acompanhamento de uma faixa esperada ao longo da sessão: extremos lidos (só quando a condição da
+ * faixa vale, ex.: marcha lenta) e quantas amostras ficaram abaixo/acima.
+ */
+class AcompanhamentoFaixa(val faixa: FaixaEsperada) {
+    val extremos = Extremos()
+    var amostras: Int = 0
+        private set
+    var abaixo: Int = 0
+        private set
+    var acima: Int = 0
+        private set
+
+    fun registrar(valor: Double) {
+        amostras++
+        extremos.registrar(valor)
+        when (faixa.situacao(valor)) {
+            SituacaoFaixa.ABAIXO -> abaixo++
+            SituacaoFaixa.ACIMA -> acima++
+            SituacaoFaixa.DENTRO -> Unit
+        }
+    }
+
+    /** `OK`, `acima em 12 % das leituras`, `abaixo em 3 % · acima em 1 %`, `sem leitura`. */
+    val situacao: String
+        get() {
+            if (amostras == 0) return "sem leitura"
+            if (abaixo == 0 && acima == 0) return "OK"
+            fun pct(n: Int) = "${RelatorioSessaoTxt.numero(n * 100.0 / amostras, 0)} %"
+            return listOfNotNull(
+                if (abaixo > 0) "abaixo em ${pct(abaixo)}" else null,
+                if (acima > 0) "acima em ${pct(acima)}" else null,
+            ).joinToString(" · ") + " das leituras"
+        }
+}
+
+/**
  * Resumo estatístico da viagem, alimentado por toda amostra da telemetria: RPM, velocidade,
  * MAP/turbo, temperatura do motor, pressão do Common Rail e tensão da bateria. Nos modos 21/22 os
  * espelhos usam o mesmo comando canônico (`010C`...), então entram aqui sem tradução.
@@ -36,6 +76,8 @@ class Extremos {
 class EstatisticasViagem(
     /** Combustível e calibração do veículo para o consumo via MAF; null = sem resumo de consumo. */
     private val motor: ParametrosMotor? = null,
+    /** Faixas mínimas/máximas esperadas do veículo (v2.1); null = sem resumo de faixas. */
+    val faixas: FaixasVeiculo? = null,
 ) {
     var amostras: Int = 0
         private set
@@ -52,6 +94,13 @@ class EstatisticasViagem(
     val tensao = Extremos()
     val temperaturaAtf = Extremos()
 
+    /** Teor de etanol (`0152`) e relação A/F real calculada (v2.1, Modo Flex). */
+    val etanol = Extremos()
+    val relacaoAf = Extremos()
+
+    /** Uma por faixa esperada do veículo, na ordem do preset. */
+    val acompanhamentoFaixas: List<AcompanhamentoFaixa> = faixas?.faixas.orEmpty().map(::AcompanhamentoFaixa)
+
     fun registrar(dados: ValoresSensores, instanteMs: Long? = null) {
         amostras++
         if (motor != null && instanteMs != null) {
@@ -63,12 +112,13 @@ class EstatisticasViagem(
         temperaturaMotor.registrar(dados[Pids.TEMPERATURA_MOTOR])
         rail.registrar(dados[Pids.PRESSAO_RAIL])
         tensao.registrar(dados[Pids.TENSAO_BATERIA])
-        temperaturaAtf.registrar(COMANDOS_ATF.firstNotNullOfOrNull { c -> dados[c]?.takeIf { it.isFinite() } })
+        temperaturaAtf.registrar(Pids.COMANDOS_ATF.firstNotNullOfOrNull { c -> dados[c]?.takeIf { it.isFinite() } })
+        etanol.registrar(dados[Pids.PERCENTUAL_ETANOL])
+        relacaoAf.registrar(dados[Pids.RELACAO_AF_REAL])
+        val f = faixas ?: return
+        acompanhamentoFaixas.forEach { a -> f.leituras(a.faixa, dados).forEach { (_, v) -> a.registrar(v) } }
     }
 }
-
-/** Chaves do ATF (câmbio `7E1` ou espelho no motor `7E0`), na ordem de preferência. */
-private val COMANDOS_ATF = listOf("TOYOTA_ATF_CAMBIO", "TOYOTA_ATF", "TOYOTA_ATF_ECM")
 
 /** Dados fixos do cabeçalho do relatório, conhecidos no início da sessão. */
 data class CabecalhoSessao(
@@ -86,6 +136,8 @@ data class CabecalhoSessao(
     val simulado: Boolean = false,
     /** Combustível/calibração do veículo, para o consumo médio do resumo; null = sem veículo. */
     val motor: ParametrosMotor? = null,
+    /** Faixas mínimas/máximas esperadas do veículo, resumidas no fim da viagem; null = sem veículo. */
+    val faixas: FaixasVeiculo? = null,
 )
 
 /** Códigos de falha lidos na sessão; cada lista null = modo não lido / não suportado pela ECU. */
@@ -205,6 +257,25 @@ object RelatorioSessaoTxt {
             campo("Distância percorrida", if (viagem.distanciaKm > 0.0) "${numero(viagem.distanciaKm, 1)} km" else "—")
             campo("Consumo médio (km/L)", viagem.mediaKmPorLitro?.let { "${numero(it, 1)} km/L" } ?: "—")
             campo("Combustível estimado (L)", if (viagem.litros > 0.0) "${numero(viagem.litros, 2)} L (via MAF)" else "—")
+            e.etanol.maximo?.let { eMax ->
+                val eMin = e.etanol.minimo ?: eMax
+                val classe = EstequiometriaFlex.classificar(eMax).titulo
+                campo("Teor de etanol (0152)", "${numero(eMin, 0)} – ${numero(eMax, 0)} % ($classe)")
+            }
+            val afMin = e.relacaoAf.minimo
+            val afMax = e.relacaoAf.maximo
+            if (afMin != null && afMax != null) campo("Relação A/F real", "${numero(afMin, 1)} – ${numero(afMax, 1)} :1")
+        }
+        if (e.acompanhamentoFaixas.isNotEmpty()) {
+            saida.append('\n').append("FAIXAS ESPERADAS (${e.faixas?.perfil})\n")
+            e.acompanhamentoFaixas.forEach { a ->
+                val p = a.faixa.parametro
+                val lido = a.extremos.minimo?.let { mn ->
+                    val mx = a.extremos.maximo ?: mn
+                    "lido ${numero(mn, p.casas)} – ${numero(mx, p.casas)} ${p.unidade}"
+                } ?: "não lido"
+                saida.append("  • ${p.titulo} (${a.faixa.texto}): $lido · ${a.situacao}\n")
+            }
         }
         saida.append('\n').append(LINHA).append('\n')
         saida.append(TITULO_LOG_BRUTO).append('\n')

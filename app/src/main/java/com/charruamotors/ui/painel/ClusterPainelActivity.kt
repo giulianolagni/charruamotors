@@ -164,7 +164,7 @@ class ClusterPainelActivity : AppCompatActivity() {
         val alertas = app.centralAlertas.processar(dados)
         bolinhas.forEachIndexed { i, gauge ->
             val sensor = ClusterPainel.sensorDaBolinha(i, escolhidos[i], dados)
-            gauge.emAlerta = sensor.emAlerta(alertas)
+            gauge.emAlerta = sensor.emAlerta(alertas) || app.centralAlertas.foraDaFaixa(sensor.comandos, dados)
             if (sensor != exibidos[i] || mudouConversor) {
                 exibidos[i] = sensor
                 MontadorMostradores.configurarGauge(gauge, sensor, EstiloMostrador.DIGITAL, conversor)

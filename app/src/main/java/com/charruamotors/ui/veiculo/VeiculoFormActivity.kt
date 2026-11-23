@@ -49,6 +49,10 @@ class VeiculoFormActivity : AppCompatActivity() {
                 CampoVeiculo.PLACA to (layoutPlaca to campoPlaca),
                 CampoVeiculo.KM to (layoutKm to campoKm),
                 CampoVeiculo.TANQUE to (layoutTanque to campoTanque),
+                CampoVeiculo.LIMITE_AGUA to (layoutLimiteAgua to campoLimiteAgua),
+                CampoVeiculo.LIMITE_ATF to (layoutLimiteAtf to campoLimiteAtf),
+                CampoVeiculo.LIMITE_TENSAO to (layoutLimiteTensao to campoLimiteTensao),
+                CampoVeiculo.CALIBRACAO to (layoutCalibracao to campoCalibracao),
             )
         }
     }
@@ -113,6 +117,10 @@ class VeiculoFormActivity : AppCompatActivity() {
         campoKm.setText(veiculo.kmAtual.toString())
         campoCombustivel.setText(veiculo.tipoCombustivel.rotulo(this@VeiculoFormActivity), false)
         campoTanque.setText(veiculo.capacidadeTanque?.let { "%.1f".format(it) }.orEmpty())
+        campoLimiteAgua.setText(veiculo.tempMaxAguaC.toString())
+        campoLimiteAtf.setText(veiculo.tempMaxAtfC.toString())
+        campoLimiteTensao.setText("%.1f".format(LOCALE_BR, veiculo.tensaoMinAlternadorV))
+        campoCalibracao.setText("%.2f".format(LOCALE_BR, veiculo.calibracaoConsumo))
     }
 
     private fun salvar() = with(binding) {
@@ -123,6 +131,10 @@ class VeiculoFormActivity : AppCompatActivity() {
             placa = campoPlaca.text.toString(),
             km = campoKm.text.toString(),
             capacidadeTanque = campoTanque.text.toString(),
+            limiteAgua = campoLimiteAgua.text.toString(),
+            limiteAtf = campoLimiteAtf.text.toString(),
+            limiteTensao = campoLimiteTensao.text.toString(),
+            calibracaoConsumo = campoCalibracao.text.toString(),
         )
         val indice = rotulosCombustivel.indexOf(campoCombustivel.text.toString())
         val combustivel = TipoCombustivel.entries.getOrElse(indice) { TipoCombustivel.FLEX }
@@ -164,6 +176,7 @@ class VeiculoFormActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_VEICULO_ID = "extra_veiculo_id"
+        private val LOCALE_BR = java.util.Locale.forLanguageTag("pt-BR")
 
         /** Cria o Intent de abertura; passe o id para editar ou null para cadastrar. */
         fun intent(context: Context, veiculoId: Long? = null): Intent =

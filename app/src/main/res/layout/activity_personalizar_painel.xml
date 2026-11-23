@@ -116,6 +116,20 @@
                     android:id="@+id/chips_botoes_navegacao"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/personalizar_atalhos_ordem"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/lista_ordem_atalhos"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:nestedScrollingEnabled="false"
+                    app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
             </LinearLayout>
 
             <!-- 2. Mostradores: lista dinâmica com estilo individual -->

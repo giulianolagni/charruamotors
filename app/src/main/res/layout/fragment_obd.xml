@@ -210,6 +210,21 @@
 
         <!-- Blocos do Painel: o ObdFragment mostra, esconde e reposiciona os filhos conforme
              "Personalizar Painel" -->
+        <!-- Alertas de proteção (água, ATF, alternador): vermelho enquanto algum limite estiver ultrapassado -->
+        <TextView
+            android:id="@+id/texto_alertas_protecao"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_pequeno"
+            android:background="@drawable/fundo_alerta_protecao"
+            android:gravity="center"
+            android:padding="@dimen/espaco_pequeno"
+            android:textAppearance="?attr/textAppearanceTitleSmall"
+            android:textColor="@android:color/white"
+            android:visibility="gone"
+            tools:text="Atenção: ÁGUA QUENTE"
+            tools:visibility="visible" />
+
         <LinearLayout
             android:id="@+id/container_secoes"
             android:layout_width="match_parent"
@@ -372,59 +387,88 @@
                     android:paddingEnd="@dimen/espaco_medio"
                     android:paddingBottom="@dimen/espaco_pequeno">
 
-                    <LinearLayout
-                        android:id="@+id/grupo_atalhos_waze"
+                    <!-- Atalhos (v1.7): cada um pode ser escondido e a ordem é a do Personalizar Painel;
+                         o fragmento reanexa os botões nesta grade na ordem escolhida. -->
+                    <GridLayout
+                        android:id="@+id/grupo_atalhos"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/espaco_pequeno"
-                        android:orientation="horizontal">
+                        android:columnCount="2">
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/botao_waze_abrir"
                             style="@style/Widget.Material3.Button.TonalButton.Icon"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginHorizontal="2dp"
-                            android:layout_weight="1"
+                            android:layout_columnWeight="1"
+                            android:layout_gravity="fill_horizontal"
+                            android:layout_margin="2dp"
                             android:paddingStart="8dp"
                             android:paddingEnd="8dp"
                             android:text="@string/waze_abrir"
                             app:icon="@drawable/ic_navegacao" />
-
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/botao_maps"
+                            style="@style/Widget.Material3.Button.TonalButton.Icon"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_columnWeight="1"
+                            android:layout_gravity="fill_horizontal"
+                            android:layout_margin="2dp"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="8dp"
+                            android:text="@string/maps_abrir"
+                            app:icon="@drawable/ic_navegacao" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/botao_spotify"
+                            style="@style/Widget.Material3.Button.TonalButton.Icon"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_columnWeight="1"
+                            android:layout_gravity="fill_horizontal"
+                            android:layout_margin="2dp"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="8dp"
+                            android:text="@string/spotify_abrir"
+                            app:icon="@drawable/ic_musica" />
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/botao_waze_posto"
                             style="@style/Widget.Material3.Button.TonalButton.Icon"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginHorizontal="2dp"
-                            android:layout_weight="1"
+                            android:layout_columnWeight="1"
+                            android:layout_gravity="fill_horizontal"
+                            android:layout_margin="2dp"
                             android:paddingStart="8dp"
                             android:paddingEnd="8dp"
                             android:text="@string/waze_posto"
                             app:icon="@drawable/ic_posto" />
-
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/botao_waze_oficina"
                             style="@style/Widget.Material3.Button.TonalButton.Icon"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginHorizontal="2dp"
-                            android:layout_weight="1"
+                            android:layout_columnWeight="1"
+                            android:layout_gravity="fill_horizontal"
+                            android:layout_margin="2dp"
                             android:paddingStart="8dp"
                             android:paddingEnd="8dp"
                             android:text="@string/waze_oficina"
                             app:icon="@drawable/ic_oficina" />
-                    </LinearLayout>
-
-                    <!-- Modo HUD: painel flutuante com a telemetria sobre o Waze (único lugar do HUD) -->
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/botao_hud"
-                        style="@style/Widget.Material3.Button.Icon"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginHorizontal="2dp"
-                        android:text="@string/hud_ativar"
-                        app:icon="@drawable/ic_hud" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/botao_hud"
+                            style="@style/Widget.Material3.Button.Icon"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_columnWeight="1"
+                            android:layout_gravity="fill_horizontal"
+                            android:layout_margin="2dp"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="8dp"
+                            android:text="@string/hud_ativar"
+                            app:icon="@drawable/ic_hud" />
+                    </GridLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

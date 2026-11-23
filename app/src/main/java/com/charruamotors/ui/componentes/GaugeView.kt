@@ -61,6 +61,14 @@ class GaugeView @JvmOverloads constructor(
             invalidate()
         }
 
+    /** Alerta de proteção (v1.7): pinta valor e progresso em vermelho, valendo mais que a zona vermelha da escala. */
+    var emAlerta: Boolean = false
+        set(v) {
+            if (v == field) return
+            field = v
+            invalidate()
+        }
+
     /** Valor exibido; null = sem leitura (ponteiro no mínimo e "—" no centro). */
     var valor: Float? = null
         private set
@@ -217,7 +225,7 @@ class GaugeView @JvmOverloads constructor(
         pincelTrilho.strokeWidth = espessura
         canvas.drawArc(arco, inicio, varredura, false, pincelTrilho)
         val v = valor
-        val alerta = v != null && escala.naZonaVermelha(v)
+        val alerta = emAlerta || (v != null && escala.naZonaVermelha(v))
         escala.fracaoZonaVermelha?.let { fz ->
             pincelZonaVermelha.strokeWidth = espessura * 0.25f
             val r = raio + espessura * 0.62f
@@ -249,7 +257,7 @@ class GaugeView @JvmOverloads constructor(
         val altura = base - topo
         if (largura <= 0f || altura <= 0f) return
         val v = valor
-        val alerta = v != null && escala.naZonaVermelha(v)
+        val alerta = emAlerta || (v != null && escala.naZonaVermelha(v))
 
         pincelTitulo.textSize = altura * 0.16f
         pincelTitulo.textAlign = Paint.Align.LEFT
@@ -331,7 +339,7 @@ class GaugeView @JvmOverloads constructor(
         pincelTrilho.strokeWidth = espessura
         canvas.drawArc(arco, inicio, varredura, false, pincelTrilho)
         val v = valor
-        val alerta = v != null && escala.naZonaVermelha(v)
+        val alerta = emAlerta || (v != null && escala.naZonaVermelha(v))
         val fracaoPonteiro = escala.fracao(valorPonteiro)
         if (v != null && fracaoPonteiro > 0f) {
             pincelProgresso.strokeWidth = espessura

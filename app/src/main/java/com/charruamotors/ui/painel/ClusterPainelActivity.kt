@@ -144,8 +144,11 @@ class ClusterPainelActivity : AppCompatActivity() {
         binding.gaugeRpm.definirValor(valorExibido(SensorPainel.RPM))
         binding.gaugeVelocidade.definirValor(valorExibido(SensorPainel.VELOCIDADE))
 
+        // Limites do veículo: o som toca uma vez ao entrar em alerta; as bolinhas e o aviso ficam vermelhos.
+        val alertas = app.centralAlertas.processar(dados)
         bolinhas.forEachIndexed { i, gauge ->
             val sensor = ClusterPainel.sensorDaBolinha(i, escolhidos[i], dados)
+            gauge.emAlerta = sensor.emAlerta(alertas)
             if (sensor != exibidos[i] || mudouConversor) {
                 exibidos[i] = sensor
                 MontadorMostradores.configurarGauge(gauge, sensor, EstiloMostrador.DIGITAL, conversor)
@@ -157,7 +160,7 @@ class ClusterPainelActivity : AppCompatActivity() {
         binding.textoMarcha.text = marcha.principal
         binding.textoLegendaMarcha.text = marcha.legenda.orEmpty()
         binding.textoVelocidade.text = SensorPainel.VELOCIDADE.texto(SensorPainel.VELOCIDADE.ler(dados), conversor)
-        binding.textoAlertas.text = ClusterPainel.alertas(dados).joinToString("  ·  ") { it.texto }
+        binding.textoAlertas.text = ClusterPainel.alertas(dados, app.centralAlertas.limites).joinToString("  ·  ") { it.texto }
     }
 
     private fun valorExibido(sensor: SensorPainel): Double? =

@@ -307,6 +307,8 @@ Toque em “Novo abastecimento” para começar.</string>
     <string name="midia_proxima">Próxima faixa</string>
     <string name="midia_erro_abrir">Não foi possível abrir o player</string>
     <string name="waze_abrir">Waze</string>
+    <string name="maps_abrir">Maps</string>
+    <string name="spotify_abrir">Spotify</string>
     <string name="waze_posto">Posto</string>
     <string name="waze_oficina">Oficina</string>
     <string name="waze_erro">Não foi possível abrir o Waze nem a Play Store</string>

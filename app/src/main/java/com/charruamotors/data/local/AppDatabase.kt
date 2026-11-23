@@ -5,6 +5,8 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.charruamotors.data.local.dao.AbastecimentoDao
 import com.charruamotors.data.local.dao.BackupDao
 import com.charruamotors.data.local.dao.CodigoFalhaDao
@@ -34,7 +36,7 @@ import com.charruamotors.domain.model.Veiculo
         LeituraObd::class,
         CodigoFalha::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -57,6 +59,16 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         private const val NOME_BANCO = "charruamotors.db"
 
+        /** v1.7: limites de alerta (água, ATF, alternador) e calibração do consumo por veículo. */
+        val MIGRACAO_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE veiculos ADD COLUMN tempMaxAguaC INTEGER NOT NULL DEFAULT 98")
+                db.execSQL("ALTER TABLE veiculos ADD COLUMN tempMaxAtfC INTEGER NOT NULL DEFAULT 105")
+                db.execSQL("ALTER TABLE veiculos ADD COLUMN tensaoMinAlternadorV REAL NOT NULL DEFAULT 13.2")
+                db.execSQL("ALTER TABLE veiculos ADD COLUMN calibracaoConsumo REAL NOT NULL DEFAULT 1.0")
+            }
+        }
+
         @Volatile
         private var instancia: AppDatabase? = null
 
@@ -67,6 +79,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     NOME_BANCO,
                 )
+                    .addMigrations(MIGRACAO_3_4)
                     // Em desenvolvimento, uma mudança de versão recria o banco do zero.
                     // Antes de publicar, trocar por migrações (Migration) para não perder dados.
                     .fallbackToDestructiveMigration(dropAllTables = true)

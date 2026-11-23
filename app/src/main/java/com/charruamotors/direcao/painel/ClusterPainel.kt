@@ -1,5 +1,8 @@
 package com.charruamotors.direcao.painel
 
+import com.charruamotors.domain.calculo.AlertasProtecao
+import com.charruamotors.domain.calculo.LimitesProtecao
+import com.charruamotors.domain.calculo.TipoAlertaProtecao
 import com.charruamotors.obd.ValoresSensores
 
 /** Indicador central do Cluster: [principal] grande (`P`, `D`, `3ª`) e, às vezes, a [legenda] pequena (`D`). */
@@ -70,16 +73,21 @@ object ClusterPainel {
         }
     }
 
-    /** Avisos para temperatura (água, ATF, óleo) e bateria fora da faixa normal; valores no catálogo (°C, V). */
-    fun alertas(dados: ValoresSensores?): List<AlertaCluster> {
+    /**
+     * Avisos de temperatura (água, ATF, óleo) e bateria fora da faixa. Água, ATF e a tensão do
+     * alternador seguem os [limites] do veículo (v1.7); óleo e bateria (parada/alta) têm faixa fixa.
+     */
+    fun alertas(dados: ValoresSensores?, limites: LimitesProtecao = LimitesProtecao()): List<AlertaCluster> {
         if (dados == null) return emptyList()
+        val protecao = AlertasProtecao.avaliar(dados, limites).map { it.tipo }.toSet()
         return buildList {
-            dados[SensorPainel.TEMP_MOTOR.comando]?.takeIf { it >= AGUA_ALTA_C }?.let { add(AlertaCluster("ÁGUA QUENTE")) }
-            SensorPainel.TEMP_CAMBIO.ler(dados)?.takeIf { it >= ATF_ALTA_C }?.let { add(AlertaCluster("ATF QUENTE")) }
+            if (TipoAlertaProtecao.AGUA in protecao) add(AlertaCluster(TipoAlertaProtecao.AGUA.texto))
+            if (TipoAlertaProtecao.ATF in protecao) add(AlertaCluster(TipoAlertaProtecao.ATF.texto))
             dados[SensorPainel.TEMP_OLEO.comando]?.takeIf { it >= OLEO_ALTA_C }?.let { add(AlertaCluster("ÓLEO QUENTE")) }
+            if (TipoAlertaProtecao.TENSAO in protecao) add(AlertaCluster(TipoAlertaProtecao.TENSAO.texto))
             dados[SensorPainel.TENSAO.comando]?.let { v ->
                 when {
-                    v < BATERIA_BAIXA_V -> add(AlertaCluster("BATERIA BAIXA"))
+                    v < BATERIA_BAIXA_V && TipoAlertaProtecao.TENSAO !in protecao -> add(AlertaCluster("BATERIA BAIXA"))
                     v > BATERIA_ALTA_V -> add(AlertaCluster("BATERIA ALTA"))
                 }
             }
@@ -89,8 +97,6 @@ object ClusterPainel {
     /** Com a alavanca nestes estados a marcha engatada não é mostrada (o `2130` não vale em P/R/N). */
     private val ALAVANCAS_SEM_MARCHA = setOf("P", "R", "N")
 
-    const val AGUA_ALTA_C = 105.0
-    const val ATF_ALTA_C = 120.0
     const val OLEO_ALTA_C = 130.0
     const val BATERIA_BAIXA_V = 12.0
     const val BATERIA_ALTA_V = 15.0

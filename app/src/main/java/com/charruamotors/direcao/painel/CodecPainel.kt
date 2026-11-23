@@ -12,6 +12,7 @@ object CodecPainel {
     const val ORDEM = "ordem"
     const val OCULTAS = "ocultas"
     const val BOTOES_NAVEGACAO = "botoes_navegacao"
+    const val ORDEM_BOTOES = "ordem_botoes"
     const val MOSTRADORES_V2 = "mostradores_v2"
     const val LISTA_RAPIDA = "lista_rapida"
     const val HUD_TAMANHO = "hud_tamanho"
@@ -23,12 +24,13 @@ object CodecPainel {
     const val ESTILO_LEGADO = "estilo"
 
     /** Todas as chaves que o codec grava. */
-    val CHAVES = listOf(ORDEM, OCULTAS, BOTOES_NAVEGACAO, MOSTRADORES_V2, LISTA_RAPIDA, HUD_TAMANHO, HUD_SENSORES, HUD_ESTILO)
+    val CHAVES = listOf(ORDEM, OCULTAS, BOTOES_NAVEGACAO, ORDEM_BOTOES, MOSTRADORES_V2, LISTA_RAPIDA, HUD_TAMANHO, HUD_SENSORES, HUD_ESTILO)
 
     fun codificar(c: ConfigPainel): Map<String, String> = mapOf(
         ORDEM to juntar(OrdemPainel.normalizar(c.ordem).map { it.name }),
         OCULTAS to juntar(c.ocultas.sortedBy { it.ordinal }.map { it.name }),
         BOTOES_NAVEGACAO to juntar(c.botoesNavegacao.sortedBy { it.ordinal }.map { it.name }),
+        ORDEM_BOTOES to juntar(OrdemPainel.normalizarBotoes(c.ordemBotoes).map { it.name }),
         MOSTRADORES_V2 to juntar(c.mostradores.map { "${it.sensor.name}$SEPARADOR_ESTILO${it.estilo.name}" }),
         LISTA_RAPIDA to juntar(c.listaRapida),
         HUD_TAMANHO to c.hud.tamanho.name,
@@ -49,6 +51,7 @@ object CodecPainel {
                 ordem = partes(ler(ORDEM)).mapNotNull { enumOuNull<SecaoPainel>(it) },
                 ocultas = partes(ler(OCULTAS)).mapNotNull { enumOuNull<SecaoPainel>(it) }.toSet(),
                 botoesNavegacao = botoes,
+                ordemBotoes = partes(ler(ORDEM_BOTOES)).mapNotNull { enumOuNull<BotaoNavegacao>(it) },
                 mostradores = mostradores,
                 listaRapida = partes(ler(LISTA_RAPIDA)),
                 hud = ConfigHud(
@@ -63,6 +66,7 @@ object CodecPainel {
     /** Sem repetidos, dentro dos limites e com todos os blocos na ordem. */
     fun normalizar(c: ConfigPainel): ConfigPainel = c.copy(
         ordem = OrdemPainel.normalizar(c.ordem),
+        ordemBotoes = OrdemPainel.normalizarBotoes(c.ordemBotoes),
         mostradores = OrdemPainel.normalizarMostradores(c.mostradores),
         listaRapida = OrdemPainel.normalizarListaRapida(c.listaRapida),
         hud = c.hud.copy(sensores = c.hud.sensores.distinct().take(ConfigHud.MAX_SENSORES).ifEmpty { ConfigHud.PADRAO_EXPANDIDO }),

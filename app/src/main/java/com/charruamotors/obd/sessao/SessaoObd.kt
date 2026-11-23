@@ -1,6 +1,7 @@
 package com.charruamotors.obd.sessao
 
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
+import com.charruamotors.domain.calculo.ParametrosMotor
 import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.Veiculo
@@ -60,6 +61,9 @@ data class VeiculoSessao(
     val marca: String?,
     val placa: String?,
     val combustivel: TipoCombustivel?,
+    /** Modelo (a cilindrada vem dele) e a calibração do consumo, para o resumo da viagem. */
+    val modelo: String? = null,
+    val calibracaoConsumo: Double = 1.0,
 ) {
     companion object {
         fun de(v: Veiculo) = VeiculoSessao(
@@ -69,6 +73,8 @@ data class VeiculoSessao(
             marca = v.marca,
             placa = v.placaFormatada,
             combustivel = v.tipoCombustivel,
+            modelo = v.modelo,
+            calibracaoConsumo = v.calibracaoConsumo,
         )
     }
 }
@@ -365,7 +371,8 @@ class SessaoObd(
     /** Conectado: telemetria, VIN, perfil → CSV → DTCs, até o cliente sair de `Conectado`. Devolve o motivo do fim. */
     private suspend fun acompanharConexao(cli: ObdClient, veiculo: VeiculoSessao?, g: GravadorLogsSessao?): String = coroutineScope {
         launch(io) {
-            cli.lerTelemetria(consumoPorMaf = veiculo?.combustivel != TipoCombustivel.DIESEL)
+            // MAF em todos os combustíveis: o diesel também estima o consumo por ele (v1.7).
+            cli.lerTelemetria(consumoPorMaf = true)
                 .catch { e -> g?.evento("Telemetria interrompida: ${e.message}", relogio()) }
                 .collect { dados -> receberAmostra(dados, g) }
         }
@@ -453,6 +460,7 @@ class SessaoObd(
             scanner = "${dispositivo.nome} (${dispositivo.endereco})",
             inicioMs = inicioMs,
             simulado = simulado,
+            motor = veiculo?.let { ParametrosMotor.deVeiculo(it.modelo, it.combustivel, it.calibracaoConsumo) },
         )
         return GravadorLogsSessao(destinoLogs, cabecalho, pastaTemporaria, zona)
     }

@@ -29,9 +29,10 @@ import kotlinx.coroutines.launch
 /**
  * Personalizar Painel 2.0 (ícone na Toolbar da aba Painel):
  * 1. **Blocos do Painel**: todos arrastáveis (`≡`), cada um com o botão de remover; os removidos
- *    ficam em "Blocos removidos" para voltar com 1 toque; e os botões da Navegação, um a um;
- * 2. **Mostradores**: lista dinâmica de 1 a 12 relógios, cada um com alça, sensor, estilo próprio
- *    (Esportivo, Digital ou Fita) e remover, mais "+ Adicionar mostrador" e "Aplicar estilo a todos";
+ *    ficam em "Blocos removidos" para voltar com 1 toque; e os atalhos da Navegação (Waze, Maps,
+ *    Spotify, Posto, Oficina e HUD), cada um com visibilidade e ordem próprias;
+ * 2. **Mostradores**: lista dinâmica sem limite de 4 (um por sensor), cada um com alça, sensor,
+ *    estilo próprio (Relógio Esportivo, Digital Grande ou Barra/Fita) e remover, mais "+ Adicionar mostrador" e "Aplicar estilo a todos";
  * 3. **Lista rápida**: os PIDs escolhidos, na ordem arrastada;
  * 4. **HUD flutuante**: tamanho, sensores (na ordem arrastada) e estilo.
  *
@@ -55,6 +56,10 @@ class PersonalizarPainelActivity : AppCompatActivity() {
         aoEscolherSensor = { i, sensor -> prefs.atualizar { it.definirMostrador(i, sensor) } },
         aoEscolherEstilo = { i, estilo -> prefs.atualizar { it.definirEstilo(i, estilo) } },
         aoRemover = { i -> prefs.atualizar { it.removerMostrador(i) } },
+    )
+    private val adapterAtalhos = ItensOrdenaveisAdapter<BotaoNavegacao>(
+        titulo = { it.titulo },
+        aoRemover = { botao -> prefs.atualizar { it.alternarBotaoNavegacao(botao) } },
     )
     private val adapterListaRapida = ItensOrdenaveisAdapter<String>(
         titulo = { comando -> nomesPids[comando] ?: comando },
@@ -96,6 +101,12 @@ class PersonalizarPainelActivity : AppCompatActivity() {
             moverVisual = adapterSecoes::moverVisual,
             aoSoltar = { de, para -> prefs.atualizar { it.mover(de, para) } },
         )
+        binding.listaOrdemAtalhos.adapter = adapterAtalhos
+        adapterAtalhos.arraste = ArrasteReordenavel(
+            binding.listaOrdemAtalhos,
+            moverVisual = adapterAtalhos::moverVisual,
+            aoSoltar = { de, para -> prefs.atualizar { it.moverBotao(de, para) } },
+        )
         for (botao in BotaoNavegacao.entries) {
             val chip = Chip(this).apply {
                 text = botao.titulo
@@ -123,6 +134,8 @@ class PersonalizarPainelActivity : AppCompatActivity() {
         }
         grupoBotoesNavegacao.isVisible = config.visivel(SecaoPainel.NAVEGACAO)
         chipsNavegacao.forEach { (botao, chip) -> chip.isChecked = config.botaoVisivel(botao) }
+        adapterAtalhos.definir(config.botoesVisiveis)
+        listaOrdemAtalhos.isVisible = config.botoesVisiveis.isNotEmpty()
     }
 
     // ---------------------------------------------------------------- 2. mostradores
@@ -241,6 +254,7 @@ class PersonalizarPainelActivity : AppCompatActivity() {
             SensorPainel.MAF to 32.0,
             SensorPainel.COMBUSTIVEL to 64.0,
             SensorPainel.CONSUMO to 4.2,
+            SensorPainel.CONSUMO_KML to 9.8,
             SensorPainel.TEMP_CAMBIO to 78.0,
             SensorPainel.MARCHA_ALAVANCA to 3.0,
             SensorPainel.MARCHA_ATUAL to 4.0,

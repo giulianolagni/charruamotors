@@ -1,5 +1,7 @@
 package com.charruamotors.direcao.painel
 
+import com.charruamotors.domain.calculo.AlertaProtecao
+import com.charruamotors.domain.calculo.TipoAlertaProtecao
 import com.charruamotors.obd.ValoresSensores
 import com.charruamotors.obd.pid.DefinicaoPid
 import com.charruamotors.sistema.unidades.ConversorUnidades
@@ -7,6 +9,9 @@ import com.charruamotors.sistema.unidades.UnidadePressao
 import com.charruamotors.sistema.unidades.ValorExibicao
 import com.charruamotors.ui.componentes.EscalaGauge
 import com.charruamotors.ui.util.comoNumero
+
+/** Chave interna do consumo calculado (não existe na ECU); fora do enum para a entrada poder usá-la. */
+private const val CHAVE_CONSUMO_KML_PAINEL = "CALC_KML"
 
 /** Correção dos bicos: ±3,00 mm³/st é a faixa saudável; a escala vai até ±4 (zona vermelha em 3). */
 private val ESCALA_BICO = mapOf("mm³/st" to EscalaGauge(-4f, 4f, 3f, 8, 2))
@@ -113,6 +118,17 @@ enum class SensorPainel(
             "gal/h" to EscalaGauge(0f, 8f, null, 4, 4),
         ),
     ),
+    /**
+     * Consumo instantâneo em km/L (v1.7), calculado do MAF e da velocidade pelo computador de
+     * bordo: não é um PID, então [comando] é só a chave interna e a leitura vem de [consumoKmL].
+     */
+    CONSUMO_KML(
+        CHAVE_CONSUMO_KML_PAINEL, "Consumo (km/L)", "KM/L", "km/L", 1,
+        mapOf(
+            "km/L" to EscalaGauge(0f, 20f, null, 5, 4),
+            "MPG" to EscalaGauge(0f, 50f, null, 5, 5),
+        ),
+    ),
 
     // ---- Toyota SW4 / Hilux (perfil de montadora, pids_estendidos.json): só leem se o módulo responder.
     TEMP_CAMBIO(
@@ -162,6 +178,25 @@ enum class SensorPainel(
     BICO_4("TOYOTA_INJ4", "Bico Injetor #4", "BICO 4", "mm³/st", 2, ESCALA_BICO, comSinal = true),
     ;
 
+    /** Proteção que este sensor evidencia em vermelho quando o limite do veículo é ultrapassado. */
+    val alertaDeProtecao: TipoAlertaProtecao?
+        get() = when (this) {
+            TEMP_MOTOR -> TipoAlertaProtecao.AGUA
+            TEMP_CAMBIO -> TipoAlertaProtecao.ATF
+            TENSAO -> TipoAlertaProtecao.TENSAO
+            else -> null
+        }
+
+    /** O mostrador deste sensor fica vermelho com estes [alertas] ativos? */
+    fun emAlerta(alertas: Collection<AlertaProtecao>): Boolean = alertaDeProtecao?.let { t -> alertas.any { it.tipo == t } } ?: false
+
+    /**
+     * Leitura para o mostrador: o consumo em km/L vem do computador de bordo ([consumoKmL], null
+     * parado ou sem dados); os demais, do instantâneo [dados].
+     */
+    fun ler(dados: ValoresSensores?, consumoKmL: Double?): Double? =
+        if (this == CONSUMO_KML) consumoKmL?.takeIf { it.isFinite() }?.coerceAtMost(MAX_KM_L) else ler(dados)
+
     /** Todas as chaves que alimentam o mostrador, na ordem de preferência. */
     val comandos: List<String> get() = listOf(comando) + alternativos
 
@@ -208,6 +243,9 @@ enum class SensorPainel(
     }
 
     companion object {
+        /** Teto do km/L exibido (descida/banguela dispara o valor). */
+        const val MAX_KM_L = 99.9
+
         const val SEM_LEITURA = "—"
 
         /** 4x4 (7C0) e VSC (7B0) não respondem na SW4 1KD-FTV + A750F. */

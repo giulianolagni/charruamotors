@@ -92,6 +92,10 @@ class VeiculoFormViewModel(
                     kmAtual = formulario.km.trim().toInt(),
                     tipoCombustivel = tipoCombustivel,
                     capacidadeTanque = formulario.capacidadeTanque.trim().replace(',', '.').toDoubleOrNull(),
+                    tempMaxAguaC = ValidadorVeiculo.numero(formulario.limiteAgua)?.toInt() ?: Veiculo.LIMITE_AGUA_PADRAO_C,
+                    tempMaxAtfC = ValidadorVeiculo.numero(formulario.limiteAtf)?.toInt() ?: Veiculo.LIMITE_ATF_PADRAO_C,
+                    tensaoMinAlternadorV = ValidadorVeiculo.numero(formulario.limiteTensao) ?: Veiculo.LIMITE_TENSAO_PADRAO_V,
+                    calibracaoConsumo = ValidadorVeiculo.numero(formulario.calibracaoConsumo) ?: Veiculo.CALIBRACAO_PADRAO,
                 )
                 repository.salvar(veiculo)
                 _eventos.send(EventoFormVeiculo.Salvo(novo = !modoEdicao))

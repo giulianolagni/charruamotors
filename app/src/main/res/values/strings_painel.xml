@@ -23,7 +23,7 @@
     <string name="personalizar_estilo_digital">Digital</string>
     <string name="personalizar_estilo_fita">Fita</string>
     <string name="personalizar_mostradores">Mostradores</string>
-    <string name="personalizar_mostradores_dica">De 1 a 12 relógios, cada um com o próprio estilo. Escolher um sensor que já está em outro relógio troca os dois.</string>
+    <string name="personalizar_mostradores_dica">Quantos relógios quiser, cada um com o próprio estilo. Escolher um sensor que já está em outro relógio troca os dois.</string>
     <string name="personalizar_relogio">Relógio %1$d</string>
     <string name="personalizar_lista_rapida">Lista rápida de sensores</string>
     <string name="personalizar_lista_vazia">Nenhum marcado: a lista mostra todos os sensores que a ECU suporta.</string>

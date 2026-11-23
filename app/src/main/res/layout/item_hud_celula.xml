@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Célula do HUD: valor grande, rótulo com a unidade e, no estilo "com barra", a fração da escala. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight="1"
+    android:orientation="vertical"
+    android:paddingEnd="8dp">
+
+    <TextView
+        android:id="@+id/valor_celula"
+        style="@style/HudValor"
+        tools:text="2.350" />
+
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/barra_celula"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="2dp"
+        android:max="1000"
+        android:visibility="gone"
+        app:indicatorColor="@color/hud_valor"
+        app:trackColor="@color/hud_borda"
+        app:trackCornerRadius="2dp"
+        app:trackThickness="4dp"
+        tools:progress="400"
+        tools:visibility="visible" />
+
+    <TextView
+        android:id="@+id/rotulo_celula"
+        style="@style/HudRotulo"
+        tools:text="RPM" />
+</LinearLayout>

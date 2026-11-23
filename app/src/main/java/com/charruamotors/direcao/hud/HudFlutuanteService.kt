@@ -20,13 +20,19 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
+import android.widget.LinearLayout
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.databinding.HudFlutuanteBinding
+import com.charruamotors.databinding.ItemHudCelulaBinding
+import com.charruamotors.direcao.painel.EstiloHud
+import com.charruamotors.direcao.painel.SensorPainel
+import com.charruamotors.direcao.painel.TamanhoHud
 import com.charruamotors.direcao.waze.AbridorWaze
 import com.charruamotors.direcao.waze.AcaoWaze
 import com.charruamotors.ui.util.definirTexto
@@ -38,8 +44,10 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 /**
- * Modo HUD: painel compacto e semitransparente (RPM, MAP/turbo, temperatura do motor e rail ou
- * tensão) numa janela `TYPE_APPLICATION_OVERLAY` sobre o Waze, arrastável com o dedo.
+ * Modo HUD: painel compacto e semitransparente numa janela `TYPE_APPLICATION_OVERLAY` sobre o
+ * Waze, arrastável com o dedo. Tamanho (Minimizado: RPM e Turbo; Expandido: até 4 sensores),
+ * sensores fixados e estilo (números, números grandes ou com barra) vêm da tela de ativação, e os
+ * valores seguem as unidades globais (métrico/imperial).
  *
  * Roda em primeiro plano (`connectedDevice`, ligado ao scanner OBD2 Bluetooth): com a
  * notificação fixa, o Android mantém o processo — e com ele o socket do ELM327 e o polling do
@@ -205,16 +213,24 @@ class HudFlutuanteService : Service() {
         }
     }
 
+    /** Células montadas para a combinação atual de sensores e estilo; refeitas só quando ela muda. */
+    private var celulas: List<ItemHudCelulaBinding> = emptyList()
+    private var assinatura: Pair<List<SensorPainel>, EstiloHud>? = null
+
     private fun desenhar(painel: PainelHud) {
         val b = binding ?: return
-        b.valorHudRpm.definirTexto(painel.rpm)
-        b.valorHudMap.definirTexto(painel.map)
-        b.rotuloHudMap.definirTexto(getString(R.string.hud_rotulo_map, painel.unidadeMap))
-        b.valorHudTemperatura.definirTexto(painel.temperatura)
-        b.valorHudQuarto.definirTexto(painel.quarto)
-        b.rotuloHudQuarto.setText(
-            if (painel.tipoQuarto == TipoQuartoValor.RAIL) R.string.hud_rotulo_rail else R.string.hud_rotulo_tensao,
-        )
+        val nova = painel.celulas.map { it.sensor } to painel.estilo
+        if (nova != assinatura) montarCelulas(b, painel)
+        painel.celulas.forEachIndexed { i, celula ->
+            val c = celulas.getOrNull(i) ?: return@forEachIndexed
+            c.valorCelula.definirTexto(celula.valor)
+            c.rotuloCelula.definirTexto(celula.rotulo)
+            if (painel.estilo == EstiloHud.BARRAS) {
+                c.barraCelula.setProgressCompat(((celula.fracao ?: 0f) * 1000).toInt(), false)
+            }
+            val quente = painel.alertaTemperatura && celula.sensor == SensorPainel.TEMP_MOTOR
+            c.valorCelula.setTextColor(ContextCompat.getColor(this, if (quente) R.color.branco else R.color.hud_valor))
+        }
         b.textoHudStatus.setText(
             when {
                 !painel.conectado -> R.string.hud_status_desconectado
@@ -223,9 +239,42 @@ class HudFlutuanteService : Service() {
             },
         )
         b.root.setBackgroundResource(if (painel.alertaTemperatura) R.drawable.fundo_hud_alerta else R.drawable.fundo_hud)
-        b.valorHudTemperatura.setTextColor(
-            ContextCompat.getColor(this, if (painel.alertaTemperatura) R.color.branco else R.color.hud_valor),
-        )
+    }
+
+    /**
+     * Grade de 2 colunas: Minimizado (RPM + Turbo) numa linha e largura menor; Expandido em até
+     * 2 linhas. "Números grandes" aumenta o texto; "com barra" mostra a fração da escala.
+     */
+    private fun montarCelulas(b: HudFlutuanteBinding, painel: PainelHud) {
+        val inflador = LayoutInflater.from(ContextThemeWrapper(this, R.style.Theme_CharruaMotors))
+        b.gradeHud.removeAllViews()
+        val novas = mutableListOf<ItemHudCelulaBinding>()
+        painel.celulas.chunked(COLUNAS).forEachIndexed { indiceLinha, linha ->
+            val container = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                if (indiceLinha > 0) setPadding(0, (6 * resources.displayMetrics.density).toInt(), 0, 0)
+            }
+            for (celula in linha) {
+                val c = ItemHudCelulaBinding.inflate(inflador, container, false)
+                c.barraCelula.isVisible = painel.estilo == EstiloHud.BARRAS
+                c.valorCelula.textSize = if (painel.estilo == EstiloHud.NUMEROS_GRANDES) TEXTO_GRANDE_SP else TEXTO_NORMAL_SP
+                c.rotuloCelula.text = celula.rotulo
+                container.addView(c.root)
+                novas += c
+            }
+            b.gradeHud.addView(container)
+        }
+        celulas = novas
+        assinatura = painel.celulas.map { it.sensor } to painel.estilo
+        val larguraDp = when {
+            painel.tamanho == TamanhoHud.MINIMIZADO -> LARGURA_MINIMIZADO_DP
+            painel.estilo == EstiloHud.NUMEROS_GRANDES -> LARGURA_GRANDE_DP
+            else -> LARGURA_EXPANDIDO_DP
+        }
+        parametros?.let { p ->
+            p.width = (larguraDp * resources.displayMetrics.density).toInt()
+            runCatching { gerenciadorJanelas?.updateViewLayout(b.root, p) }
+        }
     }
 
     companion object {
@@ -237,6 +286,13 @@ class HudFlutuanteService : Service() {
         /** Última posição do painel no processo (reabre onde o motorista deixou). */
         private var posicaoX = 24
         private var posicaoY = 240
+
+        private const val COLUNAS = 2
+        private const val TEXTO_NORMAL_SP = 30f
+        private const val TEXTO_GRANDE_SP = 40f
+        private const val LARGURA_MINIMIZADO_DP = 200
+        private const val LARGURA_EXPANDIDO_DP = 232
+        private const val LARGURA_GRANDE_DP = 280
 
         fun iniciar(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, HudFlutuanteService::class.java))

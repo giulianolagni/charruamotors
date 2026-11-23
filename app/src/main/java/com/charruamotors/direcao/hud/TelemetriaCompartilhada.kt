@@ -1,7 +1,8 @@
 package com.charruamotors.direcao.hud
 
+import com.charruamotors.direcao.painel.ConfigHud
 import com.charruamotors.obd.DadosObd
-import com.charruamotors.sistema.unidades.UnidadePressao
+import com.charruamotors.sistema.unidades.ConversorUnidades
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,13 +12,15 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 
 /**
- * Ponte entre a aba OBD2 e o HUD flutuante, mantida no Application (vive enquanto o processo
- * viver). O `ObdViewModel` publica a telemetria e a conexão; o `HudFlutuanteService` desenha;
+ * Ponte entre a aba Painel e o HUD flutuante, mantida no Application (vive enquanto o processo
+ * viver). A sessão OBD publica a telemetria e a conexão; o `HudFlutuanteService` desenha;
  * e o ViewModel lê [hudAtivo] para continuar o polling com o app minimizado sob o Waze.
  */
 class TelemetriaCompartilhada(
-    /** Unidade escolhida nas Configurações para o Turbo/MAP (kPa, bar ou psi). */
-    private val unidadePressao: Flow<UnidadePressao> = flowOf(UnidadePressao.PADRAO),
+    /** Unidades globais (métrico/imperial) e a unidade de pressão das Configurações. */
+    private val conversor: Flow<ConversorUnidades> = flowOf(ConversorUnidades.PADRAO),
+    /** Tamanho, sensores e estilo escolhidos na ativação do HUD. */
+    private val configHud: Flow<ConfigHud> = flowOf(ConfigHud()),
 ) {
 
     private val _dados = MutableStateFlow<DadosObd?>(null)
@@ -31,8 +34,8 @@ class TelemetriaCompartilhada(
     val hudAtivo: StateFlow<Boolean> = _hudAtivo.asStateFlow()
 
     /** Painel do HUD, recalculado a cada instantâneo (só emite quando algum texto muda). */
-    val painel: Flow<PainelHud> = combine(_dados, _conectado, unidadePressao) { dados, conectado, unidade ->
-        FormatadorHud.montar(dados, conectado, unidade)
+    val painel: Flow<PainelHud> = combine(_dados, _conectado, conversor, configHud) { dados, conectado, conv, config ->
+        FormatadorHud.montar(dados, conectado, config, conv)
     }
         .distinctUntilChanged()
 

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- HUD flutuante (janela TYPE_APPLICATION_OVERLAY sobre o Waze): arrastável pelo painel. -->
+<!-- HUD flutuante (janela TYPE_APPLICATION_OVERLAY sobre o Waze): arrastável pelo painel.
+     As células (1 a 4 sensores) são montadas pelo HudFlutuanteService conforme a escolha da ativação. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="@dimen/largura_hud"
@@ -48,82 +49,10 @@
             android:tint="@color/hud_valor" />
     </LinearLayout>
 
+    <!-- Linhas de até 2 células cada (item_hud_celula). -->
     <LinearLayout
+        android:id="@+id/grade_hud"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/valor_hud_rpm"
-                style="@style/HudValor"
-                tools:text="2.350" />
-
-            <TextView
-                style="@style/HudRotulo"
-                android:text="@string/hud_rotulo_rpm" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/valor_hud_map"
-                style="@style/HudValor"
-                tools:text="182" />
-
-            <TextView
-                android:id="@+id/rotulo_hud_map"
-                style="@style/HudRotulo"
-                android:text="@string/hud_rotulo_map_padrao" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:orientation="horizontal">
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/valor_hud_temperatura"
-                style="@style/HudValor"
-                tools:text="92" />
-
-            <TextView
-                style="@style/HudRotulo"
-                android:text="@string/hud_rotulo_temperatura" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/valor_hud_quarto"
-                style="@style/HudValor"
-                tools:text="1.250" />
-
-            <TextView
-                android:id="@+id/rotulo_hud_quarto"
-                style="@style/HudRotulo"
-                tools:text="@string/hud_rotulo_rail" />
-        </LinearLayout>
-    </LinearLayout>
+        android:orientation="vertical" />
 </LinearLayout>

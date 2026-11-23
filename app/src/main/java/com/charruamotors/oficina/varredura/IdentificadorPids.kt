@@ -4,6 +4,7 @@ import com.charruamotors.obd.pid.CatalogoCascata
 import com.charruamotors.obd.pid.CatalogoEstendido
 import com.charruamotors.obd.pid.CatalogoPids
 import com.charruamotors.obd.pid.DefinicaoPid
+import com.charruamotors.obd.pid.RequisicaoEstendida
 import com.charruamotors.sistema.unidades.ConversorUnidades
 import com.charruamotors.sistema.unidades.ValorExibicao
 import com.charruamotors.ui.util.comoNumero
@@ -41,6 +42,10 @@ data class IdentificacaoPid(
     val conhecido: PidConhecido? = null,
     /** Valor do primeiro sensor da resposta, já na unidade global; null se não decodificou. */
     val valor: ValorExibicao? = null,
+    /** Cabeçalho físico consultado (`7B0`): distingue o mesmo `2101` em módulos diferentes. */
+    val cabecalho: String? = null,
+    /** Rótulo do estado decodificado (alavanca `D`, 4x4 `H4`), quando o sensor tem rótulos. */
+    val rotulo: String? = null,
 ) {
     val comando: String get() = resultado.comando
 
@@ -59,7 +64,7 @@ data class IdentificacaoPid(
         }
 
     /** `850 rpm`, `92 °F`; vazio quando não há valor. */
-    val valorTexto: String get() = valor?.let { "${it.valor.comoNumero(it.casas)} ${it.unidade}".trim() }.orEmpty()
+    val valorTexto: String get() = rotulo ?: valor?.let { "${it.valor.comoNumero(it.casas)} ${it.unidade}".trim() }.orEmpty()
 
     private fun motivo(): String = when (resultado.tipo) {
         TipoRespostaPid.NEGATIVA -> "7F ${comando.take(2)} ${resultado.nrc.orEmpty()}"
@@ -101,25 +106,41 @@ class IdentificadorPids(conhecidos: List<PidConhecido>) {
 
     val quantidade: Int get() = porRequisicao.size
 
-    /** O catálogo conhece [comando] no [cabecalho]? O cabeçalho exato tem prioridade; depois, um sem cabeçalho fixo e, por fim, qualquer um. */
+    /**
+     * O catálogo conhece [comando] no [cabecalho]? O cabeçalho exato tem prioridade; depois, um sem
+     * cabeçalho fixo e, por fim, um do mesmo trem de força (`7E0`–`7E7`/`7DF`). Módulos de chassi
+     * (ABS `7B0`, painel `7C0`) só casam com o próprio endereço: o `2101` do motor não é o 4x4.
+     */
     fun conhecido(cabecalho: String?, comando: String): PidConhecido? {
         val candidatos = porRequisicao[comando.uppercase()] ?: return null
         val cab = cabecalho?.uppercase()
         return candidatos.firstOrNull { it.cabecalho == cab }
             ?: candidatos.firstOrNull { it.cabecalho == null }
-            ?: candidatos.first()
+            ?: candidatos.firstOrNull { cab == null || (tremDeForca(cab) && tremDeForca(it.cabecalho)) }
     }
+
+    private fun tremDeForca(cabecalho: String?) = RequisicaoEstendida.filtroRecepcao(cabecalho) == null
 
     fun identificar(
         resultado: ResultadoPid,
         cabecalho: String?,
         conversor: ConversorUnidades = ConversorUnidades.PADRAO,
     ): IdentificacaoPid {
-        if (!resultado.respondeu) return IdentificacaoPid(resultado, StatusIdentificacao.IGNORADO, conhecido(cabecalho, resultado.comando))
+        val cab = cabecalho?.uppercase()
+        if (!resultado.respondeu) {
+            return IdentificacaoPid(resultado, StatusIdentificacao.IGNORADO, conhecido(cabecalho, resultado.comando), cabecalho = cab)
+        }
         val conhecido = conhecido(cabecalho, resultado.comando)
-            ?: return IdentificacaoPid(resultado, StatusIdentificacao.DESCONHECIDO)
+            ?: return IdentificacaoPid(resultado, StatusIdentificacao.DESCONHECIDO, cabecalho = cab)
         val digitos = if (resultado.comando.startsWith("22")) 4 else 2
-        return IdentificacaoPid(resultado, StatusIdentificacao.IDENTIFICADO, conhecido, decodificar(conhecido.definicoes.first(), resultado.dados(digitos), conversor))
+        val definicao = conhecido.definicoes.first()
+        val dados = resultado.dados(digitos)
+        val bruto = if (definicao.rotulos.isEmpty()) null else runCatching { definicao.converter(dados) }.getOrNull()
+        return IdentificacaoPid(
+            resultado, StatusIdentificacao.IDENTIFICADO, conhecido, decodificar(definicao, dados, conversor),
+            cabecalho = cab,
+            rotulo = definicao.rotulo(bruto?.takeIf(definicao::dentroDaFaixa)),
+        )
     }
 
     fun identificarTodos(resultados: List<ResultadoPid>, cabecalho: String?, conversor: ConversorUnidades = ConversorUnidades.PADRAO) =

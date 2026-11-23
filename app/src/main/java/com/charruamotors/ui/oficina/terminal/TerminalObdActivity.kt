@@ -35,6 +35,7 @@ import com.charruamotors.oficina.terminal.EntradaTerminal
 import com.charruamotors.oficina.terminal.FormatadorTerminal
 import com.charruamotors.oficina.terminal.TradutorTerminal
 import com.charruamotors.oficina.varredura.IdentificacaoPid
+import com.charruamotors.oficina.varredura.PresetVarredura
 import com.charruamotors.oficina.varredura.StatusIdentificacao
 import com.charruamotors.oficina.varredura.TipoRespostaPid
 import com.charruamotors.oficina.varredura.VarreduraPids
@@ -59,6 +60,9 @@ class TerminalObdActivity : AppCompatActivity() {
     private lateinit var binding: ActivityTerminalObdBinding
     private val viewModel: TerminalObdViewModel by viewModels { TerminalObdViewModel.Factory }
     private val adapterResultados = ResultadoAdapter()
+
+    /** Preset multi-módulo escolhido (Varredura Completa SW4); null = os campos valem (um cabeçalho). */
+    private var presetMulti: PresetVarredura? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
@@ -195,8 +199,11 @@ class TerminalObdActivity : AppCompatActivity() {
         campoCabecalho.setAdapter(ArrayAdapter(this@TerminalObdActivity, android.R.layout.simple_list_item_1, VarreduraPids.CABECALHOS))
         campoServico.setAdapter(ArrayAdapter(this@TerminalObdActivity, android.R.layout.simple_list_item_1, VarreduraPids.SERVICOS))
         campoPreset.setOnItemClickListener { _, _, posicao, _ -> aplicarPreset(posicao) }
+        // Escolher um cabeçalho à mão sai da varredura multi-módulo.
+        campoCabecalho.setOnItemClickListener { _, _, _, _ -> sairDoPresetMulti() }
         // Ao trocar de serviço, a faixa padrão muda de largura (DIDs de 4 dígitos no 22).
         campoServico.setOnItemClickListener { _, _, posicao, _ ->
+            sairDoPresetMulti()
             if (VarreduraPids.SERVICOS[posicao] == "22") {
                 campoInicio.setText("F400")
                 campoFim.setText("F4FF")
@@ -215,8 +222,12 @@ class TerminalObdActivity : AppCompatActivity() {
             viewModel.modeloVeiculo()?.let { chipSoRespondeu.text = getString(R.string.varredura_filtro_modelo, it) }
         }
         botaoVarredura.setOnClickListener {
+            // Depois de uma rotação o campo volta sozinho; o preset multi é reconhecido pelo nome.
+            val multi = presetMulti ?: VarreduraPids.PRESETS.firstOrNull { it.multiModulo && it.nome == campoPreset.text.toString() }
             if (viewModel.varredura.value.rodando) {
                 viewModel.pararVarredura()
+            } else if (multi != null) {
+                viewModel.iniciarVarreduraModulos(multi.modulos)
             } else {
                 viewModel.iniciarVarredura(
                     campoCabecalho.text.toString(),
@@ -241,11 +252,19 @@ class TerminalObdActivity : AppCompatActivity() {
     private fun aplicarPreset(posicao: Int) = with(binding) {
         val preset = VarreduraPids.PRESETS.getOrNull(posicao) ?: return@with
         val c = preset.config
+        presetMulti = preset.takeIf { it.multiModulo }
         campoPreset.setText(preset.nome, false)
-        campoCabecalho.setText(c.cabecalho, false)
+        campoCabecalho.setText(if (preset.multiModulo) preset.modulos.joinToString("+") { it.cabecalho } else c.cabecalho, false)
         campoServico.setText(c.servico, false)
         campoInicio.setText(c.hex(c.inicio))
         campoFim.setText(c.hex(c.fim))
+    }
+
+    private fun sairDoPresetMulti() = with(binding) {
+        if (presetMulti == null) return@with
+        presetMulti = null
+        campoPreset.setText("", false)
+        if (campoCabecalho.text.contains('+')) campoCabecalho.setText(VarreduraPids.CABECALHOS.first(), false)
     }
 
     private fun mostrarVarredura(estado: EstadoVarredura) = with(binding) {
@@ -265,9 +284,16 @@ class TerminalObdActivity : AppCompatActivity() {
                 getString(R.string.varredura_metricas, metricas.identificados, metricas.ignorados),
         )
         val final = estado.final
+        val multi = estado.multi
+        val etapa = estado.config?.takeIf { estado.multiModulo }?.let { c ->
+            getString(R.string.varredura_modulo_etapa, estado.moduloAtual + 1, estado.planejados.size, c.cabecalho, VarreduraPids.nomeModulo(c.cabecalho)) + " · "
+        }.orEmpty()
         textoProgresso.definirTexto(when {
             estado.rodando && progresso != null ->
-                getString(R.string.varredura_progresso, progresso.feitos, progresso.total, progresso.responderam, progresso.atual ?: "")
+                etapa + getString(R.string.varredura_progresso, progresso.feitos, progresso.total, progresso.responderam, progresso.atual ?: "")
+            estado.rodando -> etapa.removeSuffix(" · ")
+            multi != null -> (multi.motivoParada?.let { getString(R.string.varredura_parada, it) + " · " }.orEmpty()) +
+                getString(R.string.varredura_multi_concluida, multi.positivas, multi.consultados, multi.modulosPresentes.size, multi.planejados.size)
             final?.motivoParada != null -> getString(R.string.varredura_parada, final.motivoParada) +
                 " · " + getString(R.string.varredura_concluida, final.positivas.size, final.resultados.size)
             final != null -> getString(R.string.varredura_concluida, final.positivas.size, final.total)
@@ -334,7 +360,7 @@ class TerminalObdActivity : AppCompatActivity() {
             b.textoStatus.text = id.descricao
             b.textoValor.text = id.valorTexto
             b.textoValor.isVisible = id.valorTexto.isNotEmpty()
-            b.textoComando.text = r.comando
+            b.textoComando.text = id.cabecalho?.let { "$it · ${r.comando}" } ?: r.comando
             val digitos = if (r.comando.startsWith("22")) 4 else 2
             val tipo = when (r.tipo) {
                 TipoRespostaPid.POSITIVA -> contexto.getString(R.string.varredura_dados, r.dados(digitos).size)
@@ -359,7 +385,7 @@ class TerminalObdActivity : AppCompatActivity() {
         }
 
         private object Diferenca : DiffUtil.ItemCallback<IdentificacaoPid>() {
-            override fun areItemsTheSame(a: IdentificacaoPid, b: IdentificacaoPid) = a.comando == b.comando
+            override fun areItemsTheSame(a: IdentificacaoPid, b: IdentificacaoPid) = a.comando == b.comando && a.cabecalho == b.cabecalho
             override fun areContentsTheSame(a: IdentificacaoPid, b: IdentificacaoPid) = a == b
         }
     }

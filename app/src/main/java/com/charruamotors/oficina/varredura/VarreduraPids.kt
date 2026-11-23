@@ -2,8 +2,11 @@ package com.charruamotors.oficina.varredura
 
 import com.charruamotors.obd.ObdParser
 import com.charruamotors.obd.RespostaBruta
+import com.charruamotors.obd.pid.RequisicaoEstendida
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -20,8 +23,22 @@ data class ConfigVarredura(val cabecalho: String, val servico: String, val inici
     fun hex(id: Int): String = "%0${digitos}X".format(id)
 }
 
-/** Preset de varredura para os módulos mais comuns. */
-data class PresetVarredura(val nome: String, val config: ConfigVarredura)
+/**
+ * Preset de varredura para os módulos mais comuns. Com mais de uma configuração em [modulos]
+ * (ex.: Varredura Completa SW4), os cabeçalhos são testados em sequência num relatório único.
+ */
+data class PresetVarredura(val nome: String, val modulos: List<ConfigVarredura>) {
+    constructor(nome: String, config: ConfigVarredura) : this(nome, listOf(config))
+
+    init {
+        require(modulos.isNotEmpty()) { "$nome: preset sem módulo" }
+    }
+
+    /** Primeira (ou única) configuração: a que preenche os campos da tela. */
+    val config: ConfigVarredura get() = modulos.first()
+
+    val multiModulo: Boolean get() = modulos.size > 1
+}
 
 /** Classificação da resposta a um identificador. */
 enum class TipoRespostaPid { POSITIVA, NEGATIVA, SEM_DADOS, ERRO }
@@ -58,7 +75,19 @@ data class ProgressoVarredura(val feitos: Int, val total: Int, val responderam: 
  */
 object VarreduraPids {
 
-    val CABECALHOS = listOf("7E0", "7E1", "7E2", "7DF")
+    val CABECALHOS = listOf("7E0", "7E1", "7B0", "7C0", "7E2", "7DF")
+
+    /** Nome do módulo de cada cabeçalho físico (Toyota), para a tela e o relatório. */
+    val NOMES_MODULOS = mapOf(
+        "7E0" to "Motor",
+        "7E1" to "Câmbio",
+        "7E2" to "Híbrido / 2º módulo",
+        "7B0" to "ABS / VSC / Estabilidade",
+        "7C0" to "Painel / 4WD / Carroceria",
+        "7DF" to "Funcional (OBD2)",
+    )
+
+    fun nomeModulo(cabecalho: String): String = NOMES_MODULOS[cabecalho.uppercase()] ?: "Módulo $cabecalho"
     val SERVICOS = listOf("21", "01", "22")
 
     /** Teto de identificadores por varredura (256 no serviço 21 levam ~15–50 s no Bluetooth). */
@@ -69,9 +98,29 @@ object VarreduraPids {
 
     const val PARADA_USUARIO = "interrompida pelo usuário"
 
+    /**
+     * Varredura multi-módulo: o módulo é dado como ausente (e a varredura passa ao próximo) se os
+     * primeiros identificadores forem todos `NO DATA` — ninguém respondeu no endereço.
+     */
+    const val NO_DATA_PARA_MODULO_AUSENTE = 16
+
+    private val MOTOR_21 = ConfigVarredura("7E0", "21", 0x00, 0xFF)
+    private val CAMBIO_21 = ConfigVarredura("7E1", "21", 0x00, 0xFF)
+    private val ABS_VSC_21 = ConfigVarredura("7B0", "21", 0x00, 0xFF)
+    private val PAINEL_4WD_21 = ConfigVarredura("7C0", "21", 0x00, 0xFF)
+
+    /** Os 4 módulos da SW4 que interessam ao Painel: motor, câmbio, ABS/VSC e painel/4WD. */
+    val PRESET_COMPLETA_SW4 = PresetVarredura(
+        "Varredura Completa SW4 (7E0 + 7E1 + 7B0 + 7C0)",
+        listOf(MOTOR_21, CAMBIO_21, ABS_VSC_21, PAINEL_4WD_21),
+    )
+
     val PRESETS = listOf(
-        PresetVarredura("Toyota Motor (7E0 · 2100–21FF)", ConfigVarredura("7E0", "21", 0x00, 0xFF)),
-        PresetVarredura("Toyota Câmbio (7E1 · 2100–21FF)", ConfigVarredura("7E1", "21", 0x00, 0xFF)),
+        PresetVarredura("Toyota Motor (7E0 · 2100–21FF)", MOTOR_21),
+        PresetVarredura("Toyota Câmbio (7E1 · 2100–21FF)", CAMBIO_21),
+        PresetVarredura("Toyota ABS / VSC / Estabilidade (7B0 · 2100–21FF)", ABS_VSC_21),
+        PresetVarredura("Toyota Painel / 4WD / Carroceria (7C0 · 2100–21FF)", PAINEL_4WD_21),
+        PRESET_COMPLETA_SW4,
         PresetVarredura("OBD2 padrão (7DF · 0100–01FF)", ConfigVarredura("7DF", "01", 0x00, 0xFF)),
         PresetVarredura("UDS motor (7E0 · 22F400–22F4FF)", ConfigVarredura("7E0", "22", 0xF400, 0xF4FF)),
     )
@@ -133,43 +182,87 @@ object VarreduraPids {
      * ([deveParar]) é atendido entre comandos — nunca no meio de um, o que deixaria a resposta
      * atrasada no canal; a corrotina também é cancelável entre comandos. Para sozinha depois de
      * [MAX_TIMEOUTS_SEGUIDOS] timeouts ou se o envio falhar (conexão perdida). Devolve o que foi lido.
+     *
+     * Módulos fora de `7E0`–`7E7` (ABS `7B0`, painel `7C0`) respondem no endereço + 8, fora do
+     * filtro padrão do ELM327: o `ATCRA 7B8` vai depois do `ATSH` e é desfeito (`ATCRA`) no fim.
+     * Com [desistirSemResposta], os primeiros N identificadores todos `NO DATA` encerram o módulo
+     * como ausente (usado na varredura multi-módulo).
      */
     suspend fun executar(
         config: ConfigVarredura,
         enviar: suspend (String) -> Result<RespostaBruta>,
         deveParar: () -> Boolean = { false },
+        desistirSemResposta: Int? = null,
         aoProgredir: (ProgressoVarredura, ResultadoPid?) -> Unit = { _, _ -> },
     ): ResultadoVarredura {
         val comandos = comandos(config)
         val resultados = mutableListOf<ResultadoPid>()
+        fun parar(motivo: String, conexaoPerdida: Boolean = false) =
+            ResultadoVarredura(config, resultados.toList(), comandos.size, motivoParada = motivo, conexaoPerdida = conexaoPerdida)
+
         val atsh = enviar("ATSH ${config.cabecalho}").getOrElse {
-            return ResultadoVarredura(config, resultados, comandos.size, motivoParada = it.message ?: "falha de comunicação")
+            return parar(it.message ?: "falha de comunicação", conexaoPerdida = true)
         }
         if ("OK" !in ObdParser.limparResposta(atsh.resposta)) {
-            return ResultadoVarredura(
-                config, resultados, comandos.size,
-                motivoParada = "o adaptador recusou o ATSH ${config.cabecalho} (\"${ObdParser.limparResposta(atsh.resposta).ifEmpty { "sem resposta" }}\")",
-            )
+            return parar("o adaptador recusou o ATSH ${config.cabecalho} (\"${ObdParser.limparResposta(atsh.resposta).ifEmpty { "sem resposta" }}\")")
         }
-        var timeouts = 0
-        var responderam = 0
-        aoProgredir(ProgressoVarredura(0, comandos.size, 0, comandos.firstOrNull()), null)
-        for ((i, comando) in comandos.withIndex()) {
+        val filtro = RequisicaoEstendida.filtroRecepcao(config.cabecalho)
+        val filtroAplicado = filtro != null &&
+            enviar("ATCRA $filtro").getOrNull()?.let { "OK" in ObdParser.limparResposta(it.resposta) } == true
+        try {
+            var timeouts = 0
+            var responderam = 0
+            aoProgredir(ProgressoVarredura(0, comandos.size, 0, comandos.firstOrNull()), null)
+            for ((i, comando) in comandos.withIndex()) {
+                currentCoroutineContext().ensureActive()
+                if (deveParar()) return parar(PARADA_USUARIO)
+                val resposta = enviar(comando).getOrElse {
+                    return parar(it.message ?: "falha de comunicação", conexaoPerdida = true)
+                }
+                val r = classificar(comando, resposta)
+                resultados += r
+                if (r.respondeu) responderam++
+                timeouts = if (resposta.semPrompt) timeouts + 1 else 0
+                aoProgredir(ProgressoVarredura(i + 1, comandos.size, responderam, comandos.getOrNull(i + 1)), r)
+                if (timeouts >= MAX_TIMEOUTS_SEGUIDOS) return parar("$timeouts comandos seguidos sem resposta do adaptador")
+                if (desistirSemResposta != null && resultados.size == desistirSemResposta && comandos.size > desistirSemResposta &&
+                    resultados.all { it.tipo == TipoRespostaPid.SEM_DADOS }
+                ) {
+                    return parar("módulo ${config.cabecalho} ausente ($desistirSemResposta identificadores seguidos sem resposta)")
+                }
+            }
+            return ResultadoVarredura(config, resultados.toList(), comandos.size)
+        } finally {
+            // Volta ao filtro padrão (motor/câmbio) mesmo com Parar ou cancelamento.
+            if (filtroAplicado) withContext(NonCancellable) { enviar("ATCRA") }
+        }
+    }
+
+    /**
+     * Varredura multi-módulo (ex.: [PRESET_COMPLETA_SW4]): cada configuração em sequência, na mesma
+     * sessão manual. Um módulo ausente (`NO DATA`) ou que recuse o `ATSH` não interrompe os demais;
+     * Parar ou a conexão perdida encerram tudo. [aoIniciarModulo] avisa a tela de cada etapa.
+     */
+    suspend fun executarModulos(
+        modulos: List<ConfigVarredura>,
+        enviar: suspend (String) -> Result<RespostaBruta>,
+        deveParar: () -> Boolean = { false },
+        aoIniciarModulo: (indice: Int, config: ConfigVarredura) -> Unit = { _, _ -> },
+        aoModuloConcluido: (ResultadoVarredura) -> Unit = {},
+        aoProgredir: (ProgressoVarredura, ResultadoPid?) -> Unit = { _, _ -> },
+    ): ResultadoVarreduraMulti {
+        val feitos = mutableListOf<ResultadoVarredura>()
+        for ((i, config) in modulos.withIndex()) {
             currentCoroutineContext().ensureActive()
-            if (deveParar()) return ResultadoVarredura(config, resultados, comandos.size, motivoParada = PARADA_USUARIO)
-            val resposta = enviar(comando).getOrElse {
-                return ResultadoVarredura(config, resultados, comandos.size, motivoParada = it.message ?: "falha de comunicação")
-            }
-            val r = classificar(comando, resposta)
-            resultados += r
-            if (r.respondeu) responderam++
-            timeouts = if (resposta.semPrompt) timeouts + 1 else 0
-            aoProgredir(ProgressoVarredura(i + 1, comandos.size, responderam, comandos.getOrNull(i + 1)), r)
-            if (timeouts >= MAX_TIMEOUTS_SEGUIDOS) {
-                return ResultadoVarredura(config, resultados, comandos.size, motivoParada = "$timeouts comandos seguidos sem resposta do adaptador")
-            }
+            if (deveParar()) return ResultadoVarreduraMulti(modulos, feitos.toList(), PARADA_USUARIO)
+            aoIniciarModulo(i, config)
+            val r = executar(config, enviar, deveParar, NO_DATA_PARA_MODULO_AUSENTE, aoProgredir)
+            feitos += r
+            aoModuloConcluido(r)
+            if (r.motivoParada == PARADA_USUARIO) return ResultadoVarreduraMulti(modulos, feitos.toList(), PARADA_USUARIO)
+            if (r.conexaoPerdida) return ResultadoVarreduraMulti(modulos, feitos.toList(), r.motivoParada)
         }
-        return ResultadoVarredura(config, resultados, comandos.size)
+        return ResultadoVarreduraMulti(modulos, feitos.toList())
     }
 
     private fun ehHex(c: Char) = c in '0'..'9' || c in 'A'..'F'
@@ -185,9 +278,28 @@ data class ResultadoVarredura(
     val resultados: List<ResultadoPid>,
     val total: Int,
     val motivoParada: String? = null,
+    /** O envio falhou (Bluetooth caiu): a varredura multi-módulo não segue para o próximo módulo. */
+    val conexaoPerdida: Boolean = false,
 ) {
     val positivas: List<ResultadoPid> get() = resultados.filter { it.respondeu }
     val completa: Boolean get() = resultados.size == total && motivoParada == null
+}
+
+/**
+ * Varredura de vários módulos: os [planejados] (na ordem) e o resultado de cada um já feito em
+ * [modulos]. [motivoParada] só quando o conjunto parou antes do fim (Parar, conexão perdida).
+ */
+data class ResultadoVarreduraMulti(
+    val planejados: List<ConfigVarredura>,
+    val modulos: List<ResultadoVarredura>,
+    val motivoParada: String? = null,
+) {
+    val total: Int get() = planejados.sumOf { it.quantidade }
+    val consultados: Int get() = modulos.sumOf { it.resultados.size }
+    val positivas: Int get() = modulos.sumOf { it.positivas.size }
+
+    /** Módulos que responderam positivamente a ao menos um identificador. */
+    val modulosPresentes: List<ResultadoVarredura> get() = modulos.filter { it.positivas.isNotEmpty() }
 }
 
 /** Relatório em texto da varredura, para copiar/compartilhar e mapear sensores novos. */
@@ -208,13 +320,54 @@ object RelatorioVarredura {
         appendLine(quando.format(formato) + (veiculo?.let { " · $it" } ?: ""))
         protocolo?.let { appendLine("Protocolo: $it") }
         appendLine("Faixa: ${c.descricao} (ATSH ${c.cabecalho}, serviço ${c.servico})")
+        corpo(resultado, duracaoMs, identificacoes)
+    }.trimEnd()
+
+    /**
+     * Relatório único da varredura multi-módulo (ex.: Varredura Completa SW4): resumo geral e uma
+     * seção por módulo (`7E0` Motor, `7E1` Câmbio, `7B0` ABS/VSC, `7C0` Painel/4WD) com os bytes
+     * brutos de cada identificador que respondeu — pronto para copiar e mapear marcha, alavanca,
+     * 4x4 e VSC. [identificacoes] por cabeçalho (cruzamento com o catálogo).
+     */
+    fun gerarConsolidado(
+        resultado: ResultadoVarreduraMulti,
+        quando: LocalDateTime,
+        veiculo: String? = null,
+        protocolo: String? = null,
+        duracaoMs: Long? = null,
+        identificacoes: Map<String, List<IdentificacaoPid>> = emptyMap(),
+    ): String = buildString {
+        appendLine("VARREDURA COMPLETA MULTI-MÓDULO — Charrua OBD Pro")
+        appendLine(quando.format(formato) + (veiculo?.let { " · $it" } ?: ""))
+        protocolo?.let { appendLine("Protocolo: $it") }
+        appendLine("Módulos: " + resultado.planejados.joinToString(" + ") { "${it.cabecalho} (${VarreduraPids.nomeModulo(it.cabecalho)})" })
+        append("Consultados: ${resultado.consultados}/${resultado.total} · responderam: ${resultado.positivas}")
+        append(" · módulos presentes: ${resultado.modulosPresentes.size}/${resultado.planejados.size}")
+        duracaoMs?.let { append(" · %.1f s".format(LOCALE_BR, it / 1000.0)) }
+        appendLine()
+        resultado.motivoParada?.let { appendLine("Interrompida: $it") }
+        for (config in resultado.planejados) {
+            appendLine()
+            appendLine("=== ${config.cabecalho} · ${VarreduraPids.nomeModulo(config.cabecalho)} (${config.descricao}) ===")
+            val modulo = resultado.modulos.firstOrNull { it.config == config }
+            if (modulo == null) {
+                appendLine("Não consultado.")
+                continue
+            }
+            corpo(modulo, null, identificacoes[config.cabecalho].orEmpty())
+            appendLine()
+        }
+    }.trimEnd()
+
+    private fun StringBuilder.corpo(resultado: ResultadoVarredura, duracaoMs: Long?, identificacoes: List<IdentificacaoPid>) {
+        val c = resultado.config
         val positivas = resultado.positivas
         val negativas = resultado.resultados.count { it.tipo == TipoRespostaPid.NEGATIVA }
         val semDados = resultado.resultados.count { it.tipo == TipoRespostaPid.SEM_DADOS }
         val erros = resultado.resultados.count { it.tipo == TipoRespostaPid.ERRO }
         append("Consultados: ${resultado.resultados.size}/${resultado.total} · responderam: ${positivas.size}")
         append(" · negativas (7F): $negativas · NO DATA: $semDados · erros: $erros")
-        duracaoMs?.let { append(" · %.1f s".format(java.util.Locale.forLanguageTag("pt-BR"), it / 1000.0)) }
+        duracaoMs?.let { append(" · %.1f s".format(LOCALE_BR, it / 1000.0)) }
         appendLine()
         resultado.motivoParada?.let { appendLine("Interrompida: $it") }
         appendLine()
@@ -243,5 +396,7 @@ object RelatorioVarredura {
             append("Respostas negativas: ")
             append(nrcs.entries.joinToString { (nrc, n) -> "7F ${c.servico} $nrc (${ObdParser.descricaoNrc(nrc ?: "")}) ×$n" })
         }
-    }.trimEnd()
+    }
+
+    private val LOCALE_BR: java.util.Locale = java.util.Locale.forLanguageTag("pt-BR")
 }

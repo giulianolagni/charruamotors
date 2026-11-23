@@ -41,6 +41,17 @@
             android:textAppearance="?attr/textAppearanceTitleLarge"
             tools:text="4,35 g/s" />
 
+        <!-- Mín/Máx da sessão: linha discreta, some quando ainda não há leitura. -->
+        <TextView
+            android:id="@+id/texto_extremos"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:textAppearance="?attr/textAppearanceLabelSmall"
+            android:textColor="@color/texto_secundario"
+            android:visibility="gone"
+            tools:text="Mín 59 · Máx 74" />
+
         <TextView
             android:id="@+id/texto_comando"
             android:layout_width="wrap_content"

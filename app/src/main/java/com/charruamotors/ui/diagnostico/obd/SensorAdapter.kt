@@ -2,6 +2,7 @@ package com.charruamotors.ui.diagnostico.obd
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -52,6 +53,12 @@ class SensorAdapter : ListAdapter<LeituraSensor, SensorAdapter.ViewHolder>(Diff)
                 val v = conversor().converter(valor, def.unidade, def.casasDecimais)
                 contexto.getString(R.string.obd_valor_unidade, v.valor.comoNumero(v.casas), v.unidade)
             } ?: contexto.getString(R.string.valor_indisponivel)
+            binding.textoExtremos.text = leitura.extremos?.takeIf { def.rotulo(it.min) == null }?.let { e ->
+                val min = conversor().converter(e.min, def.unidade, def.casasDecimais)
+                val max = conversor().converter(e.max, def.unidade, def.casasDecimais)
+                contexto.getString(R.string.obd_sensor_extremos, min.valor.comoNumero(min.casas), max.valor.comoNumero(max.casas))
+            }.orEmpty()
+            binding.textoExtremos.isVisible = binding.textoExtremos.text.isNotEmpty()
             binding.root.contentDescription = "${def.nome}: ${binding.textoValor.text}"
         }
     }
@@ -60,7 +67,7 @@ class SensorAdapter : ListAdapter<LeituraSensor, SensorAdapter.ViewHolder>(Diff)
         override fun areItemsTheSame(antigo: LeituraSensor, novo: LeituraSensor) =
             antigo.definicao.comando == novo.definicao.comando
 
-        override fun areContentsTheSame(antigo: LeituraSensor, novo: LeituraSensor) = antigo.valor == novo.valor
+        override fun areContentsTheSame(antigo: LeituraSensor, novo: LeituraSensor) = antigo.valor == novo.valor && antigo.extremos == novo.extremos
 
         override fun getChangePayload(antigo: LeituraSensor, novo: LeituraSensor): Any = PAYLOAD_VALOR
     }

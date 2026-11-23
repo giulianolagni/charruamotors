@@ -53,8 +53,8 @@ class MapeamentoRealSw4Test {
         assertEquals("D", alavanca.rotulo(valor("TOYOTA_ALAVANCA", "61 D9 00 00 00 04 42 E0 00 00 00 00 00\r\r")))
         // O byte A não decide a alavanca (C/D 00 00 segue P/N com A = 0x10).
         assertEquals("P/N", alavanca.rotulo(valor("TOYOTA_ALAVANCA", d9(0x10, 0, 0, 0, 0x42, 0xE0, 0, 0, 0, 0, 0))))
-        // Combinação não mapeada (C e D ao mesmo tempo) não vira rótulo chutado.
-        assertTrue(ObdParser.parsePid(d9(0, 0, 0x04, 0x04, 0x42, 0xE0, 0, 0, 0, 0, 0), alavanca) is RespostaObd.Invalido)
+        // Combinação não mapeada (C e D ao mesmo tempo) cai em M, em vez de deixar o mostrador vazio.
+        assertEquals("M", alavanca.rotulo(valor("TOYOTA_ALAVANCA", d9(0, 0, 0x04, 0x04, 0x42, 0xE0, 0, 0, 0, 0, 0))))
     }
 
     @Test

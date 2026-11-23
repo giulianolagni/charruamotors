@@ -56,6 +56,12 @@ enum class PresetVeiculo(
                 // Em altitude a marcha lenta fica em 73–75 kPa: 95 dava falso alerta vermelho.
                 FaixaEsperada(ParametroFaixa.MAP_TURBO, 60.0, 215.0),
                 FaixaEsperada(ParametroFaixa.BICOS, -3.0, 3.0),
+                FaixaEsperada(ParametroFaixa.CARGA_MOTOR, 15.0, 100.0),
+                FaixaEsperada(ParametroFaixa.TEMP_ADMISSAO, 10.0, 65.0),
+                FaixaEsperada(ParametroFaixa.MAF, 15.0, 170.0),
+                FaixaEsperada(ParametroFaixa.BORBOLETA, 0.0, 100.0),
+                FaixaEsperada(ParametroFaixa.PRESSAO_BARO, 85.0, 105.0),
+                FaixaEsperada(ParametroFaixa.TENSAO_ECU, 13.4, 14.6),
             ),
         ),
     ),

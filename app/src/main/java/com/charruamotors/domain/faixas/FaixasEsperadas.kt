@@ -45,6 +45,12 @@ enum class ParametroFaixa(
     ),
     STFT("Correção curto prazo (STFT)", "%", listOf(Pids.STFT), 1, CondicaoFaixa.MOTOR_LIGADO),
     LTFT("Correção longo prazo (LTFT)", "%", listOf(Pids.LTFT), 1, CondicaoFaixa.MOTOR_LIGADO),
+    CARGA_MOTOR("Carga do motor", "%", listOf(Pids.CARGA_MOTOR), 0, CondicaoFaixa.MOTOR_LIGADO),
+    TEMP_ADMISSAO("Temp. ar de admissão", "°C", listOf(Pids.TEMPERATURA_AR_ADMISSAO), 0, CondicaoFaixa.MOTOR_LIGADO, minimoAoVivo = false),
+    MAF("Fluxo de ar (MAF)", "g/s", listOf(Pids.MAF), 0, CondicaoFaixa.MOTOR_LIGADO),
+    BORBOLETA("Posição da borboleta", "%", listOf(Pids.BORBOLETA), 0, CondicaoFaixa.MOTOR_LIGADO),
+    PRESSAO_BARO("Pressão barométrica", "kPa", listOf("TOYOTA_BARO", "0133"), 0, CondicaoFaixa.SEMPRE),
+    TENSAO_ECU("Tensão da ECU", "V", listOf("TOYOTA_TENSAO_ECU", Pids.TENSAO_ECU), 1, CondicaoFaixa.MOTOR_LIGADO),
 }
 
 enum class SituacaoFaixa { ABAIXO, DENTRO, ACIMA }

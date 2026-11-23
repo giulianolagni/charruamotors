@@ -130,6 +130,7 @@
     <string name="unidade_kmh">km/h</string>
     <string name="unidade_kpa">kPa</string>
     <string name="unidade_celsius">°C</string>
+    <string name="obd_sensor_extremos">Mín %1$s · Máx %2$s</string>
     <string name="obd_sensores_titulo">Sensores suportados pela ECU</string>
     <string name="obd_sensores_titulo_qtd">Sensores suportados pela ECU (%1$d)</string>
     <string name="obd_sensores_vazio">Conecte o scanner para detectar os sensores suportados.</string>

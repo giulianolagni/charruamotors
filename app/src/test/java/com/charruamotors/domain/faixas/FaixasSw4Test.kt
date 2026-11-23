@@ -34,7 +34,14 @@ class FaixasSw4Test {
         // 60 kPa (v2.1.1): em altitude a marcha lenta fica em 73–75 kPa e não pode acender o vermelho.
         assertEquals(60.0 to 215.0, faixa(ParametroFaixa.MAP_TURBO).let { it.min to it.max })
         assertEquals(-3.0 to 3.0, faixa(ParametroFaixa.BICOS).let { it.min to it.max })
-        assertEquals(9, sw4.faixas.size)
+        // v2.1.2: faixas dos sensores que estavam sem faixa na grade (carga, IAT, MAF, borboleta, baro, ECU).
+        assertEquals(15.0 to 100.0, faixa(ParametroFaixa.CARGA_MOTOR).let { it.min to it.max })
+        assertEquals(10.0 to 65.0, faixa(ParametroFaixa.TEMP_ADMISSAO).let { it.min to it.max })
+        assertEquals(15.0 to 170.0, faixa(ParametroFaixa.MAF).let { it.min to it.max })
+        assertEquals(0.0 to 100.0, faixa(ParametroFaixa.BORBOLETA).let { it.min to it.max })
+        assertEquals(85.0 to 105.0, faixa(ParametroFaixa.PRESSAO_BARO).let { it.min to it.max })
+        assertEquals(13.4 to 14.6, faixa(ParametroFaixa.TENSAO_ECU).let { it.min to it.max })
+        assertEquals(15, sw4.faixas.size)
     }
 
     @Test

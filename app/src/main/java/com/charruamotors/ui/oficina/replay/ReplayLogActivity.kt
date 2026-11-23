@@ -25,8 +25,11 @@ import androidx.recyclerview.widget.RecyclerView
 import com.charruamotors.R
 import com.charruamotors.databinding.ActivityReplayLogBinding
 import com.charruamotors.databinding.ItemArquivoLogBinding
+import com.charruamotors.databinding.ItemCabecalhoSimuladosBinding
 import com.charruamotors.oficina.replay.JanelaReplay
 import com.charruamotors.obd.log.DestinoLogs
+import com.charruamotors.obd.log.LinhaLog
+import com.charruamotors.obd.log.OrganizadorLogs
 import com.charruamotors.ui.componentes.LogReplayChartView
 import com.charruamotors.ui.util.ArquivoExportado
 import com.charruamotors.ui.util.ExportadorCsv
@@ -104,7 +107,7 @@ class ReplayLogActivity : AppCompatActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
                     viewModel.arquivos.collect {
-                        adapter.submitList(it)
+                        adapter.definirArquivos(it)
                         binding.textoListaVazia.isVisible = it.isEmpty()
                     }
                 }
@@ -276,23 +279,71 @@ class ReplayLogActivity : AppCompatActivity() {
         }
     }
 
-    /** Lista de logs salvos (também usada na aba Histórico). */
+    /**
+     * Lista de logs salvos (também usada na aba Histórico): do mais recente para o mais antigo, com os
+     * logs reais direto na lista e os do Modo Simulado na pasta retrátil "Simulados (X arquivos)" no topo.
+     */
     internal class ArquivoAdapter(
         private val aoAbrir: (ArquivoLogCsv) -> Unit,
         private val aoCompartilhar: (ArquivoLogCsv) -> Unit,
-    ) :
-        ListAdapter<ArquivoLogCsv, ArquivoAdapter.Item>(Diferenca) {
+    ) : ListAdapter<LinhaLog<ArquivoLogCsv>, RecyclerView.ViewHolder>(Diferenca) {
 
         class Item(val binding: ItemArquivoLogBinding) : RecyclerView.ViewHolder(binding.root)
+        class Cabecalho(val binding: ItemCabecalhoSimuladosBinding) : RecyclerView.ViewHolder(binding.root)
 
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
-            Item(ItemArquivoLogBinding.inflate(LayoutInflater.from(parent.context), parent, false))
+        private var arquivos: List<ArquivoLogCsv> = emptyList()
+        private var simuladosExpandidos = false
 
-        override fun onBindViewHolder(holder: Item, position: Int) {
-            val arquivo = getItem(position)
+        /** Recebe os arquivos em qualquer ordem: a lista é ordenada e separada aqui. */
+        fun definirArquivos(lista: List<ArquivoLogCsv>) {
+            arquivos = lista
+            atualizarLinhas()
+        }
+
+        private fun atualizarLinhas() = submitList(OrganizadorLogs.montarLinhas(arquivos, simuladosExpandidos))
+
+        override fun getItemViewType(position: Int) = when (getItem(position)) {
+            is LinhaLog.CabecalhoSimulados -> TIPO_CABECALHO
+            is LinhaLog.Arquivo -> TIPO_ARQUIVO
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+            val inflater = LayoutInflater.from(parent.context)
+            return if (viewType == TIPO_CABECALHO) {
+                Cabecalho(ItemCabecalhoSimuladosBinding.inflate(inflater, parent, false))
+            } else {
+                Item(ItemArquivoLogBinding.inflate(inflater, parent, false))
+            }
+        }
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            when (val linha = getItem(position)) {
+                is LinhaLog.CabecalhoSimulados -> ligarCabecalho(holder as Cabecalho, linha)
+                is LinhaLog.Arquivo -> ligarArquivo(holder as Item, linha)
+            }
+        }
+
+        private fun ligarCabecalho(holder: Cabecalho, linha: LinhaLog.CabecalhoSimulados) {
+            val contexto = holder.itemView.context
+            holder.binding.textoTituloSimulados.text =
+                contexto.resources.getQuantityString(R.plurals.logs_simulados_titulo, linha.quantidade, linha.quantidade)
+            holder.binding.imagemExpandir.rotation = if (linha.expandido) 180f else 0f
+            holder.itemView.contentDescription = contexto.getString(
+                if (linha.expandido) R.string.logs_simulados_recolher else R.string.logs_simulados_expandir,
+            )
+            holder.itemView.setOnClickListener {
+                simuladosExpandidos = !simuladosExpandidos
+                atualizarLinhas()
+            }
+        }
+
+        private fun ligarArquivo(holder: Item, linha: LinhaLog.Arquivo<ArquivoLogCsv>) {
+            val arquivo = linha.item
             val contexto = holder.itemView.context
             holder.binding.textoNome.text = arquivo.nome
-            val data = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").format(Instant.ofEpochMilli(arquivo.modificadoMs).atZone(ZoneId.systemDefault()))
+            holder.binding.badgeSimulado.isVisible = linha.simulado
+            val data = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+                .format(Instant.ofEpochMilli(OrganizadorLogs.instante(arquivo)).atZone(ZoneId.systemDefault()))
             holder.binding.textoDetalhe.text =
                 contexto.getString(R.string.replay_item_detalhe, data, Formatter.formatShortFileSize(contexto, arquivo.tamanhoBytes))
             holder.binding.imagemTipo.setImageResource(if (arquivo.texto) R.drawable.ic_terminal else R.drawable.ic_grafico)
@@ -303,9 +354,19 @@ class ReplayLogActivity : AppCompatActivity() {
             }
         }
 
-        private object Diferenca : DiffUtil.ItemCallback<ArquivoLogCsv>() {
-            override fun areItemsTheSame(a: ArquivoLogCsv, b: ArquivoLogCsv) = a.uri == b.uri
-            override fun areContentsTheSame(a: ArquivoLogCsv, b: ArquivoLogCsv) = a == b
+        private object Diferenca : DiffUtil.ItemCallback<LinhaLog<ArquivoLogCsv>>() {
+            override fun areItemsTheSame(a: LinhaLog<ArquivoLogCsv>, b: LinhaLog<ArquivoLogCsv>) = when {
+                a is LinhaLog.CabecalhoSimulados && b is LinhaLog.CabecalhoSimulados -> true
+                a is LinhaLog.Arquivo && b is LinhaLog.Arquivo -> a.item.uri == b.item.uri
+                else -> false
+            }
+
+            override fun areContentsTheSame(a: LinhaLog<ArquivoLogCsv>, b: LinhaLog<ArquivoLogCsv>) = a == b
+        }
+
+        private companion object {
+            const val TIPO_ARQUIVO = 0
+            const val TIPO_CABECALHO = 1
         }
     }
 

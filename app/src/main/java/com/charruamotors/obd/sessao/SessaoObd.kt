@@ -444,14 +444,15 @@ class SessaoObd(
         gatilho: String?,
         inicioMs: Long,
     ): GravadorLogsSessao {
-        val simulado = if (_modo.value == ModoObd.SIMULADO) " · scanner simulado" else ""
+        val simulado = _modo.value == ModoObd.SIMULADO
         val cabecalho = CabecalhoSessao(
             veiculo = veiculo?.descricao,
             veiculoArquivo = veiculo?.nomeCurto,
             placa = veiculo?.placa,
-            modoInicio = descreverOrigem(origem, gatilho) + simulado,
+            modoInicio = descreverOrigem(origem, gatilho) + if (simulado) " · scanner simulado" else "",
             scanner = "${dispositivo.nome} (${dispositivo.endereco})",
             inicioMs = inicioMs,
+            simulado = simulado,
         )
         return GravadorLogsSessao(destinoLogs, cabecalho, pastaTemporaria, zona)
     }

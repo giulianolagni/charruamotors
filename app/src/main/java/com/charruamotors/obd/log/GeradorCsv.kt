@@ -63,9 +63,14 @@ object GeradorCsv {
     fun gerar(sessao: SessaoLog, zona: ZoneId = ZoneId.systemDefault()): String =
         buildString { escrever(sessao, this, zona) }
 
-    /** Ex.: `charrua_obd_2026-11-20_14-30-05.csv` (sem `:`, inválido em nomes de arquivo). */
-    fun nomeArquivo(inicioMs: Long, zona: ZoneId = ZoneId.systemDefault()): String =
-        "charrua_obd_${formatoNomeArquivo.format(Instant.ofEpochMilli(inicioMs).atZone(zona))}.csv"
+    /**
+     * Ex.: `charrua_obd_2026-11-20_14-30-05.csv` (sem `:`, inválido em nomes de arquivo); gravado com o
+     * scanner simulado: `charrua_obd_SIMULADO_2026-11-20_14-30-05.csv`.
+     */
+    fun nomeArquivo(inicioMs: Long, zona: ZoneId = ZoneId.systemDefault(), simulado: Boolean = false): String {
+        val marca = if (simulado) "${OrganizadorLogs.MARCA_SIMULADO}_" else ""
+        return "charrua_obd_$marca${formatoNomeArquivo.format(Instant.ofEpochMilli(inicioMs).atZone(zona))}.csv"
+    }
 
     /** Ponto decimal, sem separador de milhar nem notação científica; NaN/infinito = vazio. */
     internal fun formatarNumero(valor: Double, casas: Int): String {

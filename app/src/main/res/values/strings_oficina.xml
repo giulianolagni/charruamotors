@@ -65,6 +65,13 @@
     <string name="replay_abrir_outro">Abrir outro CSV</string>
     <string name="replay_atualizar">Atualizar lista</string>
     <string name="replay_carregando">Carregando…</string>
+    <string name="log_badge_simulado">SIMULADO</string>
+    <plurals name="logs_simulados_titulo">
+        <item quantity="one">Simulados (%1$d arquivo)</item>
+        <item quantity="other">Simulados (%1$d arquivos)</item>
+    </plurals>
+    <string name="logs_simulados_expandir">Toque para mostrar os logs do Modo Simulado</string>
+    <string name="logs_simulados_recolher">Toque para recolher os logs do Modo Simulado</string>
     <string name="replay_item_detalhe">%1$s · %2$s</string>
     <string name="replay_erro_ler">Não foi possível ler o CSV: %1$s</string>
     <string name="replay_max_sensores">No máximo 3 sensores ao mesmo tempo. Desmarque um para trocar.</string>

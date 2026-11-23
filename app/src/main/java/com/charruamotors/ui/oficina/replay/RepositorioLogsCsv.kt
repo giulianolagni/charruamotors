@@ -9,6 +9,8 @@ import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
+import com.charruamotors.obd.log.ItemLog
+import com.charruamotors.obd.log.OrganizadorLogs
 import com.charruamotors.oficina.replay.LeitorCsvLog
 import com.charruamotors.oficina.replay.LogCsv
 import com.charruamotors.ui.util.ExportadorCsv
@@ -18,9 +20,12 @@ import java.io.File
 import java.io.IOException
 
 /** Log salvo disponível no visualizador: CSV de telemetria (replay) ou relatório `.txt` da sessão. */
-data class ArquivoLogCsv(val uri: Uri, val nome: String, val tamanhoBytes: Long, val modificadoMs: Long) {
+data class ArquivoLogCsv(val uri: Uri, override val nome: String, val tamanhoBytes: Long, override val modificadoMs: Long) : ItemLog {
     /** Relatório de texto da caixa-preta (abre no diálogo, não no gráfico). */
     val texto: Boolean get() = nome.endsWith(".txt", ignoreCase = true)
+
+    /** Gravado no Modo Simulado (`CharruaOBD_SIMULADO_...`). */
+    val simulado: Boolean get() = OrganizadorLogs.ehSimulado(nome)
 }
 
 /** Trecho de um relatório `.txt` para exibir: [truncado] = o arquivo é maior que o lido. */
@@ -39,9 +44,8 @@ class RepositorioLogsCsv(context: Context) {
 
     suspend fun listar(): List<ArquivoLogCsv> = withContext(Dispatchers.IO) {
         val encontrados = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) listarMediaStore() else emptyList()
-        (encontrados + listarPastasDoApp())
-            .distinctBy { it.nome to it.tamanhoBytes }
-            .sortedByDescending { it.modificadoMs }
+        // Mais recente (última viagem) no topo: horário do nome do arquivo, com a data de modificação de reserva.
+        OrganizadorLogs.ordenar((encontrados + listarPastasDoApp()).distinctBy { it.nome to it.tamanhoBytes })
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)

@@ -62,6 +62,8 @@ data class CabecalhoSessao(
     /** Scanner usado (nome e endereço). */
     val scanner: String?,
     val inicioMs: Long,
+    /** Sessão gravada com o scanner simulado (Modo Simulado): marca o nome dos arquivos e o cabeçalho. */
+    val simulado: Boolean = false,
 )
 
 /** Códigos de falha lidos na sessão; cada lista null = modo não lido / não suportado pela ECU. */
@@ -91,7 +93,7 @@ data class ResumoSessao(
 )
 
 /**
- * Relatório legível da sessão (`CharruaOBD_YYYYMMDD_HHMMSS_<Veiculo>.txt`): cabeçalho, códigos de
+ * Relatório legível da sessão (`CharruaOBD_[SIMULADO_]YYYYMMDD_HHMMSS_<Veiculo>.txt`): cabeçalho, códigos de
  * falha, resumo estatístico da viagem e, depois, o log bruto completo (escrito pelo
  * [GravadorLogsSessao]). Números no formato brasileiro (`12,6 V`, `3.420 rpm`).
  */
@@ -105,9 +107,14 @@ object RelatorioSessaoTxt {
     private val formatoNome = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
     private val formatoDataHora = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")
 
-    /** `CharruaOBD_20261122_143005_Toyota_SW4` (sem extensão). */
-    fun nomeBase(inicioMs: Long, veiculo: String?, zona: ZoneId = ZoneId.systemDefault()): String =
-        "CharruaOBD_${formatoNome.format(Instant.ofEpochMilli(inicioMs).atZone(zona))}_${trechoArquivo(veiculo)}"
+    /**
+     * `CharruaOBD_20261122_143005_Toyota_SW4` (sem extensão); no Modo Simulado,
+     * `CharruaOBD_SIMULADO_20261122_143005_Toyota_SW4`.
+     */
+    fun nomeBase(inicioMs: Long, veiculo: String?, zona: ZoneId = ZoneId.systemDefault(), simulado: Boolean = false): String {
+        val marca = if (simulado) "${OrganizadorLogs.MARCA_SIMULADO}_" else ""
+        return "CharruaOBD_$marca${formatoNome.format(Instant.ofEpochMilli(inicioMs).atZone(zona))}_${trechoArquivo(veiculo)}"
+    }
 
     /** Sem acentos, espaços viram `_`, só letras/dígitos/`_`/`-`; vazio = `SemVeiculo`. */
     fun trechoArquivo(texto: String?): String {
@@ -124,6 +131,7 @@ object RelatorioSessaoTxt {
         saida.append(LINHA).append('\n')
         saida.append("  CHARRUA OBD PRO — RELATÓRIO DA SESSÃO OBD2\n")
         saida.append(LINHA).append('\n')
+        campo("Modo", if (c.simulado) "SIMULADO" else "REAL")
         campo("Veículo", c.veiculo ?: "não vinculado")
         campo("Placa", c.placa ?: "—")
         campo("Modo de início", c.modoInicio)

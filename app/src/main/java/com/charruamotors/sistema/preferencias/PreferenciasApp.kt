@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.edit
+import com.charruamotors.sistema.unidades.ConversorUnidades
+import com.charruamotors.sistema.unidades.SistemaUnidades
 import com.charruamotors.sistema.unidades.UnidadePressao
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,9 +29,14 @@ enum class TemaApp(val modoNoturno: Int) {
 data class ConfigApp(
     val tema: TemaApp = TemaApp.PADRAO,
     val unidadePressao: UnidadePressao = UnidadePressao.PADRAO,
+    /** Unidades globais (métrico ou imperial) de todo o app e do HUD. */
+    val sistemaUnidades: SistemaUnidades = SistemaUnidades.PADRAO,
     /** O Assistente de Primeira Abertura já foi concluído (ou pulado até o fim)? */
     val assistenteConcluido: Boolean = false,
-)
+) {
+    /** Conversor de exibição: no imperial a pressão é sempre psi; no métrico, a [unidadePressao]. */
+    val conversor: ConversorUnidades get() = ConversorUnidades(sistemaUnidades, unidadePressao)
+}
 
 /**
  * Armazenamento chave-valor mínimo: no app, SharedPreferences ([deSharedPreferences]); nos testes
@@ -58,7 +65,7 @@ interface ArmazenamentoChaveValor {
 }
 
 /**
- * [ConfigApp] persistida: tema, unidade de pressão e a flag do assistente. Fica num arquivo
+ * [ConfigApp] persistida: tema, unidade de pressão, unidades globais e a flag do assistente. Fica num arquivo
  * próprio (`app`), separado da sessão de login — o logout não reabre o assistente nem muda o tema.
  */
 class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
@@ -74,6 +81,7 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
 
     val tema: TemaApp get() = _config.value.tema
     val unidadePressao: UnidadePressao get() = _config.value.unidadePressao
+    val sistemaUnidades: SistemaUnidades get() = _config.value.sistemaUnidades
 
     /** O assistente deve abrir sozinho (primeira abertura após o login)? */
     val deveMostrarAssistente: Boolean get() = !_config.value.assistenteConcluido
@@ -81,6 +89,8 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
     fun definirTema(tema: TemaApp) = atualizar { it.copy(tema = tema) }
 
     fun definirUnidadePressao(unidade: UnidadePressao) = atualizar { it.copy(unidadePressao = unidade) }
+
+    fun definirSistemaUnidades(sistema: SistemaUnidades) = atualizar { it.copy(sistemaUnidades = sistema) }
 
     fun marcarAssistenteConcluido() = atualizar { it.copy(assistenteConcluido = true) }
 
@@ -98,6 +108,7 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
             mapOf(
                 TEMA to nova.tema.name,
                 UNIDADE_PRESSAO to nova.unidadePressao.name,
+                SISTEMA_UNIDADES to nova.sistemaUnidades.name,
                 ASSISTENTE_CONCLUIDO to nova.assistenteConcluido,
             ),
         )
@@ -107,6 +118,7 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
     private fun ler() = ConfigApp(
         tema = TemaApp.deCodigo(armazenamento.lerTexto(TEMA)),
         unidadePressao = UnidadePressao.deCodigo(armazenamento.lerTexto(UNIDADE_PRESSAO)),
+        sistemaUnidades = SistemaUnidades.deCodigo(armazenamento.lerTexto(SISTEMA_UNIDADES)),
         assistenteConcluido = armazenamento.lerBooleano(ASSISTENTE_CONCLUIDO, false),
     )
 
@@ -114,6 +126,7 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
         const val ARQUIVO = "app"
         const val TEMA = "tema"
         const val UNIDADE_PRESSAO = "unidade_pressao"
+        const val SISTEMA_UNIDADES = "sistema_unidades"
         const val ASSISTENTE_CONCLUIDO = "assistente_concluido"
     }
 }

@@ -22,6 +22,7 @@ import com.charruamotors.sistema.permissoes.ItemPermissao
 import com.charruamotors.sistema.permissoes.LeitorPermissoes
 import com.charruamotors.sistema.preferencias.ConfigApp
 import com.charruamotors.sistema.preferencias.TemaApp
+import com.charruamotors.sistema.unidades.SistemaUnidades
 import com.charruamotors.sistema.unidades.UnidadePressao
 import com.charruamotors.ui.assistente.AssistenteActivity
 import com.charruamotors.ui.permissoes.ChecklistPermissoesActivity
@@ -36,7 +37,8 @@ import kotlinx.coroutines.launch
  * Configurações (menu lateral, ou a faixa da caixa-preta na aba OBD2):
  * - Caixa-preta automática: auto-conexão, logs automáticos, Bluetooth gatilho, scanner e veículo
  *   padrão e o atalho de bateria "Sem restrições";
- * - Aparência e Painel: tema (aplicado na hora) e unidade de pressão do Turbo/MAP;
+ * - Aparência e Painel: tema (aplicado na hora), unidades globais (métrico ou imperial, que
+ *   convertem na hora todo o app e o HUD) e a unidade de pressão do métrico (kPa/bar);
  * - Assistente: refazer o Assistente Inicial e abrir o Checklist de Permissões.
  */
 class ConfiguracoesActivity : AppCompatActivity() {
@@ -151,6 +153,11 @@ class ConfiguracoesActivity : AppCompatActivity() {
             // Aplica na hora: as Activities abertas são recriadas no novo modo.
             AppCompatDelegate.setDefaultNightMode(tema.modoNoturno)
         }
+        grupoSistemaUnidades.addOnButtonCheckedListener { _, id, marcado ->
+            if (!marcado) return@addOnButtonCheckedListener
+            val sistema = if (id == R.id.botao_sistema_imperial) SistemaUnidades.IMPERIAL else SistemaUnidades.METRICO
+            if (sistema != prefsApp.sistemaUnidades) prefsApp.definirSistemaUnidades(sistema)
+        }
         grupoUnidade.addOnButtonCheckedListener { _, id, marcado ->
             if (!marcado) return@addOnButtonCheckedListener
             prefsApp.definirUnidadePressao(
@@ -176,6 +183,13 @@ class ConfiguracoesActivity : AppCompatActivity() {
             UnidadePressao.PSI -> R.id.botao_unidade_psi
         }
         if (grupoUnidade.checkedButtonId != unidade) grupoUnidade.check(unidade)
+        val imperial = config.sistemaUnidades == SistemaUnidades.IMPERIAL
+        val sistema = if (imperial) R.id.botao_sistema_imperial else R.id.botao_sistema_metrico
+        if (grupoSistemaUnidades.checkedButtonId != sistema) grupoSistemaUnidades.check(sistema)
+        textoSistemaUnidades.setText(if (imperial) R.string.config_sistema_imperial_descricao else R.string.config_sistema_metrico_descricao)
+        // No imperial a pressão é sempre psi: a escolha de kPa/bar só vale no métrico.
+        grupoUnidade.isEnabled = !imperial
+        textoUnidadePressao.setText(if (imperial) R.string.config_unidade_imperial else R.string.config_unidade_descricao)
     }
 
     companion object {

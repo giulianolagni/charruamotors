@@ -212,6 +212,47 @@
                             android:text="@string/config_tema_escuro" />
                     </com.google.android.material.button.MaterialButtonToggleGroup>
 
+                    <!-- Unidades globais: converte na hora o app inteiro e o HUD -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_grande"
+                        android:text="@string/config_sistema_unidades"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+                    <TextView
+                        android:id="@+id/texto_sistema_unidades"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/config_sistema_metrico_descricao"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textColor="@color/texto_secundario" />
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/grupo_sistema_unidades"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/espaco_pequeno"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/botao_sistema_metrico"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/config_sistema_metrico" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/botao_sistema_imperial"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/config_sistema_imperial" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -220,6 +261,7 @@
                         android:textAppearance="?attr/textAppearanceBodyLarge" />
 
                     <TextView
+                        android:id="@+id/texto_unidade_pressao"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/config_unidade_descricao"

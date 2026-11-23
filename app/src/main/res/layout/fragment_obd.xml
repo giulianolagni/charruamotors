@@ -335,96 +335,50 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Caixa-preta: sessão em segundo plano disparada pelo Bluetooth do carro e logs automáticos -->
+        <!-- Caixa-preta: faixa discreta de status; a configuração completa fica em Configurações -->
         <com.google.android.material.card.MaterialCardView
-            android:id="@+id/card_caixa_preta"
-            style="@style/Widget.Material3.CardView.Outlined"
+            android:id="@+id/faixa_caixa_preta"
+            style="@style/Widget.Material3.CardView.Filled"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/espaco_medio"
-            app:cardCornerRadius="@dimen/raio_card">
+            android:clickable="true"
+            android:focusable="true"
+            app:cardCornerRadius="20dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="@dimen/espaco_medio">
+                android:gravity="center_vertical"
+                android:minHeight="40dp"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/espaco_medio"
+                android:paddingEnd="@dimen/espaco_pequeno">
+
+                <View
+                    android:id="@+id/ponto_caixa_preta"
+                    android:layout_width="10dp"
+                    android:layout_height="10dp"
+                    android:background="@drawable/ponto_status"
+                    android:backgroundTint="@color/status_espera" />
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:id="@+id/texto_faixa_caixa_preta"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:drawablePadding="@dimen/espaco_pequeno"
-                    android:gravity="center_vertical"
-                    android:text="@string/caixa_titulo"
-                    android:textAppearance="?attr/textAppearanceTitleMedium"
-                    app:drawableStartCompat="@drawable/ic_caixa_preta"
-                    app:drawableTint="?attr/colorPrimary" />
+                    android:layout_marginStart="@dimen/espaco_pequeno"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textAppearance="?attr/textAppearanceLabelLarge"
+                    tools:text="Caixa-preta ativa · Gatilho: Toyota SW4" />
 
-                <TextView
-                    android:id="@+id/texto_status_sessao"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/espaco_minimo"
-                    android:textAppearance="?attr/textAppearanceBodySmall"
-                    android:textColor="@color/texto_secundario"
-                    tools:text="Conectado · Toyota SW4 · Gravando log" />
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_auto_conexao"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/espaco_pequeno"
-                    android:text="@string/caixa_auto_conexao" />
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_logs_automaticos"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/caixa_logs_automaticos" />
-
-                <!-- Bluetooth do carro que dispara a sessão (padrão "Toyota SW4") -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/espaco_pequeno"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/texto_gatilho"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:textAppearance="?attr/textAppearanceBodyMedium"
-                        tools:text="Bluetooth gatilho do carro: Toyota SW4" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/botao_trocar_gatilho"
-                        style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/caixa_trocar" />
-                </LinearLayout>
-
-                <TextView
-                    android:id="@+id/texto_vinculos"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:textAppearance="?attr/textAppearanceBodySmall"
-                    android:textColor="@color/texto_secundario"
-                    tools:text="Scanner: OBDII · Veículo: Toyota SW4 2015" />
-
-                <!-- Só aparece com a bateria do app otimizada (One UI pode barrar o serviço vindo do segundo plano) -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/botao_liberar_bateria"
-                    style="@style/Widget.Material3.Button.TextButton.Icon"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/espaco_minimo"
-                    android:text="@string/caixa_liberar_bateria"
-                    android:visibility="gone"
-                    app:icon="@drawable/ic_bateria"
-                    tools:visibility="visible" />
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_configuracoes"
+                    app:tint="@color/texto_secundario" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

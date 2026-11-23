@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Linha tocável das Configurações: título e o valor atual (abre a escolha). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+    android:minHeight="56dp"
+    android:orientation="vertical"
+    android:paddingTop="@dimen/espaco_pequeno"
+    android:paddingBottom="@dimen/espaco_pequeno">
+
+    <TextView
+        android:id="@+id/texto_titulo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAppearance="?attr/textAppearanceBodyLarge"
+        tools:text="Bluetooth gatilho do carro" />
+
+    <TextView
+        android:id="@+id/texto_valor"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        android:textColor="?attr/colorPrimary"
+        tools:text="Toyota SW4" />
+</LinearLayout>

@@ -25,6 +25,7 @@ Disciplina: Desenvolvimento Mobile II. Professor: Jaqson.
 - [Diferencial: integração OBD2](#diferencial-integração-obd2)
 - [Direção: Spotify, Waze e Modo HUD (v1.1)](#direção-spotify-waze-e-modo-hud-v11)
 - [Pacote Oficina (v1.2)](#pacote-oficina-v12)
+- [Menu lateral, Configurações e Assistente (v1.3)](#menu-lateral-configurações-e-assistente-v13)
 - [Regras de negócio e cálculos](#regras-de-negócio-e-cálculos)
 - [Arquitetura e stack](#arquitetura-e-stack)
 - [Como executar](#como-executar)
@@ -66,7 +67,8 @@ O app tem quatro Activities, todas com o mesmo tema Material 3 e a mesma Toolbar
   - próxima manutenção prevista, destacada em vermelho quando vencida;
   - alerta de códigos de falha (DTCs) ativos no histórico OBD2.
 - O resumo se atualiza sozinho a cada cadastro, manutenção, abastecimento ou leitura de DTCs, porque combina os `Flow`s dos repositórios.
-- Botão "Novo veículo", atalho "Conectar scanner OBD2" (pergunta qual veículo quando há mais de um) e logout na Toolbar, que limpa a pilha de telas.
+- Botão "Novo veículo" e atalho "Conectar scanner OBD2" (pergunta qual veículo quando há mais de um).
+- Menu lateral (ícone de 3 riscos na Toolbar) com navegação, Configurações, Checklist de Permissões, Backup e o logout — ver [v1.3](#menu-lateral-configurações-e-assistente-v13).
 
 ### 3. Formulário de veículos (`VeiculoFormActivity`): CRUD completo
 
@@ -249,6 +251,51 @@ máquina de estados `TesteBateria` é pura:
 
 ---
 
+## Menu lateral, Configurações e Assistente (v1.3)
+
+**Menu lateral (`DrawerLayout` + `NavigationView` no Dashboard).** O cabeçalho mostra o usuário logado, o
+veículo ativo (`Toyota SW4 2013`) e uma bolinha verde/cinza com o status da sessão OBD2 (`Conectado · Gravando log`
+ou `Em espera`), ao vivo a partir da `SessaoObd`. Itens:
+
+- **Navegação rápida:** Meus Veículos (troca rápida do veículo ativo, com atalho para a aba OBD2 dele), Logs e
+  Relatórios (Visualizador de Logs `.csv`/`.txt`) e Ferramentas de Oficina (Teste de Bateria/Alternador,
+  Terminal/Varredura de PIDs e Replay; as duas primeiras pedem o scanner conectado);
+- **Sistema & App:** Configurações, Checklist de Permissões e Backup e Restauração;
+- **Rodapé:** Sobre o App (`Charrua OBD Pro v1.3`, `versionCode`, tamanho dos catálogos e protocolo atual) e
+  Sair, com confirmação. O logout limpa só a sessão de login: banco local, logs e preferências ficam.
+
+**Configurações (`ConfiguracoesActivity`).** A configuração da caixa-preta saiu da aba OBD2 (que agora só tem
+uma faixa discreta `Caixa-preta ativa · Gatilho: Toyota SW4` que abre esta tela):
+
+- *Caixa-preta automática:* auto-conexão em segundo plano, logs automáticos (`.txt` + `.csv`), Bluetooth
+  gatilho do carro, scanner OBD2 padrão, veículo padrão e o atalho de bateria "Sem restrições";
+- *Aparência e Painel:* tema `Seguir sistema` / `Claro` / `Escuro` (`AppCompatDelegate.setDefaultNightMode`,
+  aplicado na hora e na inicialização do app; cores do escuro em `values-night/`) e unidade de pressão do
+  Turbo/MAP em `kPa`, `bar` ou `psi` — vale para o mostrador principal, a grade de PIDs (todo PID em kPa) e o
+  HUD flutuante. Os logs continuam em kPa;
+- *Assistente:* "Refazer Assistente Inicial" e atalho para o Checklist.
+
+**Assistente de Primeira Abertura (`AssistenteActivity`).** Abre sozinho no primeiro Dashboard depois do login
+(flag em `PreferenciasApp`, separada da sessão de login) e tem "Pular" em todos os passos:
+
+1. permissões essenciais: Bluetooth (`BLUETOOTH_CONNECT`/`BLUETOOTH_SCAN`), notificações e bateria "Sem restrições";
+2. scanner e gatilho: lista os pareados, pré-seleciona o `OBDII` e o `Toyota SW4` (ou deixa digitar o nome);
+3. veículo padrão, com auto-conexão e logs automáticos já ligados;
+4. recursos de direção opcionais: Acesso a Notificações (Spotify) e Sobrepor apps (HUD), com status verde/pendente.
+
+**Checklist de Permissões (`ChecklistPermissoesActivity`).** Status em tempo real (verde OK / vermelho Pendente,
+relido no `onResume`) e ação direta para cada item. As regras por versão do Android (Bluetooth em tempo de
+execução no 12+, notificações no 13+) ficam em `sistema/permissoes/ChecklistPermissoes`, lógica pura.
+
+**Backup e Restauração.** Exporta para um `.json` escolhido pelo usuário (`ACTION_CREATE_DOCUMENT`, sem
+permissão de armazenamento) todas as tabelas ligadas aos veículos — veículos, manutenções e peças,
+abastecimentos, leituras e códigos de falha, com os IDs originais — e as preferências da caixa-preta e da
+aparência. A restauração (`ACTION_OPEN_DOCUMENT`) valida o arquivo antes (tipo, versão do formato, enums e
+referências entre tabelas), mostra um resumo para confirmar e troca tudo numa única transação do Room
+(`BackupDao.substituirTudo`): ou restaura tudo, ou nada muda. Os usuários do login simulado não entram no backup.
+
+---
+
 ## Regras de negócio e cálculos
 
 Validações e cálculos ficam na camada de domínio (`domain/`), sem dependência do Android, e são cobertos por testes unitários. A UI apenas exibe os resultados.
@@ -369,6 +416,11 @@ app/src/main/java/com/charruamotors/
 │   ├── waze/                #   AtalhosWaze (deep links, puro) e AbridorWaze
 │   └── hud/                 #   HudFlutuanteService, FormatadorHud/PainelHud, TelemetriaCompartilhada
 ├── obd/                     # ObdClient, Elm327BluetoothClient, ObdClientFake (+ EcuSimulada), ObdParser
+├── sistema/                 # v1.3, lógica pura: StatusCaixaPreta e PreSelecaoAssistente,
+│   ├── preferencias/        #   PreferenciasApp (tema, unidade, flag do assistente), TemaApp
+│   ├── unidades/            #   UnidadePressao (kPa → bar / psi, escala do mostrador)
+│   ├── permissoes/          #   ChecklistPermissoes (regras por versão) e LeitorPermissoes
+│   └── backup/              #   BackupJson (serialização/validação) e BackupRepository (SAF)
 ├── oficina/                 # Pacote Oficina (v1.2), lógica pura:
 │   ├── bateria/             #   TesteBateria (máquina de estados), ClassificadorBateria, LaudoBateria
 │   ├── replay/              #   LeitorCsvLog, AnaliseReplay (estatísticas, normalização, zoom/arraste)
@@ -383,6 +435,9 @@ app/src/main/java/com/charruamotors/
     │   ├── manutencoes/     #   ManutencoesFragment, ManutencaoSheet, adapter, ViewModel
     │   └── abastecimentos/  #   AbastecimentosFragment, AbastecimentoSheet, adapter, ViewModel
     ├── oficina/             # Telas do Pacote Oficina: bateria/, replay/ e terminal/
+    ├── assistente/          # AssistenteActivity (Assistente de Primeira Abertura)
+    ├── configuracoes/       # ConfiguracoesActivity e DialogosCaixaPreta
+    ├── permissoes/          # ChecklistPermissoesActivity, PainelPermissoes, SolicitadorPermissoes
     ├── componentes/         # GaugeView, TelemetriaChartView, GraficoTensaoView, LogReplayChartView
     └── util/                # Formatadores, insets, seletor de data, permissões Bluetooth, rótulos
 ```
@@ -390,14 +445,14 @@ app/src/main/java/com/charruamotors/
 Recursos em `app/src/main/res`:
 
 - `layout/`: telas, itens de lista e BottomSheets;
-- `values/`: `strings.xml`, `colors.xml`, `dimens.xml` e `themes.xml`;
-- `menu/`: menus das Toolbars.
+- `values/`: `strings*.xml`, `colors.xml`, `dimens.xml` e `themes.xml` (DayNight); `values-night/`: cores do tema escuro;
+- `menu/`: menu lateral do Dashboard e menus das Toolbars.
 
 ---
 
 ## Testes unitários
 
-São **486 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./gradlew test`. Alguns destaques:
+São **564 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./gradlew test`. Alguns destaques:
 
 | Classe de teste | Testes | O que cobre |
 |---|---:|---|
@@ -419,6 +474,11 @@ São **486 testes** JUnit em `app/src/test`, todos rodando na JVM. Rode com `./g
 | `LeitorCsvLogTest` | 11 | CSV do Data Logger (ida e volta), Excel pt-BR, aspas, BOM, linhas malformadas e ordenação |
 | `AnaliseReplayTest` | 11 | Estatísticas da janela, normalização por série, zoom com foco, arraste nos limites, cursor e seleção de até 3 sensores |
 | `FormatadorTerminalTest` | 4 | Log do terminal com latência, timeout e erros |
+| `BackupJsonTest` | 13 | Ida e volta do backup `.json` (todas as tabelas e preferências), nulos, arquivo inválido, de outro app, formato mais novo, enum desconhecido e registros órfãos |
+| `UnidadePressaoTest` | 9 | Conversão kPa → bar / psi, casas decimais, escala do mostrador e o Turbo/MAP do HUD na unidade escolhida |
+| `ChecklistPermissoesTest` | 8 | Status verde/vermelho por versão do Android (Bluetooth no 12+, notificações no 13+), essenciais e recursos de direção |
+| `PreferenciasAppTest` | 8 | Persistência do Assistente Inicial (primeira abertura, concluir, refazer), tema e unidade |
+| `StatusCaixaPretaTest` | 8 | Cabeçalho do menu lateral, faixa da aba OBD2 e pré-seleção do `OBDII` e do `Toyota SW4` no assistente |
 
 ---
 

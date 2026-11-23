@@ -8,11 +8,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.annotation.SuppressLint
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
@@ -20,8 +18,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ArrayAdapter
-import android.widget.EditText
-import android.widget.FrameLayout
+import android.content.res.ColorStateList
 import android.widget.ImageView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -57,8 +54,12 @@ import com.charruamotors.obd.log.LogsSessaoSalvos
 import com.charruamotors.obd.pid.Pids
 import com.charruamotors.obd.sessao.ConfigAutoConexao
 import com.charruamotors.obd.sessao.EstadoSessao
-import com.charruamotors.obd.sessao.GatilhoBluetooth
+import com.charruamotors.obd.sessao.FaseSessao
 import com.charruamotors.obd.sessao.SessaoObd
+import com.charruamotors.sistema.StatusCaixaPreta
+import com.charruamotors.sistema.unidades.UnidadePressao
+import com.charruamotors.ui.componentes.EscalaGauge
+import com.charruamotors.ui.configuracoes.ConfiguracoesActivity
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.oficina.bateria.TesteBateriaActivity
 import com.charruamotors.ui.oficina.replay.ReplayLogActivity
@@ -103,8 +104,14 @@ class ObdFragment : Fragment() {
     /** Mini-player (sessões de mídia do Android); criado com a view, ligado entre onStart e onStop. */
     private var controladorMidia: ControladorMidia? = null
 
+    private val app: CharruaMotorsApp
+        get() = requireActivity().application as CharruaMotorsApp
+
     private val telemetriaHud: TelemetriaCompartilhada
-        get() = (requireActivity().application as CharruaMotorsApp).telemetriaCompartilhada
+        get() = app.telemetriaCompartilhada
+
+    /** Unidade do Turbo/MAP escolhida nas Configurações (kPa, bar ou psi). */
+    private var unidadePressao: UnidadePressao = UnidadePressao.PADRAO
 
     /** A permissão de notificação (opcional, só para ver o "Fechar HUD" na gaveta) já foi pedida? */
     private var notificacaoPerguntada = false
@@ -123,20 +130,6 @@ class ObdFragment : Fragment() {
 
     private val pedirNotificacao =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { ativarHud() }
-
-    // Caixa-preta: o broadcast ACL e o serviço connectedDevice exigem a permissão de Bluetooth
-    // (Android 12+); a notificação da sessão, a de notificações (Android 13+, opcional).
-    private val pedirPermissoesCaixaPreta =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-            if (!PermissoesBluetooth.concedidas(requireContext())) {
-                mostrarMensagem(getString(R.string.caixa_permissao_bluetooth))
-            } else {
-                pedirNotificacaoCaixaPreta()
-            }
-        }
-
-    private val pedirNotificacaoSessao =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     private val pedirPermissoes =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { resultado ->
@@ -213,121 +206,28 @@ class ObdFragment : Fragment() {
     // ------------------------------------------------------------------ caixa-preta (segundo plano)
 
     /**
-     * Card "Caixa-preta automática": auto-conexão pelo Bluetooth do carro, logs automáticos em
-     * toda conexão, gatilho (padrão `Toyota SW4`), vínculos e o atalho de bateria "Sem restrições".
+     * Faixa discreta da caixa-preta (`Caixa-preta ativa · Gatilho: Toyota SW4`). A configuração
+     * completa (auto-conexão, logs, gatilho, vínculos e bateria) fica nas Configurações.
      */
-    private fun configurarCaixaPreta() = with(binding) {
-        switchAutoConexao.setOnCheckedChangeListener { _, marcado ->
-            if (marcado == viewModel.configAuto.value.autoConexaoAtiva) return@setOnCheckedChangeListener
-            viewModel.definirAutoConexao(marcado)
-            if (marcado) garantirPermissoesCaixaPreta()
-        }
-        switchLogsAutomaticos.setOnCheckedChangeListener { _, marcado ->
-            if (marcado != viewModel.configAuto.value.gravarLogsAutomaticos) viewModel.definirGravarLogsAutomaticos(marcado)
-        }
-        botaoTrocarGatilho.setOnClickListener { escolherGatilho() }
-        botaoLiberarBateria.setOnClickListener { liberarBateria() }
+    private fun configurarCaixaPreta() {
+        binding.faixaCaixaPreta.setOnClickListener { startActivity(ConfiguracoesActivity.intent(requireContext())) }
     }
 
-    /** Pede o que a auto-conexão precisa para funcionar com o app fechado. */
-    private fun garantirPermissoesCaixaPreta() {
-        val contexto = requireContext()
-        if (PermissoesBluetooth.disponivel(contexto) && !PermissoesBluetooth.concedidas(contexto)) {
-            pedirPermissoesCaixaPreta.launch(PermissoesBluetooth.necessarias())
-        } else {
-            pedirNotificacaoCaixaPreta()
+    private fun mostrarFaixaCaixaPreta(config: ConfigAutoConexao, estado: EstadoSessao) = with(binding) {
+        val texto = StatusCaixaPreta.faixa(config, estado)
+        textoFaixaCaixaPreta.definirTexto(texto)
+        faixaCaixaPreta.contentDescription = getString(R.string.obd_faixa_caixa_descricao, texto)
+        val cor = when {
+            estado.ativa && estado.fase == FaseSessao.Conectada -> R.color.status_ok
+            config.autoConexaoAtiva || estado.ativa -> R.color.azul_primario
+            else -> R.color.status_espera
         }
-    }
-
-    private fun pedirNotificacaoCaixaPreta() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            pedirNotificacaoSessao.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-
-    /** Lista de pareados (se a permissão já existir) + o padrão por nome + digitar outro nome. */
-    private fun escolherGatilho() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val permitido = PermissoesBluetooth.concedidas(requireContext())
-            val pareados = if (permitido) runCatching { viewModel.pareadosBluetooth() }.getOrDefault(emptyList()) else emptyList()
-            if (_binding == null) return@launch
-            val opcoes = listOf(getString(R.string.caixa_gatilho_padrao, GatilhoBluetooth.NOME_PADRAO)) +
-                pareados.map { getString(R.string.caixa_gatilho_pareado, it.nome, it.endereco) } +
-                getString(R.string.caixa_gatilho_digitar)
-            MaterialAlertDialogBuilder(requireContext())
-                .setTitle(R.string.caixa_gatilho_titulo)
-                .setItems(opcoes.toTypedArray()) { _, i ->
-                    when {
-                        i == 0 -> viewModel.definirGatilho(GatilhoBluetooth.NOME_PADRAO, null)
-                        i <= pareados.size -> pareados[i - 1].let { viewModel.definirGatilho(it.nome, it.endereco) }
-                        else -> digitarGatilho()
-                    }
-                }
-                .setNegativeButton(R.string.botao_cancelar, null)
-                .show()
-            // Sem a permissão, a lista de pareados não aparece: pede para a próxima vez.
-            if (!permitido) garantirPermissoesCaixaPreta()
-        }
-    }
-
-    private fun digitarGatilho() {
-        val campo = EditText(requireContext()).apply {
-            setSingleLine()
-            setText(viewModel.configAuto.value.gatilhoNome)
-            setSelection(text.length)
-        }
-        val margem = resources.getDimensionPixelSize(R.dimen.espaco_grande)
-        val moldura = FrameLayout(requireContext()).apply {
-            setPadding(margem, resources.getDimensionPixelSize(R.dimen.espaco_pequeno), margem, 0)
-            addView(campo)
-        }
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.caixa_gatilho_digitar_titulo)
-            .setMessage(R.string.caixa_gatilho_digitar_mensagem)
-            .setView(moldura)
-            .setNegativeButton(R.string.botao_cancelar, null)
-            .setPositiveButton(R.string.caixa_salvar) { _, _ -> viewModel.definirGatilho(campo.text.toString(), null) }
-            .show()
-    }
-
-    private fun mostrarConfigAuto(config: ConfigAutoConexao) = with(binding) {
-        if (switchAutoConexao.isChecked != config.autoConexaoAtiva) switchAutoConexao.isChecked = config.autoConexaoAtiva
-        if (switchLogsAutomaticos.isChecked != config.gravarLogsAutomaticos) switchLogsAutomaticos.isChecked = config.gravarLogsAutomaticos
-        val gatilho = if (config.gatilhoEndereco != null) "${config.gatilhoNome} (${config.gatilhoEndereco})" else config.gatilhoNome
-        textoGatilho.definirTexto(getString(R.string.caixa_gatilho, gatilho))
-        textoVinculos.definirTexto(getString(
-            R.string.caixa_vinculos,
-            config.scanner?.nome ?: getString(R.string.caixa_scanner_nenhum),
-            config.veiculoDescricao ?: getString(R.string.caixa_veiculo_nenhum),
-        ))
+        pontoCaixaPreta.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), cor))
     }
 
     private fun mostrarEstadoSessao(estado: EstadoSessao) {
-        binding.textoStatusSessao.definirTexto(when {
-            !estado.ativa -> getString(R.string.caixa_status_inativa)
-            estado.automatica -> getString(R.string.caixa_status_automatica, SessaoObd.descreverStatus(estado))
-            else -> SessaoObd.descreverStatus(estado)
-        })
+        mostrarFaixaCaixaPreta(viewModel.configAuto.value, estado)
         mostrarEstado(viewModel.estado.value)
-    }
-
-    /** One UI / Android 14+: com a bateria "Otimizada", o serviço vindo do segundo plano pode ser barrado. */
-    private fun atualizarAtalhoBateria() {
-        val contexto = context ?: return
-        val energia = contexto.getSystemService(PowerManager::class.java)
-        _binding?.botaoLiberarBateria?.isVisible = energia != null && !energia.isIgnoringBatteryOptimizations(contexto.packageName)
-    }
-
-    @SuppressLint("BatteryLife") // app pessoal: o pedido direto é o caminho de 1 toque para "Sem restrições"
-    private fun liberarBateria() {
-        val pacote = requireContext().packageName
-        val pedido = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$pacote"))
-        if (runCatching { startActivity(pedido) }.isSuccess) return
-        // Sem o diálogo do sistema: a tela do app (Bateria → Sem restrições, no Samsung).
-        val detalhes = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.fromParts("package", pacote, null))
-        runCatching { startActivity(detalhes) }.onFailure { mostrarMensagem(getString(R.string.caixa_bateria_erro)) }
     }
 
     /** Sessão encerrada com os logs automáticos salvos: atalho para o visualizador. */
@@ -570,7 +470,8 @@ class ObdFragment : Fragment() {
                 launch { viewModel.historicoLeituras.collect { mostrarHistorico(it) } }
                 controladorMidia?.let { midia -> launch { midia.estado.collect { mostrarMidia(it) } } }
                 launch { telemetriaHud.hudAtivo.collect { mostrarHud(it) } }
-                launch { viewModel.configAuto.collect { mostrarConfigAuto(it) } }
+                launch { viewModel.configAuto.collect { mostrarFaixaCaixaPreta(it, viewModel.estadoSessao.value) } }
+                launch { app.preferenciasApp.config.collect { aplicarUnidadePressao(it.unidadePressao) } }
                 launch { viewModel.estadoSessao.collect { mostrarEstadoSessao(it) } }
                 launch {
                     viewModel.simularFalha.collect { ativa ->
@@ -672,9 +573,27 @@ class ObdFragment : Fragment() {
     private fun mostrarDados(dados: DadosObd?) = with(binding) {
         gaugeRpm.definirValor(dados?.get(Pids.RPM))
         gaugeVelocidade.definirValor(dados?.get(Pids.VELOCIDADE))
-        gaugeMap.definirValor(dados?.get(Pids.PRESSAO_COLETOR))
+        gaugeMap.definirValor(unidadePressao.deKpa(dados?.get(Pids.PRESSAO_COLETOR)))
         gaugeTemperatura.definirValor(dados?.get(Pids.TEMPERATURA_MOTOR))
         atualizarBotoes()
+    }
+
+    /** Configurações → Unidade de pressão: escala e unidade do mostrador de Turbo/MAP e da grade. */
+    private fun aplicarUnidadePressao(unidade: UnidadePressao) = with(binding) {
+        if (unidade == unidadePressao && gaugeMap.unidade == unidade.simbolo) return@with
+        unidadePressao = unidade
+        val faixa = unidade.mostradorMap
+        gaugeMap.unidade = unidade.simbolo
+        gaugeMap.casasDecimais = unidade.casasDecimais
+        gaugeMap.escala = EscalaGauge(
+            minimo = 0f,
+            maximo = faixa.maximo.toFloat(),
+            zonaVermelha = faixa.zonaVermelha?.toFloat(),
+            divisoes = faixa.divisoes,
+            subdivisoes = faixa.subdivisoes,
+        )
+        gaugeMap.definirValor(unidade.deKpa(viewModel.dados.value?.get(Pids.PRESSAO_COLETOR)), animar = false)
+        adapterSensores.definirUnidadePressao(unidade)
     }
 
     private fun mostrarSensores(sensores: List<LeituraSensor>) = with(binding) {
@@ -899,8 +818,6 @@ class ObdFragment : Fragment() {
         super.onResume()
         emPrimeiroPlano = true
         aplicarTelaAcesa()
-        // O usuário pode ter voltado agora da tela de bateria do app.
-        atualizarAtalhoBateria()
     }
 
     override fun onPause() {

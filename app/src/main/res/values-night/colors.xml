@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tema escuro (Configurações → Aparência → Escuro, ou "Seguir sistema" com o sistema escuro). -->
+<resources>
+    <color name="azul_primario">#3A7BD5</color>
+    <color name="azul_primario_escuro">#0D2F66</color>
+    <color name="fundo">#111418</color>
+    <color name="superficie">#1C2026</color>
+    <color name="texto_primario">#E4E6EA</color>
+    <color name="texto_secundario">#A9B0B9</color>
+    <color name="status_ok">#66BB6A</color>
+    <color name="status_pendente">#EF5350</color>
+    <color name="status_espera">#8A9099</color>
+</resources>

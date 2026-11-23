@@ -2,6 +2,9 @@ package com.charruamotors
 
 import android.app.Application
 import android.bluetooth.BluetoothManager
+import android.content.pm.PackageManager
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.pm.PackageInfoCompat
 import com.charruamotors.data.local.AppDatabase
 import com.charruamotors.data.repository.AbastecimentoRepository
 import com.charruamotors.data.repository.DiagnosticoRepository
@@ -24,11 +27,14 @@ import com.charruamotors.obd.sessao.OrigemSessao
 import com.charruamotors.obd.sessao.PreferenciasAutoConexao
 import com.charruamotors.obd.sessao.SessaoObd
 import com.charruamotors.obd.sessao.VeiculoSessao
+import com.charruamotors.sistema.backup.BackupRepository
+import com.charruamotors.sistema.preferencias.PreferenciasApp
 import com.charruamotors.ui.util.ExportadorCsv
 import com.charruamotors.ui.util.PermissoesBluetooth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.map
 import java.io.File
 
 /**
@@ -37,6 +43,12 @@ import java.io.File
  * compartilhadas (banco de dados, repositórios, sessão).
  */
 class CharruaMotorsApp : Application() {
+
+    override fun onCreate() {
+        super.onCreate()
+        // Tema escolhido nas Configurações (Seguir sistema / Claro / Escuro), antes da 1ª Activity.
+        AppCompatDelegate.setDefaultNightMode(preferenciasApp.tema.modoNoturno)
+    }
 
     val database: AppDatabase by lazy { AppDatabase.getInstance(this) }
 
@@ -104,7 +116,10 @@ class CharruaMotorsApp : Application() {
      * Ponte da telemetria ao vivo entre a aba OBD2 e o HUD flutuante sobre o Waze (e o sinal de
      * HUD ativo, que mantém o polling com o app minimizado).
      */
-    val telemetriaCompartilhada = TelemetriaCompartilhada()
+    val telemetriaCompartilhada: TelemetriaCompartilhada by lazy {
+        // lazy: as preferências precisam do Context, que só existe depois da construção do Application.
+        TelemetriaCompartilhada(unidadePressao = preferenciasApp.config.map { it.unidadePressao })
+    }
 
     /** Salva os logs CSV do Data Logger em Downloads. */
     val exportadorCsv: ExportadorCsv by lazy { ExportadorCsv(this) }
@@ -133,6 +148,24 @@ class CharruaMotorsApp : Application() {
     }
 
     fun selecionarModoObd(modo: ModoObd): Boolean = sessaoObd.selecionarModo(modo)
+
+    // ---------------------------------------------------------------- sistema & app
+
+    /** Tema, unidade de pressão e a flag do Assistente de Primeira Abertura. */
+    val preferenciasApp: PreferenciasApp by lazy { PreferenciasApp(this) }
+
+    /** `1.3 (4)`, lido do pacote instalado (o build não gera BuildConfig). */
+    val versaoApp: String by lazy {
+        runCatching {
+            val info = packageManager.getPackageInfo(packageName, 0)
+            "${info.versionName} (${PackageInfoCompat.getLongVersionCode(info)})"
+        }.getOrElse { if (it is PackageManager.NameNotFoundException) "?" else throw it }
+    }
+
+    /** Backup e Restauração (.json via Storage Access Framework). */
+    val backupRepository: BackupRepository by lazy {
+        BackupRepository(database.backupDao(), preferenciasAutoConexao, preferenciasApp, versaoApp)
+    }
 
     // ---------------------------------------------------------------- caixa-preta
 

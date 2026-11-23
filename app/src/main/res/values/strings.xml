@@ -15,7 +15,6 @@
     <string name="dashboard_lista_vazia">Nenhum veículo cadastrado.\nToque em “Novo veículo” para começar.</string>
     <string name="botao_conectar_scanner">Conectar scanner OBD2</string>
     <string name="botao_novo_veiculo">Novo veículo</string>
-    <string name="acao_sair">Sair</string>
     <string name="item_veiculo_detalhes">%1$s km • %2$s</string>
     <string name="item_veiculo_consumo">Consumo médio: %1$s km/l</string>
     <string name="item_veiculo_sem_consumo">Sem dados de consumo</string>
@@ -345,7 +344,8 @@ Toque em “Novo abastecimento” para começar.</string>
     <string name="hud_status_desconectado">○ SEM CONEXÃO OBD</string>
     <string name="hud_status_alerta">▲ MOTOR QUENTE</string>
     <string name="hud_rotulo_rpm">RPM</string>
-    <string name="hud_rotulo_map">TURBO/MAP kPa</string>
+    <string name="hud_rotulo_map">TURBO/MAP %1$s</string>
+    <string name="hud_rotulo_map_padrao">TURBO/MAP kPa</string>
     <string name="hud_rotulo_temperatura">MOTOR °C</string>
     <string name="hud_rotulo_rail">RAIL bar</string>
     <string name="hud_rotulo_tensao">BATERIA V</string>

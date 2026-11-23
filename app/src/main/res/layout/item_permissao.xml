@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Linha do Checklist de Permissões / Assistente: bolinha verde ou vermelha, textos e ação direta. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:minHeight="64dp"
+    android:orientation="horizontal"
+    android:paddingTop="@dimen/espaco_pequeno"
+    android:paddingBottom="@dimen/espaco_pequeno">
+
+    <View
+        android:id="@+id/ponto_status"
+        android:layout_width="12dp"
+        android:layout_height="12dp"
+        android:background="@drawable/ponto_status"
+        android:backgroundTint="@color/status_pendente" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/espaco_medio"
+        android:layout_marginEnd="@dimen/espaco_pequeno"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/texto_titulo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="?attr/textAppearanceTitleSmall"
+            tools:text="Bluetooth (dispositivos próximos)" />
+
+        <TextView
+            android:id="@+id/texto_descricao"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="@color/texto_secundario"
+            tools:text="Conectar ao scanner OBD2 e reconhecer o carro." />
+
+        <TextView
+            android:id="@+id/texto_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:textColor="@color/status_pendente"
+            tools:text="Pendente" />
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/botao_acao"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        tools:text="Permitir" />
+</LinearLayout>

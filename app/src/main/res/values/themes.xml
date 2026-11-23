@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Tema único usado por todas as Activities (layout consistente). -->
-    <style name="Theme.CharruaMotors" parent="Theme.Material3.Light.NoActionBar">
+    <!-- Tema único usado por todas as Activities (layout consistente). DayNight: claro/escuro
+         conforme Configurações → Aparência (cores do escuro em values-night/colors.xml). -->
+    <style name="Theme.CharruaMotors" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/azul_primario</item>
         <item name="colorOnPrimary">@color/branco</item>
         <item name="colorPrimaryContainer">@color/azul_primario_escuro</item>

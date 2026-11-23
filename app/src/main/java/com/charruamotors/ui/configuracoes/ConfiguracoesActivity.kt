@@ -1,0 +1,184 @@
+package com.charruamotors.ui.configuracoes
+
+import android.content.Context
+import android.content.Intent
+import android.content.res.ColorStateList
+import android.os.Bundle
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.charruamotors.CharruaMotorsApp
+import com.charruamotors.R
+import com.charruamotors.databinding.ActivityConfiguracoesBinding
+import com.charruamotors.obd.sessao.ConfigAutoConexao
+import com.charruamotors.sistema.StatusCaixaPreta
+import com.charruamotors.sistema.permissoes.ItemPermissao
+import com.charruamotors.sistema.permissoes.LeitorPermissoes
+import com.charruamotors.sistema.preferencias.ConfigApp
+import com.charruamotors.sistema.preferencias.TemaApp
+import com.charruamotors.sistema.unidades.UnidadePressao
+import com.charruamotors.ui.assistente.AssistenteActivity
+import com.charruamotors.ui.permissoes.ChecklistPermissoesActivity
+import com.charruamotors.ui.permissoes.SolicitadorPermissoes
+import com.charruamotors.ui.util.aplicarInsetsDoSistema
+import com.charruamotors.ui.util.definirTexto
+import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
+
+/**
+ * Configurações (menu lateral, ou a faixa da caixa-preta na aba OBD2):
+ * - Caixa-preta automática: auto-conexão, logs automáticos, Bluetooth gatilho, scanner e veículo
+ *   padrão e o atalho de bateria "Sem restrições";
+ * - Aparência e Painel: tema (aplicado na hora) e unidade de pressão do Turbo/MAP;
+ * - Assistente: refazer o Assistente Inicial e abrir o Checklist de Permissões.
+ */
+class ConfiguracoesActivity : AppCompatActivity() {
+
+    private lateinit var binding: ActivityConfiguracoesBinding
+    private val app get() = application as CharruaMotorsApp
+    private val prefsCaixa get() = app.preferenciasAutoConexao
+    private val prefsApp get() = app.preferenciasApp
+    private val solicitador = SolicitadorPermissoes(this) { atualizarBateria() }
+    private val dialogos = DialogosCaixaPreta(this) { solicitador.solicitarBluetooth() }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
+        super.onCreate(savedInstanceState)
+        binding = ActivityConfiguracoesBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        binding.appbar.aplicarInsetsDoSistema(base = false)
+        binding.conteudo.aplicarInsetsDoSistema(topo = false)
+        binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+
+        configurarCaixaPreta()
+        configurarAparencia()
+        binding.botaoRefazerAssistente.setOnClickListener {
+            prefsApp.reiniciarAssistente()
+            startActivity(AssistenteActivity.intent(this))
+        }
+        binding.botaoChecklist.setOnClickListener { startActivity(ChecklistPermissoesActivity.intent(this)) }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    prefsCaixa.config.combine(app.sessaoObd.estadoSessao) { c, e -> c to e }
+                        .collect { (config, estado) ->
+                            mostrarCaixaPreta(config)
+                            binding.textoStatusSessao.definirTexto(StatusCaixaPreta.faixa(config, estado))
+                        }
+                }
+                launch { prefsApp.config.collect(::mostrarAparencia) }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // O usuário pode ter voltado agora da tela de bateria do sistema.
+        atualizarBateria()
+    }
+
+    // ------------------------------------------------------------------ caixa-preta
+
+    private fun configurarCaixaPreta() = with(binding) {
+        linhaGatilho.textoTitulo.setText(R.string.config_gatilho)
+        linhaScanner.textoTitulo.setText(R.string.config_scanner)
+        linhaVeiculo.textoTitulo.setText(R.string.config_veiculo)
+
+        switchAutoConexao.setOnCheckedChangeListener { _, marcado ->
+            if (marcado == prefsCaixa.config.value.autoConexaoAtiva) return@setOnCheckedChangeListener
+            prefsCaixa.definirAutoConexao(marcado)
+            // O broadcast do carro e o serviço connectedDevice exigem a permissão de Bluetooth.
+            if (marcado) {
+                LeitorPermissoes.avaliar(this@ConfiguracoesActivity, listOf(ItemPermissao.BLUETOOTH))
+                    .firstOrNull { !it.ok }
+                    ?.let { solicitador.solicitar(it.item) }
+            }
+        }
+        switchLogsAutomaticos.setOnCheckedChangeListener { _, marcado ->
+            if (marcado != prefsCaixa.config.value.gravarLogsAutomaticos) prefsCaixa.definirGravarLogs(marcado)
+        }
+        linhaGatilho.root.setOnClickListener { dialogos.escolherGatilho() }
+        linhaScanner.root.setOnClickListener { dialogos.escolherScanner() }
+        linhaVeiculo.root.setOnClickListener {
+            dialogos.escolherVeiculo(aoNenhum = {
+                Snackbar.make(root, R.string.veiculos_nenhum, Snackbar.LENGTH_LONG).show()
+            })
+        }
+        botaoBateria.setOnClickListener { solicitador.liberarBateria() }
+    }
+
+    private fun mostrarCaixaPreta(config: ConfigAutoConexao) = with(binding) {
+        if (switchAutoConexao.isChecked != config.autoConexaoAtiva) switchAutoConexao.isChecked = config.autoConexaoAtiva
+        if (switchLogsAutomaticos.isChecked != config.gravarLogsAutomaticos) switchLogsAutomaticos.isChecked = config.gravarLogsAutomaticos
+        linhaGatilho.textoValor.definirTexto(
+            if (config.gatilhoEndereco != null) "${config.gatilhoNome} (${config.gatilhoEndereco})" else config.gatilhoNome,
+        )
+        linhaScanner.textoValor.definirTexto(
+            config.scanner?.let { "${it.nome} (${it.endereco})" } ?: getString(R.string.config_scanner_nenhum),
+        )
+        linhaVeiculo.textoValor.definirTexto(config.veiculoDescricao ?: getString(R.string.caixa_veiculo_nenhum))
+    }
+
+    private fun atualizarBateria() {
+        if (!::binding.isInitialized) return
+        val liberada = LeitorPermissoes.ler(this).bateriaSemRestricoes
+        val cor = ContextCompat.getColor(this, if (liberada) R.color.status_ok else R.color.status_pendente)
+        binding.pontoBateria.backgroundTintList = ColorStateList.valueOf(cor)
+        binding.textoBateria.setText(if (liberada) R.string.config_bateria_ok else R.string.config_bateria_pendente)
+        binding.botaoBateria.isVisible = !liberada
+    }
+
+    // ------------------------------------------------------------------ aparência
+
+    private fun configurarAparencia() = with(binding) {
+        grupoTema.addOnButtonCheckedListener { _, id, marcado ->
+            if (!marcado) return@addOnButtonCheckedListener
+            val tema = when (id) {
+                R.id.botao_tema_claro -> TemaApp.CLARO
+                R.id.botao_tema_escuro -> TemaApp.ESCURO
+                else -> TemaApp.SISTEMA
+            }
+            if (tema == prefsApp.tema) return@addOnButtonCheckedListener
+            prefsApp.definirTema(tema)
+            // Aplica na hora: as Activities abertas são recriadas no novo modo.
+            AppCompatDelegate.setDefaultNightMode(tema.modoNoturno)
+        }
+        grupoUnidade.addOnButtonCheckedListener { _, id, marcado ->
+            if (!marcado) return@addOnButtonCheckedListener
+            prefsApp.definirUnidadePressao(
+                when (id) {
+                    R.id.botao_unidade_bar -> UnidadePressao.BAR
+                    R.id.botao_unidade_psi -> UnidadePressao.PSI
+                    else -> UnidadePressao.KPA
+                },
+            )
+        }
+    }
+
+    private fun mostrarAparencia(config: ConfigApp) = with(binding) {
+        val tema = when (config.tema) {
+            TemaApp.SISTEMA -> R.id.botao_tema_sistema
+            TemaApp.CLARO -> R.id.botao_tema_claro
+            TemaApp.ESCURO -> R.id.botao_tema_escuro
+        }
+        if (grupoTema.checkedButtonId != tema) grupoTema.check(tema)
+        val unidade = when (config.unidadePressao) {
+            UnidadePressao.KPA -> R.id.botao_unidade_kpa
+            UnidadePressao.BAR -> R.id.botao_unidade_bar
+            UnidadePressao.PSI -> R.id.botao_unidade_psi
+        }
+        if (grupoUnidade.checkedButtonId != unidade) grupoUnidade.check(unidade)
+    }
+
+    companion object {
+        fun intent(context: Context): Intent = Intent(context, ConfiguracoesActivity::class.java)
+    }
+}

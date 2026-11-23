@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Menu lateral do Dashboard. Os submenus viram seções com título; o grupo final é o rodapé. -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item android:title="@string/menu_secao_navegacao">
+        <menu>
+            <item
+                android:id="@+id/menu_veiculos"
+                android:icon="@drawable/ic_veiculo"
+                android:title="@string/menu_veiculos" />
+            <item
+                android:id="@+id/menu_logs"
+                android:icon="@drawable/ic_logs"
+                android:title="@string/menu_logs" />
+            <item
+                android:id="@+id/menu_oficina"
+                android:icon="@drawable/ic_oficina"
+                android:title="@string/menu_oficina" />
+        </menu>
+    </item>
+
+    <item android:title="@string/menu_secao_sistema">
+        <menu>
+            <item
+                android:id="@+id/menu_configuracoes"
+                android:icon="@drawable/ic_configuracoes"
+                android:title="@string/menu_configuracoes" />
+            <item
+                android:id="@+id/menu_checklist"
+                android:icon="@drawable/ic_checklist"
+                android:title="@string/menu_checklist" />
+            <item
+                android:id="@+id/menu_backup"
+                android:icon="@drawable/ic_backup"
+                android:title="@string/menu_backup" />
+        </menu>
+    </item>
+
+    <group android:id="@+id/grupo_rodape">
+        <item
+            android:id="@+id/menu_sobre"
+            android:icon="@drawable/ic_info"
+            android:title="@string/menu_sobre" />
+        <item
+            android:id="@+id/menu_sair"
+            android:icon="@drawable/ic_sair"
+            android:title="@string/menu_sair" />
+    </group>
+</menu>

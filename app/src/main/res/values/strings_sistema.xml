@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.3: menu lateral, Configurações, Assistente de Primeira Abertura, Checklist de Permissões e Backup. -->
+<resources>
+    <!-- Menu lateral -->
+    <string name="menu_abrir">Abrir menu</string>
+    <string name="menu_fechar">Fechar menu</string>
+    <string name="menu_secao_navegacao">Navegação rápida</string>
+    <string name="menu_secao_sistema">Sistema &amp; App</string>
+    <string name="menu_veiculos">Meus Veículos</string>
+    <string name="menu_logs">Logs e Relatórios</string>
+    <string name="menu_oficina">Ferramentas de Oficina</string>
+    <string name="menu_configuracoes">Configurações</string>
+    <string name="menu_checklist">Checklist de Permissões</string>
+    <string name="menu_backup">Backup e Restauração</string>
+    <string name="menu_sobre">Sobre o App</string>
+    <string name="menu_sair">Sair (Logout)</string>
+    <string name="menu_cabecalho_usuario">%1$s</string>
+    <string name="menu_cabecalho_sem_veiculo">Nenhum veículo padrão</string>
+    <string name="menu_status_descricao">Status da sessão OBD2: %1$s</string>
+
+    <!-- Meus Veículos (troca rápida) -->
+    <string name="veiculos_trocar_titulo">Veículo ativo</string>
+    <string name="veiculos_nenhum">Nenhum veículo cadastrado. Toque em \"Novo veículo\" para começar.</string>
+    <string name="veiculos_ativo_definido">Veículo ativo: %1$s</string>
+    <string name="veiculos_abrir_obd">Abrir OBD2</string>
+
+    <!-- Ferramentas de Oficina -->
+    <string name="oficina_menu_titulo">Ferramentas de Oficina</string>
+    <string name="oficina_menu_bateria">Teste de Bateria e Alternador</string>
+    <string name="oficina_menu_terminal">Terminal ELM327 e Varredura de PIDs</string>
+    <string name="oficina_menu_replay">Replay de logs CSV</string>
+    <string name="oficina_menu_requer_conexao">Conecte o scanner na aba OBD2 para usar esta ferramenta</string>
+
+    <!-- Sair -->
+    <string name="sair_titulo">Sair da conta?</string>
+    <string name="sair_mensagem">A sessão de login será encerrada. Veículos, manutenções, abastecimentos e os logs salvos continuam no aparelho.</string>
+    <string name="sair_confirmar">Sair</string>
+
+    <!-- Sobre -->
+    <string name="sobre_titulo">Sobre o App</string>
+    <string name="sobre_versao">Charrua OBD Pro v%1$s</string>
+    <string name="sobre_detalhes">versionCode %1$d · %2$s\n\nCatálogo: %3$d PIDs padrão · %4$d perfis de montadora (%5$d PIDs) · %6$d códigos de falha offline\nCascata de conexão: %7$d protocolos físicos · %8$d modos de serviço (21/22)\n\nProtocolo atual: %9$s</string>
+    <string name="sobre_sem_conexao">sem conexão OBD2 ativa</string>
+
+    <!-- Backup e Restauração -->
+    <string name="backup_titulo">Backup e Restauração</string>
+    <string name="backup_descricao">Exporta veículos, manutenções, abastecimentos, leituras, códigos de falha e as preferências da caixa-preta para um arquivo .json. Os logs .txt/.csv já ficam em Downloads/CharruaOBD.</string>
+    <string name="backup_exportar">Exportar backup (.json)</string>
+    <string name="backup_restaurar">Restaurar backup (.json)</string>
+    <string name="backup_exportado">Backup salvo: %1$d veículo(s), %2$d manutenção(ões), %3$d abastecimento(s)</string>
+    <string name="backup_erro_exportar">Não foi possível salvar o backup: %1$s</string>
+    <string name="backup_erro_ler">Backup inválido: %1$s</string>
+    <string name="backup_confirmar_titulo">Restaurar este backup?</string>
+    <string name="backup_confirmar_mensagem">Gerado em %1$s (versão %2$s) com %3$d veículo(s), %4$d manutenção(ões), %5$d abastecimento(s), %6$d leitura(s) e %7$d código(s) de falha.\n\nTodos os veículos e registros atuais serão SUBSTITUÍDOS pelos do arquivo, e as preferências da caixa-preta e da aparência também. Os logs .txt/.csv não são afetados.</string>
+    <string name="backup_confirmar_sessao">\n\nHá uma sessão OBD2 em andamento: ela será encerrada antes da restauração.</string>
+    <string name="backup_confirmar_acao">Restaurar</string>
+    <string name="backup_restaurado">Backup restaurado: %1$d veículo(s)</string>
+    <string name="backup_erro_restaurar">Falha ao restaurar (nada foi alterado): %1$s</string>
+    <string name="backup_versao_desconhecida">desconhecida</string>
+
+    <!-- Configurações -->
+    <string name="config_titulo">Configurações</string>
+    <string name="config_secao_caixa">Caixa-preta automática</string>
+    <string name="config_secao_caixa_descricao">Sessão OBD2 em segundo plano iniciada pelo Bluetooth do carro, com logs .txt + .csv em Downloads/CharruaOBD.</string>
+    <string name="config_auto_conexao">Auto-conexão em segundo plano</string>
+    <string name="config_logs">Gravar logs automaticamente (.txt + .csv)</string>
+    <string name="config_gatilho">Bluetooth gatilho do carro</string>
+    <string name="config_scanner">Scanner OBD2 padrão</string>
+    <string name="config_veiculo">Veículo padrão</string>
+    <string name="config_bateria">Bateria sem restrições</string>
+    <string name="config_bateria_ok">Liberada: o Android não bloqueia a sessão em segundo plano</string>
+    <string name="config_bateria_pendente">Otimizada: o One UI pode barrar a sessão automática</string>
+    <string name="config_bateria_liberar">Liberar</string>
+    <string name="config_scanner_nenhum">Nenhum (usa o primeiro OBD pareado)</string>
+    <string name="config_scanner_titulo">Scanner OBD2 padrão</string>
+    <string name="config_scanner_sem_pareados">Nenhum aparelho pareado (ou sem a permissão de Bluetooth). Pareie o OBDII nas configurações de Bluetooth do celular.</string>
+    <string name="config_veiculo_titulo">Veículo padrão</string>
+    <string name="config_secao_aparencia">Aparência e Painel</string>
+    <string name="config_tema">Tema do app</string>
+    <string name="config_tema_sistema">Seguir sistema</string>
+    <string name="config_tema_claro">Claro</string>
+    <string name="config_tema_escuro">Escuro</string>
+    <string name="config_unidade">Unidade de pressão (Turbo/MAP)</string>
+    <string name="config_unidade_descricao">Vale para o mostrador principal, a grade de PIDs e o HUD flutuante. Os logs continuam em kPa.</string>
+    <string name="config_unidade_kpa">kPa</string>
+    <string name="config_unidade_bar">bar</string>
+    <string name="config_unidade_psi">psi</string>
+    <string name="config_secao_assistente">Assistente e permissões</string>
+    <string name="config_refazer_assistente">Refazer Assistente Inicial</string>
+    <string name="config_abrir_checklist">Abrir Checklist de Permissões</string>
+
+    <!-- Checklist de Permissões -->
+    <string name="checklist_titulo">Checklist de Permissões</string>
+    <string name="checklist_resumo_ok">Tudo liberado</string>
+    <string name="checklist_resumo_pendente">%1$d de %2$d pendente(s)</string>
+    <string name="checklist_essenciais">Essenciais (scanner e caixa-preta)</string>
+    <string name="checklist_direcao">Recursos de direção (opcional)</string>
+    <string name="permissao_status_ok">OK</string>
+    <string name="permissao_status_pendente">Pendente</string>
+    <string name="permissao_status_nao_aplicavel">Não necessário nesta versão do Android</string>
+    <string name="permissao_acao_permitir">Permitir</string>
+    <string name="permissao_acao_abrir">Abrir</string>
+    <string name="permissao_bluetooth">Bluetooth (dispositivos próximos)</string>
+    <string name="permissao_bluetooth_descricao">Conectar ao scanner OBD2 e reconhecer o Bluetooth do carro com o app fechado.</string>
+    <string name="permissao_notificacoes">Notificações</string>
+    <string name="permissao_notificacoes_descricao">Status discreto da sessão OBD2 e o botão Fechar do HUD.</string>
+    <string name="permissao_bateria">Bateria \"Sem restrições\"</string>
+    <string name="permissao_bateria_descricao">Evita que o Android/Samsung bloqueie a sessão automática em segundo plano.</string>
+    <string name="permissao_acesso_notificacoes">Acesso a Notificações (Spotify)</string>
+    <string name="permissao_acesso_notificacoes_descricao">Mini-player de música na aba OBD2. Nenhuma notificação é lida.</string>
+    <string name="permissao_sobrepor">Sobrepor a outros apps (HUD)</string>
+    <string name="permissao_sobrepor_descricao">Painel flutuante com RPM, turbo e temperatura sobre o Waze.</string>
+    <string name="permissao_bloqueada">Permissão bloqueada: libere em Configurações → Apps → Charrua OBD Pro → Permissões</string>
+    <string name="permissao_sem_bluetooth">Este aparelho não tem Bluetooth</string>
+    <string name="permissao_erro_abrir">Não foi possível abrir a tela do sistema</string>
+
+    <!-- Assistente de Primeira Abertura -->
+    <string name="assistente_titulo">Assistente inicial</string>
+    <string name="assistente_passo">Passo %1$d de %2$d</string>
+    <string name="assistente_pular">Pular</string>
+    <string name="assistente_proximo">Próximo</string>
+    <string name="assistente_concluir">Concluir</string>
+    <string name="assistente_voltar">Voltar</string>
+    <string name="assistente_1_titulo">Permissões essenciais</string>
+    <string name="assistente_1_descricao">O Charrua OBD Pro precisa destas permissões para conectar ao scanner e gravar a caixa-preta sozinho quando você entra no carro.</string>
+    <string name="assistente_2_titulo">Scanner e gatilho Bluetooth</string>
+    <string name="assistente_2_descricao">Escolha o adaptador OBD2 e o Bluetooth do carro (multimídia) que dispara a sessão automática.</string>
+    <string name="assistente_2_scanner">Scanner OBD2</string>
+    <string name="assistente_2_gatilho">Bluetooth gatilho do carro</string>
+    <string name="assistente_2_digitar">Digitar o nome</string>
+    <string name="assistente_2_nome_gatilho">Nome do Bluetooth do carro</string>
+    <string name="assistente_2_sem_permissao">Sem a permissão de Bluetooth não dá para listar os aparelhos pareados.</string>
+    <string name="assistente_2_permitir">Permitir Bluetooth</string>
+    <string name="assistente_2_sem_pareados">Nenhum aparelho pareado. Pareie o OBDII nas configurações de Bluetooth e toque em Atualizar.</string>
+    <string name="assistente_2_abrir_bluetooth">Configurações de Bluetooth</string>
+    <string name="assistente_2_atualizar">Atualizar lista</string>
+    <string name="assistente_3_titulo">Veículo padrão e caixa-preta</string>
+    <string name="assistente_3_descricao">A sessão automática usa este veículo no cabeçalho e no nome dos logs.</string>
+    <string name="assistente_3_sem_veiculos">Nenhum veículo cadastrado ainda. Depois de cadastrar, escolha o padrão em Configurações.</string>
+    <string name="assistente_4_titulo">Recursos de direção (opcional)</string>
+    <string name="assistente_4_descricao">Mini-player do Spotify na aba OBD2 e HUD flutuante sobre o Waze. Dá para ativar depois pelo Checklist de Permissões.</string>
+    <string name="assistente_dispositivo">%1$s\n%2$s</string>
+
+    <!-- Aba OBD2: faixa da caixa-preta -->
+    <string name="obd_faixa_caixa_descricao">Caixa-preta: %1$s. Toque para abrir as Configurações.</string>
+</resources>

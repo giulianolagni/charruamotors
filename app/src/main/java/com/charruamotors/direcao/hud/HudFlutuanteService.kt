@@ -209,6 +209,7 @@ class HudFlutuanteService : Service() {
         val b = binding ?: return
         b.valorHudRpm.definirTexto(painel.rpm)
         b.valorHudMap.definirTexto(painel.map)
+        b.rotuloHudMap.definirTexto(getString(R.string.hud_rotulo_map, painel.unidadeMap))
         b.valorHudTemperatura.definirTexto(painel.temperatura)
         b.valorHudQuarto.definirTexto(painel.quarto)
         b.rotuloHudQuarto.setText(

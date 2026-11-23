@@ -54,11 +54,12 @@
         android:text="@string/hud_config_sensores"
         android:textAppearance="?attr/textAppearanceLabelLarge" />
 
-    <com.google.android.material.chip.ChipGroup
+    <LinearLayout
         android:id="@+id/chips_sensores_hud"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/espaco_minimo" />
+        android:layout_marginTop="@dimen/espaco_minimo"
+        android:orientation="vertical" />
 
     <!-- Ordem das células do HUD: arraste pela alça -->
     <TextView

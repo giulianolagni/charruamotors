@@ -59,32 +59,32 @@ enum class SensorPainel(
         ),
     ),
     TEMP_MOTOR(
-        "0105", "Motor", "MOTOR", "°C", 0,
+        "0105", "Temp. Água (°C)", "MOTOR", "°C", 0,
         mapOf(
             "°C" to EscalaGauge(40f, 130f, 110f, 9, 2),
             "°F" to EscalaGauge(100f, 280f, 230f, 9, 2),
         ),
     ),
     TEMP_ADMISSAO(
-        "010F", "Admissão", "ADMISSÃO", "°C", 0,
+        "010F", "Temp. Admissão (°C)", "ADMISSÃO", "°C", 0,
         mapOf(
             "°C" to EscalaGauge(-20f, 100f, 70f, 6, 2),
             "°F" to EscalaGauge(0f, 210f, 160f, 7, 3),
         ),
     ),
     TEMP_OLEO(
-        "015C", "Óleo", "ÓLEO", "°C", 0,
+        "015C", "Temp. Óleo (°C)", "ÓLEO", "°C", 0,
         mapOf(
             "°C" to EscalaGauge(40f, 160f, 130f, 6, 2),
             "°F" to EscalaGauge(100f, 320f, 265f, 11, 2),
         ),
     ),
     CARGA(
-        "0104", "Carga", "CARGA", "%", 0,
+        "0104", "Carga Motor (%)", "CARGA", "%", 0,
         mapOf("%" to EscalaGauge(0f, 100f, 90f, 5, 4)),
     ),
     BORBOLETA(
-        "0111", "Borboleta", "BORBOLETA", "%", 0,
+        "0111", "Borboleta (%)", "BORBOLETA", "%", 0,
         mapOf("%" to EscalaGauge(0f, 100f, null, 5, 4)),
     ),
     ACELERADOR(
@@ -93,11 +93,11 @@ enum class SensorPainel(
         alternativos = listOf("TOYOTA_PEDAL_D", "TOYOTA_PEDAL_E"),
     ),
     TENSAO(
-        "ATRV", "Bateria", "BATERIA", "V", 1,
+        "ATRV", "Bateria (V)", "BATERIA", "V", 1,
         mapOf("V" to EscalaGauge(8f, 16f, 15f, 8, 2)),
     ),
     RAIL(
-        "0123", "Common Rail", "RAIL", "kPa", 0,
+        "0123", "Pressão Rail (bar)", "RAIL", "kPa", 0,
         mapOf(
             "bar" to EscalaGauge(0f, 2000f, 1800f, 4, 5),
             "psi" to EscalaGauge(0f, 30000f, 26000f, 6, 5, 1000f),
@@ -108,22 +108,15 @@ enum class SensorPainel(
         mapOf("g/s" to EscalaGauge(0f, 250f, null, 5, 5)),
     ),
     COMBUSTIVEL(
-        "012F", "Tanque", "TANQUE", "%", 0,
+        "012F", "Nível Tanque (%)", "TANQUE", "%", 0,
         mapOf("%" to EscalaGauge(0f, 100f, null, 4, 5)),
-    ),
-    CONSUMO(
-        "015E", "Consumo", "CONSUMO", "L/h", 1,
-        mapOf(
-            "L/h" to EscalaGauge(0f, 30f, null, 6, 5),
-            "gal/h" to EscalaGauge(0f, 8f, null, 4, 4),
-        ),
     ),
     /**
      * Consumo instantâneo em km/L (v1.7), calculado do MAF e da velocidade pelo computador de
      * bordo: não é um PID, então [comando] é só a chave interna e a leitura vem de [consumoKmL].
      */
     CONSUMO_KML(
-        CHAVE_CONSUMO_KML_PAINEL, "Consumo (km/L)", "KM/L", "km/L", 1,
+        CHAVE_CONSUMO_KML_PAINEL, "Consumo (km/L)", "CONSUMO", "km/L", 1,
         mapOf(
             "km/L" to EscalaGauge(0f, 20f, null, 5, 4),
             "MPG" to EscalaGauge(0f, 50f, null, 5, 5),
@@ -140,13 +133,13 @@ enum class SensorPainel(
         alternativos = listOf("TOYOTA_ATF", "TOYOTA_ATF_ECM"),
     ),
     MARCHA_ALAVANCA(
-        "TOYOTA_ALAVANCA", "Marcha / Alavanca", "ALAVANCA", "", 0,
+        "TOYOTA_ALAVANCA", "Alavanca (P/R/D)", "ALAVANCA", "", 0,
         mapOf("" to EscalaGauge(0f, 6f, null, 6, 1)),
         alternativos = listOf("TOYOTA_ALAVANCA_ECM"),
         rotulos = mapOf(0 to "P", 1 to "R", 2 to "N", 3 to "D", 4 to "3", 5 to "2", 6 to "L"),
     ),
     MARCHA_ATUAL(
-        "TOYOTA_MARCHA", "Marcha", "MARCHA", "", 0,
+        "TOYOTA_MARCHA", "Marcha (1ª–5ª)", "MARCHA", "", 0,
         mapOf("" to EscalaGauge(0f, 6f, null, 6, 1)),
         rotulos = mapOf(0 to "N", 1 to "1ª", 2 to "2ª", 3 to "3ª", 4 to "4ª", 5 to "5ª", 255 to "Parado"),
     ),
@@ -161,7 +154,7 @@ enum class SensorPainel(
         rotulos = mapOf(0 to "Normal", 1 to "Atuando", 2 to "VSC OFF", 3 to "TRC OFF", 4 to "Falha"),
     ),
     TENSAO_ECU(
-        "TOYOTA_TENSAO_ECU", "Tensão da ECU", "ECU", "V", 2,
+        "TOYOTA_TENSAO_ECU", "Tensão ECU (V)", "ECU", "V", 2,
         mapOf("V" to EscalaGauge(8f, 16f, 15f, 8, 2)),
     ),
     PRESSAO_BARO(
@@ -177,6 +170,16 @@ enum class SensorPainel(
     BICO_3("TOYOTA_INJ3", "Bico Injetor #3", "BICO 3", "mm³/st", 2, ESCALA_BICO, comSinal = true),
     BICO_4("TOYOTA_INJ4", "Bico Injetor #4", "BICO 4", "mm³/st", 2, ESCALA_BICO, comSinal = true),
     ;
+
+    /** Seção em que o sensor aparece nos chips de escolha. */
+    val grupo: GrupoSensor
+        get() = when (this) {
+            RPM, VELOCIDADE, TURBO, CARGA, BORBOLETA, ACELERADOR, CONSUMO_KML -> GrupoSensor.PRINCIPAL
+            TEMP_MOTOR, TEMP_ADMISSAO, TEMP_OLEO, TEMP_CAMBIO -> GrupoSensor.TEMPERATURAS
+            RAIL, MAF, COMBUSTIVEL, PRESSAO_BARO, BICO_1, BICO_2, BICO_3, BICO_4 -> GrupoSensor.INJECAO
+            MARCHA_ALAVANCA, MARCHA_ATUAL, TRACAO_4X4, VSC -> GrupoSensor.CAMBIO_CHASSI
+            TENSAO, TENSAO_ECU -> GrupoSensor.ELETRICA
+        }
 
     /** Proteção que este sensor evidencia em vermelho quando o limite do veículo é ultrapassado. */
     val alertaDeProtecao: TipoAlertaProtecao?
@@ -251,9 +254,34 @@ enum class SensorPainel(
         /** 4x4 (7C0) e VSC (7B0) não respondem na SW4 1KD-FTV + A750F. */
         const val NAO_DISPONIVEL = "N/D"
 
-        fun deCodigo(codigo: String?): SensorPainel? = entries.firstOrNull { it.name.equals(codigo?.trim(), ignoreCase = true) }
+        /** `CONSUMO` (L/h, até a 1.7.0) foi unificado em [CONSUMO_KML]: configurações antigas migram sozinhas. */
+        fun deCodigo(codigo: String?): SensorPainel? {
+            val c = codigo?.trim()
+            if (c.equals("CONSUMO", ignoreCase = true)) return CONSUMO_KML
+            return entries.firstOrNull { it.name.equals(c, ignoreCase = true) }
+        }
+
+        /** Sensores sem duplicatas na ordem de [GrupoSensor], para os chips do HUD e do Painel. */
+        fun agrupados(naoSuportados: Set<SensorPainel> = emptySet()): List<Pair<String, List<SensorPainel>>> {
+            val suportados = GrupoSensor.entries.mapNotNull { g ->
+                entries.filter { it.grupo == g && it !in naoSuportados }.takeIf { it.isNotEmpty() }?.let { g.titulo to it }
+            }
+            val fora = entries.filter { it in naoSuportados }
+            return if (fora.isEmpty()) suportados else suportados + (TITULO_NAO_SUPORTADOS to fora)
+        }
+
+        const val TITULO_NAO_SUPORTADOS = "Não suportados neste veículo"
 
         fun doComando(comando: String): SensorPainel? =
             entries.firstOrNull { s -> s.comandos.any { it.equals(comando, ignoreCase = true) } }
     }
+}
+
+/** Seções curtas dos chips de sensores (HUD e Personalizar Painel). */
+enum class GrupoSensor(val titulo: String) {
+    PRINCIPAL("Principal"),
+    TEMPERATURAS("Temperaturas"),
+    INJECAO("Injeção & Diesel"),
+    CAMBIO_CHASSI("Câmbio & Chassi"),
+    ELETRICA("Elétrica"),
 }

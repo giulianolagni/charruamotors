@@ -1,14 +1,18 @@
 package com.charruamotors.ui.painel
 
+import android.content.Context
+import android.widget.TextView
 import androidx.core.view.isVisible
 import com.charruamotors.R
 import com.charruamotors.databinding.ConteudoConfigHudBinding
 import com.charruamotors.direcao.painel.ConfigHud
 import com.charruamotors.direcao.painel.EstiloHud
+import com.charruamotors.direcao.painel.HistoricoSensores
 import com.charruamotors.direcao.painel.SensorPainel
 import com.charruamotors.direcao.painel.TamanhoHud
 import com.charruamotors.ui.componentes.ArrasteReordenavel
 import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 
 /**
  * Liga os controles de [ConteudoConfigHudBinding] (tamanho, sensores fixados, a ordem deles por
@@ -32,15 +36,7 @@ class EditorConfigHud(
 
     init {
         val contexto = binding.root.context
-        for (sensor in SensorPainel.entries) {
-            val chip = Chip(contexto).apply {
-                text = sensor.titulo
-                isCheckable = true
-                setOnClickListener { alternar(sensor) }
-            }
-            chips[sensor] = chip
-            binding.chipsSensoresHud.addView(chip)
-        }
+        montarChips(contexto)
         binding.listaOrdemHud.adapter = adapterOrdem
         adapterOrdem.arraste = ArrasteReordenavel(
             binding.listaOrdemHud,
@@ -62,6 +58,41 @@ class EditorConfigHud(
             if (estilo != config.estilo) atualizar(config.copy(estilo = estilo))
         }
         mostrar(config)
+    }
+
+    /**
+     * Chips por seção (Principal, Temperaturas...). Os sensores que a ECU atual nunca respondeu
+     * ([HistoricoSensores]) ficam numa seção recolhida no fim, para não poluir a lista.
+     */
+    private fun montarChips(contexto: Context) {
+        val naoSuportados = HistoricoSensores.naoSuportados()
+        for ((titulo, sensores) in SensorPainel.agrupados(naoSuportados)) {
+            val fora = titulo == SensorPainel.TITULO_NAO_SUPORTADOS
+            val grupo = ChipGroup(contexto)
+            val cabecalho = TextView(contexto, null, com.google.android.material.R.attr.textAppearanceLabelMedium).apply {
+                text = if (fora) "▸ $titulo (${sensores.size})" else titulo
+                setPadding(0, 12, 0, 4)
+                if (fora) alpha = 0.6f
+            }
+            if (fora) {
+                grupo.isVisible = false
+                cabecalho.setOnClickListener {
+                    grupo.isVisible = !grupo.isVisible
+                    cabecalho.text = (if (grupo.isVisible) "▾ " else "▸ ") + "$titulo (${sensores.size})"
+                }
+            }
+            for (sensor in sensores) {
+                val chip = Chip(contexto).apply {
+                    text = sensor.titulo
+                    isCheckable = true
+                    setOnClickListener { alternar(sensor) }
+                }
+                chips[sensor] = chip
+                grupo.addView(chip)
+            }
+            binding.chipsSensoresHud.addView(cabecalho)
+            binding.chipsSensoresHud.addView(grupo)
+        }
     }
 
     /** Recarrega os controles (ex.: "Restaurar padrão"). */

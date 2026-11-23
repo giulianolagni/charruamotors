@@ -75,8 +75,13 @@ foreach ($drive in @('G:\Meu Drive\CharruaOBD', 'G:\My Drive\CharruaOBD')) {
 }
 
 # ------------------------------------------------------------------ release
-& $ghExe release view $tag *> $null
-if ($LASTEXITCODE -eq 0) {
+# `gh release view` escreve "release not found" no stderr quando a release não existe; com
+# $ErrorActionPreference = 'Stop' isso viraria NativeCommandError, então relaxa só nesta checagem.
+$prefAnterior = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try { & $ghExe release view $tag 2>$null | Out-Null; $releaseExiste = ($LASTEXITCODE -eq 0) }
+finally { $ErrorActionPreference = $prefAnterior }
+if ($releaseExiste) {
     Write-Host "A release $tag já existe: substituindo o APK anexado..." -ForegroundColor Yellow
     & $ghExe release upload $tag $apk --clobber
     if ($LASTEXITCODE -ne 0) { throw 'gh release upload falhou' }

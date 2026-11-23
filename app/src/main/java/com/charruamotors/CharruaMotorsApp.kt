@@ -17,6 +17,7 @@ import com.charruamotors.data.repository.VeiculoRepository
 import com.charruamotors.data.session.SessaoManager
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
 import com.charruamotors.domain.calculo.CentralAlertas
+import com.charruamotors.domain.calculo.TipoAlertaProtecao
 import com.charruamotors.ui.util.SomAlerta
 import com.charruamotors.direcao.painel.PreferenciasPainel
 import com.charruamotors.obd.Elm327BluetoothClient
@@ -150,7 +151,17 @@ class CharruaMotorsApp : Application() {
     }
 
     /** Alertas de proteção (água, ATF, alternador) com o aviso sonoro; os limites vêm do veículo ativo. */
-    val centralAlertas: CentralAlertas by lazy { CentralAlertas(som = SomAlerta::tocar) }
+    val centralAlertas: CentralAlertas by lazy { 
+        CentralAlertas(som = SomAlerta::tocar).also { central ->
+            central.aoEntrarEmAlerta = { a ->
+                val unidade = if (a.tipo == TipoAlertaProtecao.TENSAO) "V" else "°C"
+                val sinal = if (a.tipo == TipoAlertaProtecao.TENSAO) "<" else "≥"
+                sessaoObd.registrarEvento("ALERTA ${a.tipo.texto}: ${a.valor} $unidade ($sinal limite ${a.limite} $unidade) às ${horaAlerta()}")
+            }
+        }
+    }
+
+    private fun horaAlerta(): String = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT).format(java.util.Date())
 
     /** Salva os logs CSV do Data Logger em Downloads. */
     val exportadorCsv: ExportadorCsv by lazy { ExportadorCsv(this) }

@@ -158,6 +158,7 @@ object BackupJson {
         put("caixaPreta", JSONObject().apply {
             put("autoConexaoAtiva", c.autoConexaoAtiva)
             put("gravarLogsAutomaticos", c.gravarLogsAutomaticos)
+            put("logCompletoTrafego", c.logCompletoTrafego)
             put("gatilhoNome", c.gatilhoNome)
             putOpt("gatilhoEndereco", c.gatilhoEndereco)
             putOpt("scannerNome", c.scanner?.nome)
@@ -298,6 +299,7 @@ object BackupJson {
             ConfigAutoConexao(
                 autoConexaoAtiva = c.optBoolean("autoConexaoAtiva", padrao.autoConexaoAtiva),
                 gravarLogsAutomaticos = c.optBoolean("gravarLogsAutomaticos", padrao.gravarLogsAutomaticos),
+                logCompletoTrafego = c.optBoolean("logCompletoTrafego", padrao.logCompletoTrafego),
                 gatilhoNome = c.textoOuNull("gatilhoNome")?.takeIf { it.isNotBlank() } ?: padrao.gatilhoNome,
                 gatilhoEndereco = c.textoOuNull("gatilhoEndereco"),
                 scanner = scannerEndereco?.let { DispositivoObd(c.textoOuNull("scannerNome") ?: it, it) },

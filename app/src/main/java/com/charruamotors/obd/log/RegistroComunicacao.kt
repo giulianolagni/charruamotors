@@ -51,6 +51,25 @@ class RegistroComunicacao(
 
     fun evento(texto: String) = adicionar(EntradaRegistro.Evento(relogio(), texto))
 
+    /**
+     * Log completo de tráfego (auditoria): liga a entrega, só ao [ouvinte], das trocas do polling
+     * contínuo e dos valores decodificados. Ficam fora do buffer circular da tela para não expulsar
+     * dele o handshake e os eventos (um ciclo de telemetria enche o buffer em segundos).
+     */
+    @Volatile var logCompleto: Boolean = false
+
+    /** Troca do loop de telemetria: vai só para o [ouvinte] (arquivo `.txt`), nunca para o buffer. */
+    fun comandoSomenteLog(comando: String, resposta: String?, duracaoMs: Long) {
+        if (!logCompleto) return
+        ouvinte?.let { runCatching { it(EntradaRegistro.Comando(relogio(), comando, resposta, duracaoMs)) } }
+    }
+
+    /** Valor decodificado de uma resposta do polling, ao lado do hexadecimal bruto (só no arquivo). */
+    fun decodificado(texto: String) {
+        if (!logCompleto) return
+        ouvinte?.let { runCatching { it(EntradaRegistro.Evento(relogio(), "  ↳ $texto")) } }
+    }
+
     fun limpar() = synchronized(trava) { entradas.clear() }
 
     /** Cópia das entradas, da mais antiga para a mais recente. */
@@ -65,7 +84,7 @@ class RegistroComunicacao(
     }
 
     companion object {
-        const val CAPACIDADE_PADRAO = 300
+        const val CAPACIDADE_PADRAO = 5_000
 
         /**
          * Texto para exibir/copiar: uma linha por troca, com `\r` visível, para colar numa mensagem

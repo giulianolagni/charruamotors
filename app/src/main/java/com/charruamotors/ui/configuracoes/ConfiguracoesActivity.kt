@@ -113,6 +113,9 @@ class ConfiguracoesActivity : AppCompatActivity() {
         switchLogsAutomaticos.setOnCheckedChangeListener { _, marcado ->
             if (marcado != prefsCaixa.config.value.gravarLogsAutomaticos) prefsCaixa.definirGravarLogs(marcado)
         }
+        switchLogCompleto.setOnCheckedChangeListener { _, marcado ->
+            if (marcado != prefsCaixa.config.value.logCompletoTrafego) prefsCaixa.definirLogCompleto(marcado)
+        }
         linhaGatilho.root.setOnClickListener { dialogos.escolherGatilho() }
         linhaScanner.root.setOnClickListener { dialogos.escolherScanner() }
         linhaVeiculo.root.setOnClickListener {
@@ -126,6 +129,7 @@ class ConfiguracoesActivity : AppCompatActivity() {
     private fun mostrarCaixaPreta(config: ConfigAutoConexao) = with(binding) {
         if (switchAutoConexao.isChecked != config.autoConexaoAtiva) switchAutoConexao.isChecked = config.autoConexaoAtiva
         if (switchLogsAutomaticos.isChecked != config.gravarLogsAutomaticos) switchLogsAutomaticos.isChecked = config.gravarLogsAutomaticos
+        if (switchLogCompleto.isChecked != config.logCompletoTrafego) switchLogCompleto.isChecked = config.logCompletoTrafego
         linhaGatilho.textoValor.definirTexto(
             if (config.gatilhoEndereco != null) "${config.gatilhoNome} (${config.gatilhoEndereco})" else config.gatilhoNome,
         )

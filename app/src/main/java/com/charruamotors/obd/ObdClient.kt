@@ -107,6 +107,9 @@ interface ObdClient {
      */
     fun observarRegistro(ouvinte: ((EntradaRegistro) -> Unit)?) {}
 
+    /** Log completo de tráfego: entrega ao ouvinte também as trocas do polling e os valores decodificados. */
+    fun definirLogCompleto(ativo: Boolean) {}
+
     // ---------------------------------------------------------------- Ferramentas de Oficina
 
     /**

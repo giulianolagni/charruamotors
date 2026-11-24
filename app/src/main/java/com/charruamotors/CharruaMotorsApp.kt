@@ -47,6 +47,7 @@ import com.charruamotors.sistema.backup.BackupRepository
 import com.charruamotors.sistema.preferencias.PreferenciasApp
 import com.charruamotors.ui.util.ExportadorCsv
 import com.charruamotors.ui.util.PermissoesBluetooth
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -247,6 +248,18 @@ class CharruaMotorsApp : Application() {
 
     // ---------------------------------------------------------------- caixa-preta
 
+    /**
+     * Escopo de vida do processo (sessão OBD, proteção da sessão, GPS) na main thread. Falha
+     * inesperada numa corrotina filha é registrada e não derruba o app: a sessão OBD já fecha o
+     * socket e os logs no `finally` e volta a aceitar uma nova conexão.
+     */
+    private fun escopoDoApp(): CoroutineScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + tratadorFalhas)
+
+    private val tratadorFalhas = CoroutineExceptionHandler { _, erro ->
+        Log.e("CharruaMotorsApp", "Falha inesperada numa corrotina do app", erro)
+    }
+
     /** Auto-conexão pelo Bluetooth do carro, logs automáticos e vínculos (scanner e veículo). */
     val preferenciasAutoConexao: PreferenciasAutoConexao by lazy { PreferenciasAutoConexao(this) }
 
@@ -255,7 +268,7 @@ class CharruaMotorsApp : Application() {
      * pelo HUD flutuante e pelo `ObdSessaoService` em primeiro plano. Ver [SessaoObd].
      */
     val protecaoSessao: ProtecaoSessao by lazy {
-        val escopo = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val escopo = escopoDoApp()
         ProtecaoSessao(
             escopo = escopo,
             estadoSessao = { sessaoObd.estadoSessao.value },
@@ -280,7 +293,7 @@ class CharruaMotorsApp : Application() {
             buscarVeiculo = { id -> veiculoRepository.buscarPorId(id)?.let(VeiculoSessao::de) },
             destinoLogs = DestinoLogsDownloads(this),
             pastaTemporaria = File(cacheDir, "sessoes_obd"),
-            escopo = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+            escopo = escopoDoApp(),
             telemetria = telemetriaCompartilhada,
             aoAtivar = { origem ->
                 // A automática já nasce dentro do serviço. No modo simulado sem a permissão de
@@ -290,7 +303,7 @@ class CharruaMotorsApp : Application() {
             gpsAtivo = { preferenciasApp.config.value.velocidadeGps },
             velocidadeGps = { velocidadeGps.velocidadeKmh() },
         ).also { sessao ->
-            val escopo = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+            val escopo = escopoDoApp()
             escopo.launch {
                 sessao.estadoSessao.map { it.fase == FaseSessao.Conectada }
                     .combine(preferenciasApp.config.map { it.velocidadeGps }) { conectada, gps -> conectada && gps }

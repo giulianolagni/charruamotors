@@ -58,9 +58,7 @@
     <string name="combustivel_gnv">GNV</string>
 
     <!-- Diagnóstico (Activity com abas) -->
-    <string name="aba_obd">Diagnóstico OBD2</string>
     <string name="aba_manutencoes">Manutenções</string>
-    <string name="aba_abastecimentos">Abastecimentos</string>
     <string name="seletor_data_titulo">Selecione a data</string>
     <string name="valor_indisponivel">—</string>
     <string name="prefixo_reais">R$</string>
@@ -98,17 +96,12 @@
     </plurals>
     <string name="obd_erro_sem_leitura">Ainda não há leitura para salvar</string>
     <string name="obd_leitura_salva">Leitura salva no histórico</string>
-    <string name="obd_tempo_real">Dados em tempo real</string>
     <string name="obd_rpm">Rotação (RPM)</string>
     <string name="obd_velocidade">Velocidade</string>
     <string name="obd_temperatura">Temperatura do motor</string>
     <string name="obd_carga">Carga do motor</string>
-    <string name="obd_bateria">Tensão da bateria</string>
     <string name="obd_valor_rpm">%1$s rpm</string>
-    <string name="obd_valor_velocidade">%1$d km/h</string>
-    <string name="obd_valor_temperatura">%1$d °C</string>
     <string name="obd_valor_carga">%1$s %%</string>
-    <string name="obd_valor_bateria">%1$s V</string>
     <string name="obd_historico_titulo">Leituras salvas</string>
     <string name="obd_historico_vazio">Nenhuma leitura salva ainda.</string>
     <string name="obd_historico_valores">%1$s • %2$s • %3$s</string>
@@ -125,11 +118,6 @@
     <string name="obd_limpar_confirmar">Limpar</string>
 
     <!-- Painel de telemetria -->
-    <string name="obd_map">Pressão do coletor / turbo</string>
-    <string name="unidade_rpm">rpm</string>
-    <string name="unidade_kmh">km/h</string>
-    <string name="unidade_kpa">kPa</string>
-    <string name="unidade_celsius">°C</string>
     <string name="obd_sensor_extremos">Mín %1$s · Máx %2$s</string>
     <string name="obd_sensores_titulo">Sensores suportados pela ECU</string>
     <string name="obd_sensores_titulo_qtd">Sensores suportados pela ECU (%1$d)</string>
@@ -149,7 +137,6 @@
     <string name="obd_log_compartilhar_titulo">Compartilhar log OBD2</string>
 
     <!-- Diagnóstico avançado -->
-    <string name="obd_diagnostico_titulo">Diagnóstico</string>
     <string name="obd_ecu_titulo">Informações da ECU</string>
     <string name="obd_ecu_vin">Número do chassi (VIN)</string>
     <string name="obd_ecu_pids">PIDs suportados detectados</string>
@@ -186,8 +173,6 @@
     <string name="obd_bordo_titulo">Computador de bordo</string>
     <string name="obd_bordo_instantaneo">Consumo instantâneo</string>
     <string name="obd_bordo_media">Média da viagem</string>
-    <string name="obd_bordo_km_l">%1$s km/L</string>
-    <string name="obd_bordo_l_h">%1$s L/h</string>
     <string name="obd_bordo_parado">Parado</string>
     <string name="obd_bordo_totais">%1$s %2$s · %3$s %4$s</string>
     <string name="obd_bordo_zerar">Zerar viagem</string>
@@ -296,7 +281,6 @@ Toque em “Novo abastecimento” para começar.</string>
     <string name="erro_litros_acima_do_tanque">Os litros excedem a capacidade do tanque</string>
 
     <!-- Card de direção: mini-player (Spotify / YouTube Music) e atalhos do Waze -->
-    <string name="direcao_titulo">Direção</string>
     <string name="midia_servico_nome">Controle de música do Charrua OBD Pro</string>
     <string name="midia_ativar">Ativar controle de música</string>
     <string name="midia_ativar_dica">Libere o Charrua OBD Pro em “Acesso a notificações”. Se o Android bloquear (configuração restrita), abra Informações do app › ⋮ › Permitir configurações restritas.</string>
@@ -329,10 +313,4 @@ Toque em “Novo abastecimento” para começar.</string>
     <string name="hud_status_ao_vivo">● OBD AO VIVO</string>
     <string name="hud_status_desconectado">○ SEM CONEXÃO OBD</string>
     <string name="hud_status_alerta">▲ MOTOR QUENTE</string>
-    <string name="hud_rotulo_rpm">RPM</string>
-    <string name="hud_rotulo_map">TURBO/MAP %1$s</string>
-    <string name="hud_rotulo_map_padrao">TURBO/MAP kPa</string>
-    <string name="hud_rotulo_temperatura">MOTOR °C</string>
-    <string name="hud_rotulo_rail">RAIL bar</string>
-    <string name="hud_rotulo_tensao">BATERIA V</string>
 </resources>

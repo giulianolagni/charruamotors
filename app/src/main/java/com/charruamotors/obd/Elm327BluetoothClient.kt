@@ -88,6 +88,10 @@ import java.io.IOException
  *   [estado] a `Erro` e encerram o fluxo de leituras, sem exceções chegando à UI.
  * - [desconectar] pode ser chamado a qualquer momento, inclusive com um comando em andamento ou
  *   durante a conexão: fecha o socket na hora e a leitura interrompida termina sem virar `Erro`.
+ * - Concorrência (v2.2.1): `conectar` reserva o estado com compare-and-set (nunca dois sockets),
+ *   respostas de um canal que já não é o da sessão são descartadas em [trocar] (nada da sessão
+ *   velha vaza para a reconexão) e `RuntimeException` da pilha Bluetooth vira link perdido. Um
+ *   ciclo de polling que falhe por qualquer motivo encerra a sessão em `Erro`, nunca a deixa zumbi.
  *
  * As permissões `BLUETOOTH_CONNECT`/`BLUETOOTH_SCAN` (Android 12+) devem ser pedidas pela UI
  * antes de conectar; se faltarem, a `SecurityException` é convertida em estado `Erro`.
@@ -234,11 +238,16 @@ class Elm327BluetoothClient(
     }
 
     override suspend fun conectar(dispositivo: DispositivoObd, marcaVeiculo: String?): Result<Unit> = withContext(dispatcher) {
-        val atual = _estado.value
-        if (atual == EstadoConexaoObd.Conectando || atual == EstadoConexaoObd.Conectado) {
-            return@withContext Result.failure(ObdException("Já existe uma conexão ativa ou em andamento"))
+        // Compare-and-set: dois conectar() simultâneos (tela + Bluetooth do carro) nunca abrem dois sockets.
+        while (true) {
+            val atual = _estado.value
+            if (atual == EstadoConexaoObd.Conectando || atual == EstadoConexaoObd.Conectado) {
+                return@withContext Result.failure(ObdException("Já existe uma conexão ativa ou em andamento"))
+            }
+            if (_estado.compareAndSet(atual, EstadoConexaoObd.Conectando)) break
         }
-        _estado.value = EstadoConexaoObd.Conectando
+        // Nada da sessão anterior (ou de um comando dela que terminou depois do desconectar) vaza para esta.
+        reiniciarEstadoSessao()
         registro.limpar()
         registro.evento("Conectando a ${dispositivo.nome} (${dispositivo.endereco})")
         var canal: ObdTransport? = null
@@ -249,8 +258,15 @@ class Elm327BluetoothClient(
             registro.evento("Socket Bluetooth aberto")
 
             inicializarAdaptador(marcaVeiculo)
-            if (transporte !== canal) return@withContext Result.failure(ObdException("Conexão cancelada"))
-            _estado.value = EstadoConexaoObd.Conectado
+            // desconectar() pode chegar entre o fim da inicialização e aqui: o estado nunca fica
+            // "Conectado" sem canal (a próxima reconexão seria recusada para sempre).
+            val confirmado = transporte === canal &&
+                _estado.compareAndSet(EstadoConexaoObd.Conectando, EstadoConexaoObd.Conectado)
+            if (!confirmado || transporte !== canal) {
+                if (transporte == null) _estado.compareAndSet(EstadoConexaoObd.Conectado, EstadoConexaoObd.Desconectado)
+                canal.fechar()
+                return@withContext Result.failure(ObdException("Conexão cancelada"))
+            }
             Result.success(Unit)
         } catch (e: CancellationException) {
             if (canal == null || transporte === canal) {
@@ -285,8 +301,10 @@ class Elm327BluetoothClient(
             }
             val ciclo = try {
                 cicloForaDaSessaoManual { lerCiclo(comandos) } ?: continue
-            } catch (e: ObdException) {
-                perderConexao(sessao, e.message ?: "Conexão com o scanner perdida")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                perderConexao(sessao, mensagemFalhaCiclo(e))
                 break
             }
             ciclosSemEcu = if (ciclo.semRespostaDaEcu) ciclosSemEcu + 1 else 0
@@ -318,8 +336,12 @@ class Elm327BluetoothClient(
             escalonador.atualizarSuportados(_pidsSuportados.value, ::grupoDe)
             val ciclo = try {
                 cicloForaDaSessaoManual { lerChaves(escalonador.proximoCiclo()) } ?: continue
-            } catch (e: ObdException) {
-                perderConexao(sessao, e.message ?: "Conexão com o scanner perdida")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Qualquer falha encerra a sessão de forma limpa (socket fechado, estado Erro): um
+                // polling morto com o estado ainda "Conectado" deixaria a sessão zumbi, sem reconexão.
+                perderConexao(sessao, mensagemFalhaCiclo(e))
                 break
             }
             ciclosSemEcu = if (ciclo.semRespostaDaEcu) ciclosSemEcu + 1 else 0
@@ -1596,6 +1618,8 @@ class Elm327BluetoothClient(
         val resposta = try {
             canal.enviarComando(comando, timeoutMs)
         } catch (e: ObdTimeoutException) {
+            // Sessão encerrada enquanto o comando esperava: o timeout não conta para a sessão nova.
+            if (transporte !== canal) throw IOException("Sessão encerrada durante o $comando", e)
             timeoutsSeguidos++
             registro.comando(comando, null, duracao(), "TIMEOUT: ${e.message}")
             ativarRespiroSeguro("timeout no $comando")
@@ -1603,9 +1627,19 @@ class Elm327BluetoothClient(
         } catch (e: IOException) {
             registro.comando(comando, null, duracao(), "LINK PERDIDO: ${e.message}")
             throw e
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: RuntimeException) {
+            // Pilhas Bluetooth de alguns aparelhos lançam NPE/IllegalStateException no socket depois de
+            // uma queda de sinal: é link perdido, tratado como IOException (sessão encerrada, não crash).
+            registro.comando(comando, null, duracao(), "FALHA DO BLUETOOTH: ${e.javaClass.simpleName}: ${e.message}")
+            throw IOException("Falha inesperada do Bluetooth no $comando", e)
         } finally {
             fimUltimoComandoNs = System.nanoTime()
         }
+        // Resposta de um canal que já não é o da sessão (desconectar/reconexão no meio do comando):
+        // descartada, para nenhuma configuração da sessão velha (ATSH, ATST, filtro) cair na nova.
+        if (transporte !== canal) throw IOException("Sessão encerrada durante o $comando")
         timeoutsSeguidos = 0
         val erro = ObdParser.erroElm(resposta)
         if (registrar || erro != null) registro.comando(comando, resposta, duracao()) else registro.comandoSomenteLog(comando, resposta, duracao())
@@ -1652,6 +1686,12 @@ class Elm327BluetoothClient(
         }
     }
 
+    /** Motivo da queda quando um ciclo de polling falha: a mensagem da [ObdException] ou o tipo da falha inesperada. */
+    private fun mensagemFalhaCiclo(e: Exception): String = when (e) {
+        is ObdException -> e.message ?: "Conexão com o scanner perdida"
+        else -> "Falha inesperada no polling (${e.javaClass.simpleName}${e.message?.let { ": $it" }.orEmpty()})"
+    }
+
     private fun mensagemEcuMuda(erro: String?): String =
         "A ECU parou de responder${erro?.let { " ($it)" }.orEmpty()}. A ignição foi desligada?"
 
@@ -1688,6 +1728,15 @@ class Elm327BluetoothClient(
         val canal = transporte
         transporte = null
         canal?.fechar()
+        reiniciarEstadoSessao()
+    }
+
+    /**
+     * Volta todo o estado conhecido do adaptador e da sessão aos padrões. Chamado ao fechar e de
+     * novo no início de cada [conectar]: um comando da sessão anterior que terminou depois do
+     * fechamento não deixa cabeçalho, filtro ou timeout velhos para a próxima.
+     */
+    private fun reiniciarEstadoSessao() {
         _pidsSuportados.value = emptySet()
         _infoConexao.value = InfoConexao()
         definicoesEstendidas = emptyMap()

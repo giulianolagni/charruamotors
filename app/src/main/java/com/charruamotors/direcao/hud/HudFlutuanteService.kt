@@ -88,6 +88,10 @@ class HudFlutuanteService : Service() {
         escopo.cancel()
         binding?.let { b -> runCatching { gerenciadorJanelas?.removeView(b.root) } }
         binding = null
+        celulas = emptyList()
+        assinatura = null
+        parametros = null
+        gerenciadorJanelas = null
         super.onDestroy()
     }
 
@@ -119,7 +123,7 @@ class HudFlutuanteService : Service() {
 
     private fun criarNotificacao(): Notification {
         val gerenciador = getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && gerenciador?.getNotificationChannel(CANAL) == null) {
+        if (gerenciador?.getNotificationChannel(CANAL) == null) {
             gerenciador?.createNotificationChannel(
                 NotificationChannel(CANAL, getString(R.string.hud_canal_nome), NotificationManager.IMPORTANCE_LOW).apply {
                     description = getString(R.string.hud_canal_descricao)
@@ -304,7 +308,12 @@ class HudFlutuanteService : Service() {
         private const val LARGURA_GRANDE_DP = 280
 
         fun iniciar(context: Context) {
-            ContextCompat.startForegroundService(context, Intent(context, HudFlutuanteService::class.java))
+            try {
+                ContextCompat.startForegroundService(context, Intent(context, HudFlutuanteService::class.java))
+            } catch (e: IllegalStateException) {
+                // Android 12+: ForegroundServiceStartNotAllowedException se o app já foi para o segundo plano.
+                Log.w(TAG, "HUD não iniciado: o sistema bloqueou o serviço em primeiro plano", e)
+            }
         }
 
         fun parar(context: Context) {

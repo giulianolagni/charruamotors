@@ -22,8 +22,8 @@ android {
         applicationId = "com.charruamotors.pro"
         minSdk = 26
         targetSdk = 37
-        versionCode = 20
-        versionName = "2.2.0"
+        versionCode = 21
+        versionName = "2.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -42,7 +42,10 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.findByName("release")
-            isMinifyEnabled = false
+            // v2.2.1: R8 (ofuscação + remoção de código morto) e remoção de recursos não usados.
+            // Regras em proguard-rules.pro; o mapping.txt sai em build/outputs/mapping/release/.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -55,6 +58,11 @@ android {
     sourceSets {
         // v2.2: os perfis de assets/perfis/ entram no classpath dos testes JVM (CarregadorPerfis sem Context).
         getByName("test").resources.srcDir("src/main/assets")
+    }
+
+    lint {
+        // Textos do app em português: o corretor do lint é em inglês ("Comando" → "Commando").
+        disable += "Typos"
     }
 
     buildFeatures {

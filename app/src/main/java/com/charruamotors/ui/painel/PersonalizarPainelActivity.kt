@@ -171,7 +171,7 @@ class PersonalizarPainelActivity : AppCompatActivity() {
 
     private fun mostrarMostradores(config: ConfigPainel) = with(binding) {
         adapterMostradores.definir(config.mostradores)
-        tituloMostradores.text = getString(R.string.personalizar_mostradores_qtd, config.mostradores.size, ConfigPainel.MAX_MOSTRADORES)
+        tituloMostradores.text = getString(R.string.personalizar_mostradores_qtd, config.mostradores.size)
         botaoAdicionarMostrador.isEnabled = config.podeAdicionarMostrador
         mostrarPrevia(config.mostradores, app.preferenciasApp.config.value.conversor)
     }

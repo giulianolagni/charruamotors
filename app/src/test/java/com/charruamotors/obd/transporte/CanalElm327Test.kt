@@ -192,4 +192,53 @@ class CanalElm327Test {
         elm.fechado = true
         assertTrue(runCatching { canal.enviar("ATRV", 3_000) }.exceptionOrNull() is IOException)
     }
+
+    // ---------------------------------------------------------------- v2.2.1: auditoria de estabilidade
+
+    @Test
+    fun `comando cancelado no meio nao deixa a resposta atrasada para o proximo`() = runTest {
+        val (elm, canal) = cenario()
+        // Tela fechada / prazo do perfil estourado com o 21D9 esperando o câmbio responder.
+        elm.roteiro["21D9"] = listOf(150L to "61 D9 00 80 52\r\r>")
+        elm.roteiro["010C1"] = listOf(80L to "41 0C 1A F8\r\r>")
+        val pedido = launch { canal.enviar("21D9", 3_000) }
+        testScheduler.advanceTimeBy(100)
+        pedido.cancel()
+        assertTrue("o cancelamento deixa o canal marcado para ressincronizar", canal.dessincronizado)
+
+        // Sem a ressincronia, o 010C1 leria o "61 D9..." atrasado e cada comando seguinte
+        // passaria a receber a resposta do anterior.
+        assertEquals("41 0C 1A F8\r\r", canal.enviar("010C1", 3_000))
+        assertFalse(canal.dessincronizado)
+    }
+
+    @Test
+    fun `read devolvendo zero com bytes anunciados conta como silencio e estoura no prazo`() = runTest {
+        val relogio = { testScheduler.currentTime }
+        // Pilha Bluetooth "meio morta" depois de uma queda de sinal: available() > 0, read() = 0.
+        val entrada = object : InputStream() {
+            override fun available(): Int = 4
+            override fun read(): Int = 0
+            override fun read(b: ByteArray, off: Int, len: Int): Int = 0
+        }
+        val saida = object : OutputStream() {
+            override fun write(b: Int) = Unit
+        }
+        val canal = CanalElm327(entrada, saida, relogio)
+        val inicio = testScheduler.currentTime
+
+        val e = runCatching { canal.enviar("010C1", 1_000) }.exceptionOrNull()
+
+        assertTrue("esperado timeout, veio $e", e is ObdTimeoutException)
+        val decorrido = testScheduler.currentTime - inicio
+        assertTrue("estourou em $decorrido ms (laço sem pausa não avança o relógio)", decorrido in 1_000..1_100)
+    }
+
+    @Test
+    fun `eco parcial e BUFFER FULL chegam inteiros ate o prompt para o parser decidir`() = runTest {
+        val (elm, canal) = cenario()
+        elm.roteiro["010C1"] = listOf(10L to "10C1\r41 0C 1A", 30L to "\rBUFFER FULL\r\r>")
+        assertEquals("10C1\r41 0C 1A\rBUFFER FULL\r\r", canal.enviar("010C1", 3_000))
+        assertFalse(canal.dessincronizado)
+    }
 }

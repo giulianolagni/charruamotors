@@ -65,7 +65,7 @@ object LeitorCsvLog {
         val registros = RegistrosCsv(leitor)
         val primeira = registros.proximoBruto() ?: throw CsvInvalidoException("Arquivo vazio")
         val separador = detectarSeparador(primeira)
-        val cabecalho = dividir(primeira, separador).map { it.trim().removePrefix("﻿").trim() }
+        val cabecalho = dividir(primeira, separador).map { it.trim().removePrefix("\uFEFF").trim() }
         if (cabecalho.isEmpty() || cabecalho.all { it.isEmpty() }) throw CsvInvalidoException("Cabeçalho vazio")
 
         val indiceTimestamp = cabecalho.indexOfFirst { it.equals("timestamp_ms", ignoreCase = true) }

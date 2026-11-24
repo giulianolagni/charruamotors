@@ -469,10 +469,12 @@ class SessaoObd(
                 val modelo = if (veiculoId > 0) runCatching { withContext(io) { modeloAprendidoDe(veiculoId) } }.getOrNull() else null
                 cli.definirModeloAprendido(modelo?.takeIf { it.veiculoId == veiculoId })
             }
-            if (config().gravarLogsAutomaticos) {
-                g = withContext(io) { criarGravador(dispositivo, veiculo, origem, gatilho, inicioMs) }
+            // v2.2.5: sessão simulada nunca grava .csv/.txt (nem entra no índice de aprendizado).
+            if (config().gravarLogsAutomaticos && !sessaoSimulada) {
+                val logBruto = config().logCompletoTrafego
+                g = withContext(io) { criarGravador(dispositivo, veiculo, origem, gatilho, inicioMs, logBruto) }
                 gravador = g
-                cli.definirLogCompleto(config().logCompletoTrafego)
+                cli.definirLogCompleto(logBruto)
                 cli.observarRegistro(g::registrarEntrada)
             }
             _sessao.update { it.copy(veiculo = veiculo?.nomeCurto, gravandoLogs = g != null) }
@@ -525,6 +527,10 @@ class SessaoObd(
             cli.lerTelemetria(consumoPorMaf = true)
                 .catch { e -> g?.evento("Telemetria interrompida: ${e.message}", relogio()) }
                 .collect { dados -> receberAmostra(dados, g) }
+        }
+        if (g != null && config().logCompletoTrafego) {
+            // Log bruto: cada mudança de estado do Bluetooth/ELM327 fica registrada com o instante.
+            launch { cli.estado.collect { g.evento("Estado da conexão Bluetooth/ELM327: ${descreverEstado(it)}", relogio()) } }
         }
         launch { identificarVeiculo(cli, veiculo, g) }
         launch {
@@ -756,6 +762,7 @@ class SessaoObd(
         origem: OrigemSessao,
         gatilho: String?,
         inicioMs: Long,
+        logBruto: Boolean = false,
     ): GravadorLogsSessao {
         val simulado = _modo.value == ModoObd.SIMULADO
         val cabecalho = CabecalhoSessao(
@@ -769,7 +776,12 @@ class SessaoObd(
             motor = veiculo?.let { ParametrosMotor.deVeiculo(it.modelo, it.combustivel, it.calibracaoConsumo) },
             faixas = veiculo?.faixas,
         )
-        return GravadorLogsSessao(destinoLogs, cabecalho, pastaTemporaria, zona)
+        return GravadorLogsSessao(destinoLogs, cabecalho, pastaTemporaria, zona, logBruto = logBruto)
+    }
+
+    private fun descreverEstado(e: EstadoConexaoObd): String = when (e) {
+        is EstadoConexaoObd.Erro -> "Erro (${e.mensagem})"
+        else -> e.toString()
     }
 
     private fun descreverOrigem(origem: OrigemSessao, gatilho: String?): String = when (origem) {

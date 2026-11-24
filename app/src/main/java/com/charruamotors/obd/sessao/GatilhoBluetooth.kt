@@ -8,7 +8,7 @@ import java.util.Locale
  *
  * @param autoConexaoAtiva conectar sozinho ao scanner quando o Bluetooth do carro conectar
  * @param gravarLogsAutomaticos gravar `.txt` + `.csv` em toda conexão (manual ou automática)
- * @param logCompletoTrafego incluir no `.txt` todo o tráfego do polling contínuo (fase de testes: ligado)
+ * @param logCompletoTrafego log bruto detalhado no `.txt` (uso esporádico: desligado por padrão desde a v2.2.5)
  * @param gatilhoNome nome do Bluetooth do carro que dispara a sessão (padrão `Toyota SW4`)
  * @param gatilhoEndereco endereço MAC escolhido na lista de pareados; null = só pelo nome
  * @param scanner último scanner OBD2 (`OBDII`) usado no modo Bluetooth
@@ -17,8 +17,8 @@ import java.util.Locale
 data class ConfigAutoConexao(
     val autoConexaoAtiva: Boolean = true,
     val gravarLogsAutomaticos: Boolean = true,
-    /** Log completo de tráfego bruto: todo comando/resposta do polling e o valor decodificado no `.txt`. */
-    val logCompletoTrafego: Boolean = true,
+    /** Log bruto detalhado (v2.2.5, desligado por padrão): todo comando/resposta, bytes, tempos e estados no `.txt`. */
+    val logCompletoTrafego: Boolean = false,
     val gatilhoNome: String = GatilhoBluetooth.NOME_PADRAO,
     val gatilhoEndereco: String? = null,
     val scanner: DispositivoObd? = null,

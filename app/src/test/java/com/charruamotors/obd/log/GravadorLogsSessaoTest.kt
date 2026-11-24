@@ -37,8 +37,8 @@ class GravadorLogsSessaoTest {
 
     private val colunas = listOf(Pids.RPM, Pids.VELOCIDADE, Pids.PRESSAO_COLETOR).map(CatalogoTeste::pid)
 
-    private fun gravador(amostrasPorFlush: Int = 100, tmp: java.io.File = pasta.newFolder()) =
-        GravadorLogsSessao(destino, cabecalho, tmp, zona, intervaloFlushMs = 10_000, amostrasPorFlush = amostrasPorFlush)
+    private fun gravador(amostrasPorFlush: Int = 100, tmp: java.io.File = pasta.newFolder(), logBruto: Boolean = true) =
+        GravadorLogsSessao(destino, cabecalho, tmp, zona, intervaloFlushMs = 10_000, amostrasPorFlush = amostrasPorFlush, logBruto = logBruto)
 
     private fun dados(rpm: Double, velocidade: Double? = null, map: Double? = null, vararg outros: Pair<String, Double>) =
         DadosObd(
@@ -207,8 +207,8 @@ class GravadorLogsSessaoTest {
         assertTrue(txt.indexOf("RESUMO DA VIAGEM") < txt.indexOf(RelatorioSessaoTxt.TITULO_LOG_BRUTO))
         val ordem = listOf(
             "14:30:05.000  ● Sessão: Aguardando 4 s",
-            "14:30:09.100  ATZ → \"\\r\\rELM327 v1.5\\r\\r\" (812 ms)",
-            "14:30:09.900  ATRV → \"12.6V\\r\\r\" (40 ms)",
+            "14:30:09.100  TX 14:30:08.288 > ATZ < \"\\r\\rELM327 v1.5\\r\\r\" [15 B: 0D 0D 45 4C 4D 33 32 37 20 76 31 2E 35 0D 0D] (812 ms)",
+            "14:30:09.900  TX 14:30:09.860 > ATRV < \"12.6V\\r\\r\" [7 B: 31 32 2E 36 56 0D 0D] (40 ms)",
             "15:12:44.000  ● Conexão perdida: A ECU parou de responder",
         ).map { bruto.indexOf(it) }
         assertTrue("log bruto fora de ordem: $ordem\n$bruto", ordem.all { it >= 0 } && ordem == ordem.sorted())
@@ -233,7 +233,8 @@ class GravadorLogsSessaoTest {
         assertTrue(linha(txt, "Telemetria (CSV)").endsWith(": não gerado"))
         assertTrue(txt.contains("Não lidos nesta sessão."))
         assertTrue(txt.contains("Nenhuma leitura de telemetria nesta sessão."))
-        assertTrue(txt.contains("0100 → \"SEARCHING...\\rUNABLE TO CONNECT\\r\\r\" (6400 ms)"))
+        assertTrue(txt.contains("> 0100 < \"SEARCHING...\\rUNABLE TO CONNECT\\r\\r\""))
+        assertTrue(txt.contains("(6400 ms)"))
         assertTrue(txt.contains("Sessão: Tentativa 3/3 falhou"))
     }
 
@@ -253,6 +254,99 @@ class GravadorLogsSessaoTest {
         assertEquals("35 s", RelatorioSessaoTxt.duracao(35_400))
         assertEquals("42 min 39 s", RelatorioSessaoTxt.duracao(2_559_000))
         assertEquals("1 h 02 min 05 s", RelatorioSessaoTxt.duracao(3_725_000))
+    }
+
+    // ------------------------------------------------------------------ v2.2.5: mín / máx / média e log bruto
+
+    @Test
+    fun `relatorio basico traz minimo, maximo e media de todos os sensores lidos`() {
+        val g = gravador(logBruto = false)
+        g.iniciarCsv(colunas)
+        g.registrar(dados(780.0, 0.0, 98.0, Pids.TENSAO_BATERIA to 12.6), inicio + 1_000)
+        g.registrar(dados(3420.0, 95.0, 245.0, Pids.TENSAO_BATERIA to 14.3), inicio + 2_000)
+        g.registrar(dados(2100.0, 118.0, 160.0, Pids.TENSAO_BATERIA to 12.1), inicio + 3_000)
+        g.evento("ALERTA Água quente: 112 °C (≥ limite 105 °C) às 14:31:00", inicio + 2_500)
+        g.finalizar(inicio + 4_000, conectou = true, motivoFim = "Desconectado pelo usuário")
+
+        val txt = destino.terminadoEm(".txt").conteudo
+        assertTrue(txt.contains(RelatorioSessaoTxt.TITULO_SENSORES))
+        val rpm = txt.lines().single { "[010C]" in it && "mín" in it }
+        assertTrue(rpm, "mín 780" in rpm && "máx 3.420" in rpm && "média 2.100" in rpm && "(3 leituras)" in rpm)
+        val vel = txt.lines().single { "[010D]" in it && "mín" in it }
+        assertTrue(vel, "mín 0" in vel && "máx 118" in vel && "média 71" in vel)
+        // Sensor sem coluna definida (só chegou na amostra) também entra, pelo comando.
+        val bateria = txt.lines().single { "[${Pids.TENSAO_BATERIA}]" in it && "mín" in it }
+        assertTrue(bateria, "mín 12,1" in bateria && "máx 14,3" in bateria && "média 13,0" in bateria)
+        assertTrue(txt.contains("ALERTAS DA SESSÃO\n  1 alerta(s):\n    • Água quente: 112 °C"))
+        assertTrue(txt.contains(RelatorioSessaoTxt.TITULO_EVENTOS))
+        assertFalse(txt.contains(RelatorioSessaoTxt.TITULO_LOG_BRUTO))
+    }
+
+    @Test
+    fun `relatorio resume as marchas da sessao`() {
+        val g = gravador(logBruto = false)
+        g.iniciarCsv(colunas)
+        listOf(0.0, 1.0, 1.0, 2.0).forEachIndexed { i, marcha ->
+            g.registrar(dados(1500.0, 20.0, 100.0, "TOYOTA_MARCHA" to marcha), inicio + 1_000L * (i + 1))
+        }
+        g.finalizar(inicio + 5_000, conectou = true, motivoFim = "x")
+        val txt = destino.terminadoEm(".txt").conteudo
+        assertTrue(txt.contains("MARCHAS\n  N       : 1 amostras (25,0 %)\n  1ª      : 2 amostras (50,0 %)\n  2ª      : 1 amostras (25,0 %)"))
+    }
+
+    @Test
+    fun `sem o log bruto o txt guarda o handshake, eventos e comandos que falharam`() {
+        val g = gravador(logBruto = false)
+        g.registrarEntrada(EntradaRegistro.Comando(inicio + 100, "ATZ", "ELM327 v1.5", 800))
+        g.conexaoEstabelecida(InfoConexao(protocolo = "AUTO", nomeModo = "Modo 01"))
+        g.registrarEntrada(EntradaRegistro.Comando(inicio + 500, "010C", "41 0C 1A F8", 40))
+        g.registrarEntrada(EntradaRegistro.Comando(inicio + 900, "0100", null, 6_000, falha = "TIMEOUT: sem resposta"))
+        g.registrarEntrada(EntradaRegistro.Evento(inicio + 1_000, "Protocolo: AUTO"))
+        g.finalizar(inicio + 2_000, conectou = false, motivoFim = "x")
+        val txt = destino.terminadoEm(".txt").conteudo
+        assertTrue("o handshake (antes de conectar) fica", txt.contains("ATZ → \"ELM327 v1.5\" (800 ms)"))
+        assertFalse("o tráfego depois de conectar não", txt.contains("010C"))
+        assertTrue(txt.contains("0100 → TIMEOUT: sem resposta (6000 ms)"))
+        assertTrue(txt.contains("● Protocolo: AUTO"))
+        assertTrue(txt.contains("(3 linhas de log)"))
+    }
+
+    @Test
+    fun `log bruto registra tudo - ATSH, 7F, NO DATA, headers, retry, tempos e bytes`() {
+        val g = gravador(logBruto = true)
+        g.registrarEntrada(EntradaRegistro.Comando(inicio + 1_000, "ATSH7E1", "OK\r", 30))
+        g.registrarEntrada(EntradaRegistro.Comando(inicio + 1_100, "ATCRA7E9", "OK\r", 25))
+        g.registrarEntrada(EntradaRegistro.Comando(inicio + 1_300, "21D9", "7E9 03 7F 21 12\r", 150))
+        g.registrarEntrada(EntradaRegistro.Comando(inicio + 1_400, "010C", "NO DATA\r", 90))
+        g.registrarEntrada(EntradaRegistro.Evento(inicio + 1_410, "010C interrompido (STOPPED); repetindo"))
+        g.registrarEntrada(EntradaRegistro.Comando(inicio + 1_500, "010C", "7E8 04 41 0C 1A F8\r", 60))
+        g.registrarEntrada(EntradaRegistro.Comando(inicio + 7_000, "0100", null, 5_000, falha = "TIMEOUT: sem prompt"))
+        g.evento("Estado da conexão Bluetooth/ELM327: Conectado", inicio + 1_600)
+        g.finalizar(inicio + 8_000, conectou = true, motivoFim = "x")
+
+        val txt = destino.terminadoEm(".txt").conteudo
+        assertTrue(txt.contains(RelatorioSessaoTxt.TITULO_LOG_BRUTO))
+        assertTrue(txt.contains("TX 14:30:05.970 > ATSH7E1 < \"OK\\r\" [3 B: 4F 4B 0D] (30 ms)"))
+        assertTrue(txt.contains("> ATCRA7E9 <"))
+        assertTrue(txt.contains("> 21D9 < \"7E9 03 7F 21 12\\r\""))
+        assertTrue(txt.contains("> 010C < \"NO DATA\\r\""))
+        assertTrue(txt.contains("> 010C < \"7E8 04 41 0C 1A F8\\r\""))
+        assertTrue(txt.contains("STOPPED); repetindo"))
+        assertTrue(txt.contains("> 0100 < TIMEOUT: sem prompt (5000 ms)"))
+        assertTrue(txt.contains("Estado da conexão Bluetooth/ELM327: Conectado"))
+        assertTrue(txt.contains("(8 linhas de log)"))
+    }
+
+    @Test
+    fun `log bruto nao corta resposta longa`() {
+        val longa = (1..300).joinToString(" ") { "%02X".format(it % 256) } + "\r"
+        val g = gravador(logBruto = true)
+        g.registrarEntrada(EntradaRegistro.Comando(inicio + 500, "0902", longa, 400))
+        g.finalizar(inicio + 1_000, conectou = true, motivoFim = "x")
+        val txt = destino.terminadoEm(".txt").conteudo
+        assertTrue(txt.contains("[${longa.length} B: "))
+        assertTrue(txt.contains(RegistroComunicacao.hexadecimal(longa)))
+        assertTrue(txt.contains(RegistroComunicacao.visivel(longa)))
     }
 
     /** A linha do relatório cujo rótulo (preenchido com pontos) é [rotulo]. */

@@ -32,6 +32,25 @@ class IndiceLogsReais(private val arquivo: File) {
     fun entradas(veiculoId: Long): List<EntradaLogReal> =
         ler().filter { it.veiculoId == veiculoId && !OrganizadorLogs.ehSimulado(it.nome) }
 
+    /**
+     * Remove do índice os vínculos dos arquivos [nomes] (de qualquer veículo) e devolve os
+     * `veiculoId`s afetados, para o aprendizado deles ser refeito.
+     */
+    @Synchronized
+    fun remover(nomes: Collection<String>): Set<Long> {
+        if (nomes.isEmpty()) return emptySet()
+        val alvo = nomes.toSet()
+        val atuais = ler()
+        val removidas = atuais.filter { it.nome in alvo }
+        if (removidas.isEmpty()) return emptySet()
+        gravar(atuais - removidas.toSet())
+        return removidas.map { it.veiculoId }.toSet()
+    }
+
+    /** Todas as entradas do índice (de todos os veículos). */
+    @Synchronized
+    fun todas(): List<EntradaLogReal> = ler()
+
     private fun ler(): List<EntradaLogReal> {
         if (!arquivo.isFile) return emptyList()
         return try {

@@ -87,7 +87,8 @@ class PreferenciasAutoConexao(context: Context) {
         const val ARQUIVO = "auto_conexao"
         const val AUTO = "auto_conexao_ativa"
         const val LOGS = "gravar_logs_automaticos"
-        const val LOG_COMPLETO = "log_completo_trafego"
+        /** Chave nova na v2.2.5: o log bruto passou a vir desligado, mesmo para quem tinha ligado na fase de testes. */
+        const val LOG_COMPLETO = "log_bruto_v225"
         const val GATILHO_NOME = "gatilho_nome"
         const val GATILHO_ENDERECO = "gatilho_endereco"
         const val SCANNER_NOME = "scanner_nome"

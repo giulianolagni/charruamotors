@@ -1,0 +1,163 @@
+{
+  "versao": 1,
+  "_comentario": "Catálogo de veículos: liga montadora/modelo/anos a um motor (motores/<motorId>.json) e a um câmbio (cambios/<cambioId>.json). 'deteccao' reconhece o cadastro pela marca/modelo/ano; entradas 'generico' são o fallback por motorização/combustível.",
+  "veiculos": [
+    {
+      "id": "toyota_sw4_1kd",
+      "titulo": "Toyota Hilux SW4 3.0 D-4D 2013 (1KD-FTV)",
+      "montadora": "Toyota",
+      "modelo": "Hilux SW4 3.0 D-4D",
+      "anoInicio": 2005,
+      "anoFim": 2015,
+      "anoReferencia": 2013,
+      "motorId": "toyota_1kd_ftv",
+      "cambioId": "toyota_a750f",
+      "status": "validado",
+      "layoutSugerido": "padrao",
+      "deteccao": {
+        "marcas": ["toyota"],
+        "modelos": ["sw4", "hilux"],
+        "confirmacaoModelo": ["3[.,]0", "1kd"],
+        "confirmacaoAno": { "de": 2005, "ate": 2015 }
+      }
+    },
+    {
+      "id": "chevrolet_cruze_14t",
+      "titulo": "Chevrolet Cruze 1.4 Turbo Flex 2018 (LE2)",
+      "montadora": "Chevrolet",
+      "modelo": "Cruze 1.4 Turbo Flex",
+      "anoInicio": 2017,
+      "anoFim": 2023,
+      "anoReferencia": 2018,
+      "motorId": "gm_le2_14t",
+      "cambioId": "gm_6t35",
+      "status": "base",
+      "layoutSugerido": "turbo_flex",
+      "deteccao": {
+        "marcas": ["chevrolet", "chevy", "gm", "general motors"],
+        "modelos": ["cruze"],
+        "confirmacaoModelo": ["1[.,]4", "le2", "turbo"],
+        "confirmacaoAno": { "de": 2017, "ate": null }
+      }
+    },
+    {
+      "id": "chevrolet_onix_tracker_turbo",
+      "titulo": "Chevrolet Onix/Tracker Turbo",
+      "montadora": "Chevrolet",
+      "modelo": "Onix 1.0 Turbo",
+      "anoInicio": 2020,
+      "anoFim": null,
+      "anoReferencia": 2022,
+      "motorId": "generico_flex_turbo",
+      "cambioId": "gm_6t35",
+      "status": "base",
+      "layoutSugerido": "turbo_flex",
+      "deteccao": {
+        "marcas": ["chevrolet", "chevy", "gm", "general motors"],
+        "modelos": ["onix", "tracker"],
+        "confirmacaoModelo": ["turbo", "1[.,][02] ?t\\b"],
+        "confirmacaoAno": null
+      }
+    },
+    {
+      "id": "vw_tsi",
+      "titulo": "Volkswagen Polo/Virtus/T-Cross/Nivus TSI",
+      "montadora": "Volkswagen",
+      "modelo": "Polo 1.0 TSI",
+      "anoInicio": 2018,
+      "anoFim": null,
+      "anoReferencia": 2022,
+      "motorId": "vw_ea211_tsi",
+      "cambioId": "aisin_6m",
+      "status": "base",
+      "layoutSugerido": "turbo_flex",
+      "deteccao": {
+        "marcas": ["volkswagen", "vw", "volks"],
+        "modelos": ["polo", "virtus", "t-cross", "tcross", "t cross", "nivus"],
+        "confirmacaoModelo": ["tsi", "turbo"],
+        "confirmacaoAno": null
+      }
+    },
+    {
+      "id": "fiat_t200",
+      "titulo": "Fiat Pulse/Fastback T200",
+      "montadora": "Fiat",
+      "modelo": "Pulse T200",
+      "anoInicio": 2022,
+      "anoFim": null,
+      "anoReferencia": 2023,
+      "motorId": "fiat_firefly_t200",
+      "cambioId": "cvt",
+      "status": "base",
+      "layoutSugerido": "turbo_flex",
+      "deteccao": {
+        "marcas": ["fiat"],
+        "modelos": ["pulse", "fastback"],
+        "confirmacaoModelo": ["t200", "turbo", "1[.,]0 ?t\\b"],
+        "confirmacaoAno": null
+      }
+    },
+    {
+      "id": "honda_l15",
+      "titulo": "Honda Civic/HR-V/City",
+      "montadora": "Honda",
+      "modelo": "City 1.5",
+      "anoInicio": 2015,
+      "anoFim": null,
+      "anoReferencia": 2022,
+      "motorId": "honda_l15_aspirado",
+      "cambioId": "cvt",
+      "status": "base",
+      "layoutSugerido": "padrao",
+      "deteccao": {
+        "marcas": ["honda"],
+        "modelos": ["civic", "hr-v", "hrv", "hr v", "city"],
+        "excluirModelo": ["turbo", "touring"],
+        "confirmacaoModelo": [],
+        "confirmacaoAno": null
+      }
+    },
+    {
+      "id": "generico_flex_aspirado",
+      "titulo": "Genérico · Flex Aspirado",
+      "montadora": "Genérico",
+      "modelo": "Flex Aspirado",
+      "anoInicio": 2003,
+      "anoFim": null,
+      "anoReferencia": null,
+      "motorId": "generico_flex_aspirado",
+      "cambioId": "manual",
+      "status": "base",
+      "layoutSugerido": "padrao",
+      "generico": true
+    },
+    {
+      "id": "generico_flex_turbo",
+      "titulo": "Genérico · Flex Turbo",
+      "montadora": "Genérico",
+      "modelo": "Flex Turbo",
+      "anoInicio": 2003,
+      "anoFim": null,
+      "anoReferencia": null,
+      "motorId": "generico_flex_turbo",
+      "cambioId": "manual",
+      "status": "base",
+      "layoutSugerido": "turbo_flex",
+      "generico": true
+    },
+    {
+      "id": "generico_diesel_cr",
+      "titulo": "Genérico · Diesel Common Rail",
+      "montadora": "Genérico",
+      "modelo": "Diesel Common Rail",
+      "anoInicio": 2003,
+      "anoFim": null,
+      "anoReferencia": null,
+      "motorId": "generico_diesel_cr",
+      "cambioId": "manual",
+      "status": "base",
+      "layoutSugerido": "padrao",
+      "generico": true
+    }
+  ]
+}

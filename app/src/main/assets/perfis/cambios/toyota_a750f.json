@@ -1,0 +1,36 @@
+{
+  "id": "toyota_a750f",
+  "status": "validado",
+  "nome": "Toyota A750F (automático de 5 marchas)",
+  "tipo": "automatico",
+  "cabecalhos": ["7E1"],
+  "servico": "21",
+  "pidsAtf": ["TOYOTA_ATF_CAMBIO"],
+  "mapaAlavanca": {
+    "chave": "TOYOTA_ALAVANCA",
+    "cabecalho": "7E1",
+    "comando": "21D9",
+    "observacao": "Bytes C e D da resposta 61 D9 (log real da SW4 2013). Qualquer outro par diferente de zero vira M.",
+    "posicoes": [
+      { "rotulo": "P/N", "bytesCD": "00 00" },
+      { "rotulo": "R", "bytesCD": "04 00" },
+      { "rotulo": "D", "bytesCD": "00 04" },
+      { "rotulo": "4", "bytesCD": "00 06" },
+      { "rotulo": "3", "bytesCD": "00 01" },
+      { "rotulo": "2", "bytesCD": "02 00" },
+      { "rotulo": "L", "bytesCD": "03 00" }
+    ]
+  },
+  "limiteAtfC": 105,
+  "observacao": "O 7E1 · 2130 devolve 0xFF fixo mesmo andando: a marcha 1ª–5ª é estimada pela razão rpm / velocidade (km/h).",
+  "faixas": [
+    { "parametro": "TEMP_ATF", "min": 60, "max": 105 }
+  ],
+  "relacoes": [
+    { "marcha": 1, "razaoMinima": 85 },
+    { "marcha": 2, "razaoMinima": 55 },
+    { "marcha": 3, "razaoMinima": 36 },
+    { "marcha": 4, "razaoMinima": 26 },
+    { "marcha": 5, "razaoMinima": 0 }
+  ]
+}

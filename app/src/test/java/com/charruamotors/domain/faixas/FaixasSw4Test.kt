@@ -69,7 +69,8 @@ class FaixasSw4Test {
         val gol = Veiculo(marca = "VW", modelo = "Gol 1.6", ano = 2015, placa = "ABC1234", kmAtual = 0,
             tipoCombustivel = TipoCombustivel.FLEX, tempMaxAguaC = 102, tensaoMinAlternadorV = 13.0)
         val f = FaixasVeiculo.paraVeiculo(gol)
-        assertEquals(FaixasVeiculo.PERFIL_GENERICO, f.perfil)
+        // v2.2: sem perfil exato, cai no genérico do catálogo pela motorização (Flex Aspirado), com os limites do cadastro.
+        assertEquals("Genérico · Flex Aspirado (limites do cadastro)", f.perfil)
         assertEquals(102.0, f[ParametroFaixa.TEMP_AGUA]!!.max!!, 0.0)
         assertEquals(13.0, f[ParametroFaixa.TENSAO]!!.min!!, 0.0)
         assertTrue(f[ParametroFaixa.STFT] != null)

@@ -1,0 +1,23 @@
+{
+  "id": "aisin_6m",
+  "status": "base",
+  "nome": "Aisin automático de 6 marchas (VW/Fiat/Jeep/Toyota)",
+  "tipo": "automatico",
+  "cabecalhos": ["7E1"],
+  "servico": null,
+  "pidsAtf": [],
+  "mapaAlavanca": null,
+  "limiteAtfC": 105,
+  "observacao": "Perfil base (sem validação em carro): razões calculadas para pneu ~1,9 m e diferencial ~3,5. O serviço do TCM varia por montadora.",
+  "faixas": [
+    { "parametro": "TEMP_ATF", "min": 60, "max": 105 }
+  ],
+  "relacoes": [
+    { "marcha": 1, "razaoMinima": 103 },
+    { "marcha": 2, "razaoMinima": 61 },
+    { "marcha": 3, "razaoMinima": 41 },
+    { "marcha": 4, "razaoMinima": 30 },
+    { "marcha": 5, "razaoMinima": 23 },
+    { "marcha": 6, "razaoMinima": 0 }
+  ]
+}

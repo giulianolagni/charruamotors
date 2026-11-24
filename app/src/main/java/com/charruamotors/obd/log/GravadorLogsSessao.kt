@@ -1,5 +1,6 @@
 package com.charruamotors.obd.log
 
+import com.charruamotors.domain.perfis.VinDecodificado
 import com.charruamotors.obd.InfoConexao
 import com.charruamotors.obd.ValoresSensores
 import com.charruamotors.obd.pid.DefinicaoPid
@@ -67,6 +68,9 @@ class GravadorLogsSessao(
     private var tensaoInicial: Double? = null
     private var conexao: InfoConexao? = null
     private var dtcs: DtcsSessao? = null
+    private var vin: String? = null
+    private var vinDecodificado: VinDecodificado? = null
+    private var sugestaoPerfil: String? = null
     private var finalizado = false
 
     /** Amostras já gravadas no CSV (as da fila ainda não contam). */
@@ -97,6 +101,13 @@ class GravadorLogsSessao(
     fun conexaoEstabelecida(info: InfoConexao): Unit = synchronized(trava) { conexao = info }
 
     fun registrarDtcs(dtcs: DtcsSessao): Unit = synchronized(trava) { this.dtcs = dtcs }
+
+    /** VIN lido (`0902`), o que o WMI/10º caractere revelam e a sugestão de perfil, para o cabeçalho do relatório. */
+    fun registrarVin(vin: String?, decodificado: VinDecodificado?, sugestao: String?): Unit = synchronized(trava) {
+        this.vin = vin
+        this.vinDecodificado = decodificado
+        this.sugestaoPerfil = sugestao
+    }
 
     /**
      * Abre o CSV com as [colunas] definitivas da sessão e grava a fila acumulada até aqui.
@@ -224,6 +235,9 @@ class GravadorLogsSessao(
             arquivoCsv = nomeCsv,
             amostrasCsv = amostrasCsv,
             avisoCsv = avisoCsv,
+            vin = vin,
+            vinDecodificado = vinDecodificado,
+            sugestaoPerfil = sugestaoPerfil,
         )
         var txt: ArquivoLogAberto? = null
         try {

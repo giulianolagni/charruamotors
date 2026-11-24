@@ -77,6 +77,7 @@ import com.charruamotors.ui.util.ArquivoExportado
 import com.charruamotors.ui.util.ExportadorCsv
 import com.charruamotors.ui.util.PermissoesBluetooth
 import com.charruamotors.ui.util.comoNumero
+import com.charruamotors.obd.aprendizado.FonteSimulacao
 import com.charruamotors.ui.util.definirTexto
 import com.charruamotors.ui.util.rotulo
 import com.charruamotors.ui.componentes.PontoTelemetria
@@ -499,6 +500,7 @@ class ObdFragment : Fragment() {
                 launch { app.preferenciasApp.config.collect { aplicarConversor(it.conversor) } }
                 launch { app.preferenciasPainel.config.collect { aplicarConfigPainel(it) } }
                 launch { viewModel.estadoSessao.collect { mostrarEstadoSessao(it) } }
+                launch { app.sessaoObd.fonteSimulacao.collect { mostrarFonteSimulacao(it) } }
                 launch { app.sessaoObd.cambioAtivo.collect { configurarMostradores() } }
                 launch {
                     viewModel.simularFalha.collect { ativa ->
@@ -584,6 +586,16 @@ class ObdFragment : Fragment() {
             gauge.definirValor(m.sensor.ler(dados, consumoKmL)?.let { m.sensor.exibir(it, conversor).valor })
         }
         atualizarBotoes()
+    }
+
+    /** Modo Simulado: indicador discreto de onde vêm os dados (logs reais deste veículo ou simulação sintética). */
+    private fun mostrarFonteSimulacao(fonte: FonteSimulacao?) = with(binding.textoFonteSimulacao) {
+        isVisible = fonte != null
+        text = when (fonte) {
+            is FonteSimulacao.LogsReais -> resources.getQuantityString(R.plurals.simulado_fonte_logs_reais, fonte.quantidade, fonte.quantidade)
+            FonteSimulacao.Sintetica -> getString(R.string.simulado_fonte_sintetica)
+            null -> ""
+        }
     }
 
     /** Aviso discreto do perfil escolhido pela sessão (VDS do VIN / sondagem da ECU), com Manter / Ignorar. */

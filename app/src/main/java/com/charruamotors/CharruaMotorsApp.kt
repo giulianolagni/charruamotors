@@ -28,6 +28,8 @@ import com.charruamotors.obd.Elm327BluetoothClient
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
 import com.charruamotors.obd.ObdClientFake
+import com.charruamotors.obd.aprendizado.AprendizLogsVeiculo
+import com.charruamotors.obd.aprendizado.IndiceLogsReais
 import com.charruamotors.obd.dtc.CatalogoDtc
 import com.charruamotors.obd.pid.CatalogoCascata
 import com.charruamotors.obd.pid.CatalogoEstendido
@@ -283,6 +285,16 @@ class CharruaMotorsApp : Application() {
         }
     }
 
+    /** Quais CSVs reais pertencem a qual `veiculoId` (v2.2.4); sessões simuladas nunca entram. */
+    val indiceLogsReais: IndiceLogsReais by lazy { IndiceLogsReais(File(filesDir, "aprendizado/indice_logs_reais.json")) }
+
+    /** Aprendizado por veículo dos logs reais (`modelo_aprendido_<veiculoId>.json`), usado no Modo Simulado. */
+    val aprendizLogs: AprendizLogsVeiculo by lazy {
+        AprendizLogsVeiculo(File(filesDir, "aprendizado"), indiceLogsReais) { entrada ->
+            runCatching { contentResolver.openInputStream(android.net.Uri.parse(entrada.uri))?.bufferedReader(Charsets.UTF_8) }.getOrNull()
+        }
+    }
+
     val sessaoObd: SessaoObd by lazy {
         SessaoObd(
             clientePorModo = ::obdClientDe,
@@ -302,6 +314,8 @@ class CharruaMotorsApp : Application() {
             },
             gpsAtivo = { preferenciasApp.config.value.velocidadeGps },
             velocidadeGps = { velocidadeGps.velocidadeKmh() },
+            modeloAprendidoDe = { id -> aprendizLogs.atualizar(id) },
+            aoSalvarLogReal = { id, csv -> if (indiceLogsReais.registrar(id, csv.nome, csv.uri, simulado = false)) aprendizLogs.atualizar(id) },
         ).also { sessao ->
             val escopo = escopoDoApp()
             escopo.launch {

@@ -28,8 +28,12 @@ import com.charruamotors.obd.DtcLido
 import com.charruamotors.obd.InfoConexao
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
+import com.charruamotors.obd.ObdClientFake
+import com.charruamotors.obd.aprendizado.FonteSimulacao
+import com.charruamotors.obd.aprendizado.ModeloAprendido
 import com.charruamotors.obd.ResultadoPerfil
 import com.charruamotors.obd.dtc.CatalogoDtc
+import com.charruamotors.obd.log.ArquivoLogSalvo
 import com.charruamotors.obd.log.CabecalhoSessao
 import com.charruamotors.obd.log.DestinoLogs
 import com.charruamotors.obd.log.DtcsSessao
@@ -204,6 +208,13 @@ class SessaoObd(
     private val gpsAtivo: () -> Boolean = { false },
     /** Velocidade GPS atual em km/h, já filtrada (null = sem fix confiável: a chave fica ausente). */
     private val velocidadeGps: () -> Double? = { null },
+    /**
+     * v2.2.4: modelo aprendido dos CSVs reais **deste** `veiculoId` (null = sem logs reais), usado só
+     * no Modo Simulado. Roda na [io]; nunca recebe nem devolve dados de outro veículo.
+     */
+    private val modeloAprendidoDe: suspend (Long) -> ModeloAprendido? = { null },
+    /** v2.2.4: CSV de uma sessão **real** (nunca simulada) fechado para o `veiculoId`; alimenta o aprendizado. */
+    private val aoSalvarLogReal: suspend (veiculoId: Long, csv: ArquivoLogSalvo) -> Unit = { _, _ -> },
 ) {
     private val _modo = MutableStateFlow(modoInicial)
     val modo: StateFlow<ModoObd> = _modo.asStateFlow()
@@ -241,6 +252,11 @@ class SessaoObd(
     private val _vinLido = MutableStateFlow(false)
     val vinLido: StateFlow<Boolean> = _vinLido.asStateFlow()
 
+    private val _fonteSimulacao = MutableStateFlow<FonteSimulacao?>(null)
+
+    /** Modo Simulado conectado: logs reais do veículo ou simulador sintético; null = fora do Modo Simulado/desconectado. */
+    val fonteSimulacao: StateFlow<FonteSimulacao?> = _fonteSimulacao.asStateFlow()
+
     private val _sessao = MutableStateFlow(EstadoSessao())
     val estadoSessao: StateFlow<EstadoSessao> = _sessao.asStateFlow()
 
@@ -252,6 +268,10 @@ class SessaoObd(
     @Volatile private var gravador: GravadorLogsSessao? = null
     @Volatile private var motivoPedido: String? = null
     @Volatile private var marcaAtual: String? = null
+
+    /** Veículo e modo da sessão em curso, para o aprendizado de logs reais no encerramento. */
+    @Volatile private var veiculoIdSessao: Long = 0
+    @Volatile private var sessaoSimulada: Boolean = false
 
     /** Combustível do veículo da sessão (Auto Flex por padrão): decide a estequiometria da A/F real. */
     @Volatile private var combustivelAtual: TipoCombustivel? = null
@@ -431,6 +451,8 @@ class SessaoObd(
         tentativas: Int,
     ) {
         val inicioMs = relogio()
+        veiculoIdSessao = veiculoId
+        sessaoSimulada = _modo.value == ModoObd.SIMULADO
         var conectou = false
         var motivoFim = "Sessão encerrada"
         var g: GravadorLogsSessao? = null
@@ -442,6 +464,11 @@ class SessaoObd(
             combustivelAtual = veiculo?.combustivel
             // A750F (alavanca no 7E1) e GM têm estimador próprio; os demais automáticos usam as razões do perfil.
             estimadorPerfil = veiculo?.cambio?.takeIf { it.estimaMarcha && it.mapaAlavanca == null }?.let(::EstimadorMarchaPerfil)
+            if (sessaoSimulada && cli is ObdClientFake) {
+                // Só o modelo deste veículo; sem veículo ou sem logs reais, segue o simulador sintético.
+                val modelo = if (veiculoId > 0) runCatching { withContext(io) { modeloAprendidoDe(veiculoId) } }.getOrNull() else null
+                cli.definirModeloAprendido(modelo?.takeIf { it.veiculoId == veiculoId })
+            }
             if (config().gravarLogsAutomaticos) {
                 g = withContext(io) { criarGravador(dispositivo, veiculo, origem, gatilho, inicioMs) }
                 gravador = g
@@ -473,6 +500,17 @@ class SessaoObd(
                 return
             }
             _sessao.update { it.copy(fase = FaseSessao.Conectada) }
+            if (sessaoSimulada && cli is ObdClientFake) {
+                val fonte = cli.fonteSimulacao.value
+                _fonteSimulacao.value = fonte
+                g?.evento(
+                    when (fonte) {
+                        is FonteSimulacao.LogsReais -> "Modo Simulado baseado em ${fonte.quantidade} log(s) real(is) deste veículo"
+                        FonteSimulacao.Sintetica -> "Modo Simulado sintético (sem logs reais deste veículo)"
+                    },
+                    relogio(),
+                )
+            }
             g?.conexaoEstabelecida(cli.infoConexao.value)
             motivoFim = acompanharConexao(cli, veiculo, g)
         } finally {
@@ -699,7 +737,13 @@ class SessaoObd(
             cli.definirLogCompleto(false)
             val logs = withContext(io) { g.finalizar(relogio(), conectou, motivo) }
             _eventos.tryEmit(EventoSessao.LogsSalvos(logs))
+            // Só sessão real (nunca a simulada) alimenta o aprendizado do veículo.
+            val csv = logs.csv
+            if (conectou && !sessaoSimulada && veiculoIdSessao > 0 && csv != null) {
+                runCatching { withContext(io) { aoSalvarLogReal(veiculoIdSessao, csv) } }
+            }
         }
+        _fonteSimulacao.value = null
         gravador = null
         clienteDaSessao = null
         sessaoJob = null

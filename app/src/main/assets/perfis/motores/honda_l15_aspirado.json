@@ -1,0 +1,23 @@
+{
+  "id": "honda_l15_aspirado",
+  "status": "base",
+  "nome": "Honda L15 1.5 i-VTEC Flex (aspirado)",
+  "codigo": "L15",
+  "combustivel": "FLEX",
+  "turbo": false,
+  "protocolo": "ATSP6",
+  "descricaoProtocolo": "ISO 15765-4 CAN 11 bits / 500 kbps",
+  "cabecalho": "7E0",
+  "servicoExtra": "22",
+  "pidsOpcionais": [],
+  "limites": { "aguaMaxC": 100, "tensaoMinV": 12.6 },
+  "observacao": "Perfil base (sem validação em carro): Flex aspirado, MAP sempre abaixo da atmosfera.",
+  "faixas": [
+    { "parametro": "RPM_MAXIMO", "min": null, "max": 6500 },
+    { "parametro": "TEMP_AGUA", "min": 82, "max": 100 },
+    { "parametro": "TENSAO", "min": 12.6, "max": 14.8 },
+    { "parametro": "MAP_TURBO", "min": 25, "max": 105 },
+    { "parametro": "STFT", "min": -10, "max": 10 },
+    { "parametro": "LTFT", "min": -10, "max": 10 }
+  ]
+}

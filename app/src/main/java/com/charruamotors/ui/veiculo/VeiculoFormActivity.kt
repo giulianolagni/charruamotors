@@ -3,12 +3,17 @@ package com.charruamotors.ui.veiculo
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.Lifecycle
@@ -17,10 +22,13 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.R
 import com.charruamotors.databinding.ActivityVeiculoFormBinding
 import com.charruamotors.domain.calculo.LimitesProtecao
-import com.charruamotors.domain.faixas.FaixasVeiculo
+import com.charruamotors.domain.faixas.NivelPerfil
 import com.charruamotors.domain.faixas.PresetVeiculo
+import com.charruamotors.domain.faixas.ResolucaoPerfil
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.Veiculo
+import com.charruamotors.domain.perfis.StatusPerfil
+import com.charruamotors.domain.perfis.TextoPerfis
 import com.charruamotors.domain.validacao.CampoVeiculo
 import com.charruamotors.domain.validacao.ErroValidacao
 import com.charruamotors.domain.validacao.FormularioVeiculo
@@ -124,20 +132,53 @@ class VeiculoFormActivity : AppCompatActivity() {
         atualizarFicha()
     }
 
-    /** "Aplicar preset": preenche marca, modelo, ano, combustível e os limites de alerta do perfil. */
+    /**
+     * "Presets": os modelos de `assets/perfis/veiculos.json`, cada um com um selo discreto
+     * (`Validado` = conferido em carro; `Base` = valores típicos) e a faixa de anos.
+     */
     private fun escolherPreset() {
         val presets = PresetVeiculo.entries
+        if (presets.isEmpty()) {
+            Toast.makeText(this, R.string.veiculo_preset_indisponivel, Toast.LENGTH_LONG).show()
+            return
+        }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.veiculo_preset_titulo)
-            .setItems(presets.map { it.titulo }.toTypedArray()) { _, i -> aplicarPreset(presets[i]) }
+            .setItems(presets.map(::itemPreset).toTypedArray()) { _, i -> aplicarPreset(presets[i]) }
             .setNegativeButton(R.string.botao_cancelar, null)
             .show()
     }
 
+    /** `Toyota Hilux SW4 ... (1KD-FTV)  VALIDADO · 2005–2015`, com o selo menor e colorido. */
+    private fun itemPreset(p: PresetVeiculo): CharSequence {
+        val validado = p.status == StatusPerfil.VALIDADO
+        val selo = getString(if (validado) R.string.veiculo_preset_selo_validado else R.string.veiculo_preset_selo_base)
+        val anos = p.perfil.faixaAnos.takeIf { it.isNotEmpty() && !p.generico }?.let { " · $it" }.orEmpty()
+        val cor = ContextCompat.getColor(this, if (validado) R.color.status_ok else R.color.texto_secundario)
+        return SpannableStringBuilder(p.titulo).append("  ").apply {
+            val inicio = length
+            append(selo).append(anos)
+            setSpan(RelativeSizeSpan(0.78f), inicio, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(ForegroundColorSpan(cor), inicio, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
+    /**
+     * Preenche marca, modelo, ano, combustível e os limites de alerta do perfil. Nos genéricos só o
+     * combustível e os limites (marca/modelo/ano ficam os digitados); no Flex Turbo genérico o
+     * modelo ganha "Turbo" se ainda não indicar, para a cascata reconhecer a motorização depois.
+     */
     private fun aplicarPreset(p: PresetVeiculo) = with(binding) {
-        campoMarca.setText(p.marca)
-        campoModelo.setText(p.modelo)
-        campoAno.setText(p.ano.toString())
+        if (p.generico) {
+            val modelo = campoModelo.text?.toString().orEmpty().trim()
+            if (p.perfilMotor.turbo && p.combustivel != TipoCombustivel.DIESEL && !TextoPerfis.indicaTurbo(modelo)) {
+                campoModelo.setText(if (modelo.isEmpty()) p.modelo else "$modelo Turbo")
+            }
+        } else {
+            campoMarca.setText(p.marca)
+            campoModelo.setText(p.modelo)
+            p.ano?.let { campoAno.setText(it.toString()) }
+        }
         campoCombustivel.setText(p.combustivel.rotulo(this@VeiculoFormActivity), false)
         campoLimiteAgua.setText(p.limiteAguaC.toString())
         campoLimiteAtf.setText(p.limiteAtfC.toString())
@@ -146,26 +187,40 @@ class VeiculoFormActivity : AppCompatActivity() {
         atualizarFicha()
     }
 
-    /** Ficha técnica ao vivo: o preset reconhecido pelo que está digitado (ou as faixas genéricas). */
+    /**
+     * Ficha técnica ao vivo pela cascata de perfis: o perfil exato reconhecido pelo que está
+     * digitado, senão o genérico pela motorização (com os limites acima), senão o OBD2 padrão.
+     */
     private fun atualizarFicha() = with(binding) {
         val ano = campoAno.text?.toString()?.trim()?.toIntOrNull()
-        val preset = PresetVeiculo.detectar(campoMarca.text?.toString(), campoModelo.text?.toString(), ano)
-        val faixas = preset?.faixas ?: run {
-            val indice = rotulosCombustivel.indexOf(campoCombustivel.text.toString())
-            val limites = LimitesProtecao(
-                aguaMaxC = ValidadorVeiculo.numero(campoLimiteAgua.text.toString()) ?: Veiculo.LIMITE_AGUA_PADRAO_C.toDouble(),
-                atfMaxC = ValidadorVeiculo.numero(campoLimiteAtf.text.toString()) ?: Veiculo.LIMITE_ATF_PADRAO_C.toDouble(),
-                tensaoMinV = ValidadorVeiculo.numero(campoLimiteTensao.text.toString()) ?: Veiculo.LIMITE_TENSAO_PADRAO_V,
-            )
-            // Limites ainda inválidos enquanto o usuário digita: a ficha mostra os padrões.
-            runCatching { FaixasVeiculo.genericas(TipoCombustivel.entries.getOrNull(indice), limites) }
-                .getOrElse { FaixasVeiculo.genericas(TipoCombustivel.entries.getOrNull(indice)) }
+        val indice = rotulosCombustivel.indexOf(campoCombustivel.text.toString())
+        val combustivel = TipoCombustivel.entries.getOrNull(indice)
+        val limites = LimitesProtecao(
+            aguaMaxC = ValidadorVeiculo.numero(campoLimiteAgua.text.toString()) ?: Veiculo.LIMITE_AGUA_PADRAO_C.toDouble(),
+            atfMaxC = ValidadorVeiculo.numero(campoLimiteAtf.text.toString()) ?: Veiculo.LIMITE_ATF_PADRAO_C.toDouble(),
+            tensaoMinV = ValidadorVeiculo.numero(campoLimiteTensao.text.toString()) ?: Veiculo.LIMITE_TENSAO_PADRAO_V,
+        )
+        val marca = campoMarca.text?.toString()
+        val modelo = campoModelo.text?.toString()
+        // Limites ainda inválidos enquanto o usuário digita: a ficha mostra os padrões.
+        val r = runCatching { ResolucaoPerfil.resolver(marca, modelo, ano, combustivel, limites) }
+            .getOrElse { ResolucaoPerfil.resolver(marca, modelo, ano, combustivel) }
+        val preset = r.preset
+        textoPerfilFicha.text = when (r.nivel) {
+            NivelPerfil.EXATO -> "${preset?.titulo} · ${preset?.status?.rotulo}"
+            NivelPerfil.GENERICO -> getString(R.string.veiculo_faixas_generico_perfil, preset?.titulo.orEmpty())
+            NivelPerfil.OBD2_PADRAO -> getString(R.string.veiculo_faixas_generico)
         }
-        textoPerfilFicha.text = preset?.titulo ?: getString(R.string.veiculo_faixas_generico)
-        textoRedeFicha.text = preset?.linhasRede?.joinToString(QUEBRA).orEmpty()
-        textoRedeFicha.isVisible = preset != null
-        textoFaixasFicha.text = faixas.linhasFicha().joinToString(QUEBRA) { "• $it" }
+        val rede = preset?.takeIf { r.nivel == NivelPerfil.EXATO }?.let { p ->
+            p.linhasRede + getString(R.string.veiculo_ficha_layout, rotuloLayout(p.layoutSugerido))
+        }.orEmpty()
+        textoRedeFicha.text = rede.joinToString(QUEBRA)
+        textoRedeFicha.isVisible = rede.isNotEmpty()
+        textoFaixasFicha.text = r.faixas.linhasFicha().joinToString(QUEBRA) { "• $it" }
     }
+
+    private fun rotuloLayout(id: String): String =
+        getString(if (id == LAYOUT_TURBO_FLEX) R.string.veiculo_layout_turbo_flex else R.string.veiculo_layout_padrao)
 
     private fun preencher(veiculo: Veiculo) = with(binding) {
         campoMarca.setText(veiculo.marca)
@@ -237,6 +292,7 @@ class VeiculoFormActivity : AppCompatActivity() {
         const val EXTRA_VEICULO_ID = "extra_veiculo_id"
         private val LOCALE_BR = java.util.Locale.forLanguageTag("pt-BR")
         private const val QUEBRA = "\n"
+        private const val LAYOUT_TURBO_FLEX = "turbo_flex"
 
         /** Cria o Intent de abertura; passe o id para editar ou null para cadastrar. */
         fun intent(context: Context, veiculoId: Long? = null): Intent =

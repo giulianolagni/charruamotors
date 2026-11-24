@@ -8,6 +8,7 @@ import com.charruamotors.domain.calculo.TelemetriaCalculada
 import com.charruamotors.domain.faixas.FaixaEsperada
 import com.charruamotors.domain.faixas.FaixasVeiculo
 import com.charruamotors.domain.faixas.SituacaoFaixa
+import com.charruamotors.domain.perfis.VinDecodificado
 import com.charruamotors.obd.DtcLido
 import com.charruamotors.obd.ValoresSensores
 import com.charruamotors.obd.pid.Pids
@@ -164,6 +165,12 @@ data class ResumoSessao(
     val amostrasCsv: Int,
     /** Por que o CSV não saiu (ou saiu incompleto), se for o caso. */
     val avisoCsv: String?,
+    /** VIN lido pelo `0902` (null = não lido / não suportado). */
+    val vin: String? = null,
+    /** Montadora pelo WMI e ano-modelo pelo 10º caractere. */
+    val vinDecodificado: VinDecodificado? = null,
+    /** Sugestão de perfil do catálogo quando o veículo cadastrado está num perfil genérico. */
+    val sugestaoPerfil: String? = null,
 )
 
 /**
@@ -208,6 +215,15 @@ object RelatorioSessaoTxt {
         campo("Modo", if (c.simulado) "SIMULADO" else "REAL")
         campo("Veículo", c.veiculo ?: "não vinculado")
         campo("Placa", c.placa ?: "—")
+        if (r.conectou) {
+            campo("VIN (0902)", r.vin ?: "não lido / não suportado")
+            r.vinDecodificado?.let { d ->
+                campo("Montadora (VIN)", d.montadora?.let { "$it (WMI ${d.wmi}${d.origem?.let { o -> ", $o" }.orEmpty()})" } ?: "desconhecida (WMI ${d.wmi})")
+                campo("Ano-modelo (VIN)", d.anoModelo?.toString() ?: "—")
+            }
+        }
+        c.faixas?.perfil?.let { campo("Perfil de faixas", it) }
+        r.sugestaoPerfil?.let { campo("Sugestão de perfil", it) }
         campo("Modo de início", c.modoInicio)
         campo("Scanner", c.scanner ?: "—")
         campo("Início", dataHora(c.inicioMs, zona))

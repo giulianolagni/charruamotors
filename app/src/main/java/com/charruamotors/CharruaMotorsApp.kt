@@ -20,6 +20,8 @@ import com.charruamotors.direcao.desempenho.RecordesDesempenho
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
 import com.charruamotors.domain.calculo.CentralAlertas
 import com.charruamotors.domain.calculo.TipoAlertaProtecao
+import com.charruamotors.domain.perfis.CarregadorPerfis
+import com.charruamotors.domain.perfis.FontePerfis
 import com.charruamotors.ui.util.SomAlerta
 import com.charruamotors.direcao.painel.PreferenciasPainel
 import com.charruamotors.obd.Elm327BluetoothClient
@@ -63,6 +65,8 @@ class CharruaMotorsApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // v2.2: catálogo modular de perfis (assets/perfis/: veículos → motor + câmbio), lido sob demanda.
+        CarregadorPerfis.instalar(FontePerfis.deStreams(assets::open))
         // Tema escolhido nas Configurações (Seguir sistema / Claro / Escuro), antes da 1ª Activity.
         AppCompatDelegate.setDefaultNightMode(preferenciasApp.tema.modoNoturno)
         registerActivityLifecycleCallbacks(rastreadorPrimeiroPlano)

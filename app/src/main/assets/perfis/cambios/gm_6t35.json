@@ -1,0 +1,23 @@
+{
+  "id": "gm_6t35",
+  "status": "base",
+  "nome": "GM 6T35/6T40 (automático de 6 marchas)",
+  "tipo": "automatico",
+  "cabecalhos": ["7E1", "7E2"],
+  "servico": "22",
+  "pidsAtf": ["GM_ATF", "GM_ATF_7E2"],
+  "mapaAlavanca": null,
+  "limiteAtfC": 105,
+  "observacao": "ATF por UDS 22 1940 no TCM 7E1 (alternativa no 7E2). Sem PID de marcha: 1ª–6ª pela razão rpm / velocidade (km/h).",
+  "faixas": [
+    { "parametro": "TEMP_ATF", "min": 60, "max": 105 }
+  ],
+  "relacoes": [
+    { "marcha": 1, "razaoMinima": 115 },
+    { "marcha": 2, "razaoMinima": 72 },
+    { "marcha": 3, "razaoMinima": 49 },
+    { "marcha": 4, "razaoMinima": 36 },
+    { "marcha": 5, "razaoMinima": 27 },
+    { "marcha": 6, "razaoMinima": 0 }
+  ]
+}

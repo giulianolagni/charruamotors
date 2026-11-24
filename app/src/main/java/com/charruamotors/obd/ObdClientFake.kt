@@ -48,7 +48,8 @@ class ObdClientFake(
     codigosIniciais: List<String> = listOf("P0300", "P0171", "P0420"),
     codigosPendentesIniciais: List<String> = listOf("P0133"),
     private val codigosPermanentes: List<String> = listOf("P0420"),
-    private val vin: String = "9BWZZZ377VT004251",
+    /** VIN fixo; null = o do carro simulado (Cruze `8AG…J…` 2018, Toyota `8AJ…D…` 2013, demais o de teste VW). */
+    private val vin: String? = null,
     private val catalogoEstendido: CatalogoEstendido = CatalogoEstendido.VAZIO,
     private val latenciaComandoMs: Long = 35,
     private val relogioMs: () -> Long = { System.nanoTime() / 1_000_000 },
@@ -116,6 +117,9 @@ class ObdClientFake(
     @Volatile
     var simularFalhaNaConexao: Boolean = false
 
+    /** VIN respondido nesta conexão (ver [vinSimulado]). */
+    @Volatile private var vinConexao: String = VIN_PADRAO
+
     /** PIDs de montadora ativados nesta conexão. */
     private var estendidosAtivos: Set<String> = emptySet()
 
@@ -157,6 +161,7 @@ class ObdClientFake(
         }
         perfilSimulacao = perfilForcado ?: PerfilSimulacao.paraMarca(marcaVeiculo)
         ecu.perfil = perfilSimulacao
+        vinConexao = vin ?: vinSimulado(perfilSimulacao, marcaVeiculo)
         cruze.reiniciar()
         velocidade = 0.0
         velocidadeAlvo = 40.0
@@ -255,7 +260,7 @@ class ObdClientFake(
     override suspend fun lerVin(): Result<String> {
         if (_estado.value != EstadoConexaoObd.Conectado) return Result.failure(naoConectado())
         delay(latenciaMs)
-        return Result.success(vin)
+        return Result.success(vinConexao)
     }
 
     /** Como numa ECU real: apaga armazenados, pendentes e o Freeze Frame; os permanentes ficam. */
@@ -513,6 +518,22 @@ class ObdClientFake(
     }
 
     companion object {
+        /** VIN de teste clássico (VW, WMI `9BW`). */
+        const val VIN_PADRAO = "9BWZZZ377VT004251"
+
+        /** Cruze 2018 (fabricado na Argentina, WMI `8AG`; `J` = 2018). */
+        const val VIN_CRUZE = "8AGBN69S0JR104567"
+
+        /** Hilux SW4 2013 (Argentina, WMI `8AJ`; `D` = 2013). */
+        const val VIN_TOYOTA = "8AJFZ29G4D6012345"
+
+        /** VIN coerente com o carro simulado, para a detecção por VIN (`0902`) funcionar no Modo Simulado. */
+        fun vinSimulado(perfil: PerfilSimulacao, marca: String?): String = when {
+            perfil == PerfilSimulacao.CRUZE_14T_FLEX -> VIN_CRUZE
+            marca?.contains("toyota", ignoreCase = true) == true -> VIN_TOYOTA
+            else -> VIN_PADRAO
+        }
+
         /** PIDs que a "ECU" simulada suporta: todos os do catálogo padrão (`pids_padrao.json`). */
         val COMANDOS_SIMULADOS: Set<String> = setOf(
             "0104", "0105", "0106", "0107", "010A", "010B", "010C", "010D", "010E", "010F",

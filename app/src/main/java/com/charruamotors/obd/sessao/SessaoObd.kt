@@ -5,9 +5,15 @@ import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.calculo.EstequiometriaFlex
 import com.charruamotors.domain.calculo.EstimadorCambioA750f
 import com.charruamotors.domain.calculo.EstimadorCambioGm6T
+import com.charruamotors.domain.calculo.EstimadorMarchaPerfil
 import com.charruamotors.domain.calculo.ParametrosMotor
 import com.charruamotors.domain.faixas.FaixasVeiculo
 import com.charruamotors.domain.faixas.PresetVeiculo
+import com.charruamotors.domain.faixas.ResolucaoPerfil
+import com.charruamotors.domain.perfis.CarregadorPerfis
+import com.charruamotors.domain.perfis.DecodificadorVin
+import com.charruamotors.domain.perfis.PerfilCambio
+import com.charruamotors.domain.perfis.VinDecodificado
 import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.Veiculo
@@ -71,21 +77,33 @@ data class VeiculoSessao(
     /** Modelo (a cilindrada vem dele) e a calibração do consumo, para o resumo da viagem. */
     val modelo: String? = null,
     val calibracaoConsumo: Double = 1.0,
-    /** Faixas mínimas/máximas esperadas (preset SW4/Cruze ou genéricas do cadastro), para o relatório. */
+    /** Faixas mínimas/máximas esperadas (perfil do catálogo ou genéricas do cadastro), para o relatório. */
     val faixas: FaixasVeiculo? = null,
+    val ano: Int? = null,
+    /** Onde o cadastro caiu na cascata de perfis (exato → genérico → OBD2 padrão); null = não resolvido. */
+    val resolucao: ResolucaoPerfil? = null,
 ) {
+    /** Câmbio do perfil exato (estima a marcha dos automáticos sem regra própria); null nos genéricos. */
+    val cambio: PerfilCambio?
+        get() = resolucao?.takeIf { !it.generico }?.preset?.perfilCambio
+
     companion object {
-        fun de(v: Veiculo) = VeiculoSessao(
-            id = v.id,
-            descricao = v.descricao,
-            nomeCurto = "${v.marca} ${v.modelo}".trim(),
-            marca = v.marca,
-            placa = v.placaFormatada,
-            combustivel = v.tipoCombustivel,
-            modelo = v.modelo,
-            calibracaoConsumo = v.calibracaoConsumo,
-            faixas = FaixasVeiculo.paraVeiculo(v),
-        )
+        fun de(v: Veiculo): VeiculoSessao {
+            val resolucao = ResolucaoPerfil.deVeiculo(v)
+            return VeiculoSessao(
+                id = v.id,
+                descricao = v.descricao,
+                nomeCurto = "${v.marca} ${v.modelo}".trim(),
+                marca = v.marca,
+                placa = v.placaFormatada,
+                combustivel = v.tipoCombustivel,
+                modelo = v.modelo,
+                calibracaoConsumo = v.calibracaoConsumo,
+                faixas = resolucao.faixas,
+                ano = v.ano,
+                resolucao = resolucao,
+            )
+        }
     }
 }
 
@@ -234,6 +252,13 @@ class SessaoObd(
     /** Marcha 1ª–6ª estimada do câmbio GM 6T35/6T40 (Cruze) pela razão rpm/velocidade. */
     private val estimadorCambioGm = EstimadorCambioGm6T()
 
+    /** v2.2: marcha pelas razões do perfil de câmbio do catálogo (ex.: Aisin 6 marchas dos VW TSI). */
+    @Volatile private var estimadorPerfil: EstimadorMarchaPerfil? = null
+
+    private val _vinDecodificado = MutableStateFlow<VinDecodificado?>(null)
+    /** Montadora (WMI) e ano-modelo do VIN desta conexão; null = não lido ou formato inválido. */
+    val vinDecodificado: StateFlow<VinDecodificado?> = _vinDecodificado.asStateFlow()
+
     // ------------------------------------------------------------------ modo
 
     /** Só troca de modo sem sessão ativa e com o scanner desconectado. */
@@ -347,7 +372,9 @@ class SessaoObd(
         val temLambda = (Pids.COMANDOS_LAMBDA_MEDIDO + Pids.LAMBDA_COMANDADO).any { it in suportados }
         if (temLambda && combustivelAtual != TipoCombustivel.DIESEL) add(DefinicaoPid.RELACAO_AF_REAL)
         if (CambioA750f.CHAVE_ALAVANCA in suportados && CambioA750f.CHAVE_MARCHA !in suportados) add(DefinicaoPid.MARCHA_ESTIMADA_A750F)
-        else if (PresetVeiculo.marcaGm(marcaAtual) && CambioA750f.CHAVE_MARCHA !in suportados) add(DefinicaoPid.MARCHA_ESTIMADA_A750F)
+        else if ((PresetVeiculo.marcaGm(marcaAtual) || estimadorPerfil != null) && CambioA750f.CHAVE_MARCHA !in suportados) {
+            add(DefinicaoPid.MARCHA_ESTIMADA_A750F)
+        }
     }
 
     // ------------------------------------------------------------------ execução
@@ -368,6 +395,8 @@ class SessaoObd(
             val veiculo = if (veiculoId > 0) runCatching { buscarVeiculo(veiculoId) }.getOrNull() else null
             marcaAtual = veiculo?.marca
             combustivelAtual = veiculo?.combustivel
+            // A750F (alavanca no 7E1) e GM têm estimador próprio; os demais automáticos usam as razões do perfil.
+            estimadorPerfil = veiculo?.cambio?.takeIf { it.estimaMarcha && it.mapaAlavanca == null }?.let(::EstimadorMarchaPerfil)
             if (config().gravarLogsAutomaticos) {
                 g = withContext(io) { criarGravador(dispositivo, veiculo, origem, gatilho, inicioMs) }
                 gravador = g
@@ -416,8 +445,11 @@ class SessaoObd(
         }
         launch {
             _vinLido.value = false
-            _vin.value = cli.lerVin().getOrNull()
+            val vin = cli.lerVin().getOrNull()
+            _vin.value = vin
+            _vinDecodificado.value = DecodificadorVin.decodificar(vin)
             _vinLido.value = true
+            registrarVin(vin, veiculo, g)
         }
         launch {
             _perfil.value = null
@@ -442,11 +474,43 @@ class SessaoObd(
 
     private fun receberAmostra(daEcu: DadosObd, g: GravadorLogsSessao?) {
         val base = comCalculados(comVelocidadeGps(daEcu), combustivelAtual)
-        val dados = if (PresetVeiculo.marcaGm(marcaAtual)) estimadorCambioGm.aplicar(base) else estimadorCambio.aplicar(base)
+        val porPerfil = estimadorPerfil
+        val dados = when {
+            PresetVeiculo.marcaGm(marcaAtual) -> estimadorCambioGm.aplicar(base)
+            porPerfil != null -> porPerfil.aplicar(base)
+            else -> estimadorCambio.aplicar(base)
+        }
         _dados.value = dados
         _amostras.tryEmit(dados)
         telemetria.publicar(dados, conectado = true)
         g?.registrar(dados, relogio())
+    }
+
+    /**
+     * VIN lido (`0902`): montadora pelo WMI e ano-modelo vão para o cabeçalho do relatório. Se o
+     * veículo cadastrado ainda estiver num perfil genérico e o catálogo tiver perfis da montadora
+     * do VIN para aquele ano, sugere (discretamente) aplicar um deles em Presets.
+     */
+    private fun registrarVin(vin: String?, veiculo: VeiculoSessao?, g: GravadorLogsSessao?) {
+        val info = DecodificadorVin.decodificar(vin)
+        val sugestao = sugestaoPorVin(info, veiculo)
+        g?.registrarVin(vin, info, sugestao)
+        if (info != null) g?.evento("VIN $vin: ${info.descricao}", relogio())
+        if (sugestao != null) {
+            g?.evento("Sugestão: $sugestao", relogio())
+            _eventos.tryEmit(EventoSessao.Mensagem(sugestao))
+        }
+    }
+
+    /** Texto da sugestão de perfil pelo VIN (só para cadastro em perfil genérico); null = nada a sugerir. */
+    private fun sugestaoPorVin(info: VinDecodificado?, veiculo: VeiculoSessao?): String? {
+        if (info?.montadora == null || veiculo == null) return null
+        if (veiculo.resolucao?.generico != true) return null
+        val perfis = CarregadorPerfis.catalogo.sugestoesPara(info.montadora, info.anoModelo ?: veiculo.ano)
+        if (perfis.isEmpty()) return null
+        val nomes = perfis.take(3).joinToString(" / ") { it.titulo }
+        val ano = info.anoModelo?.let { " $it" }.orEmpty()
+        return "VIN indica ${info.montadora}$ano: perfil disponível em Presets ($nomes)"
     }
 
     /** Mescla a velocidade GPS ([Pids.VELOCIDADE_GPS]) ao instantâneo da ECU; sem fix (ou desativada), ele segue igual. */
@@ -478,7 +542,9 @@ class SessaoObd(
         _dados.value = null
         _perfil.value = null
         _vin.value = null
+        _vinDecodificado.value = null
         _vinLido.value = false
+        estimadorPerfil = null
         telemetria.publicar(null, conectado = false)
         if (g != null) {
             g.evento("Encerrada: $motivo", relogio())

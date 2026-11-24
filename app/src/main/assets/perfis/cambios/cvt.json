@@ -1,0 +1,16 @@
+{
+  "id": "cvt",
+  "status": "base",
+  "nome": "CVT (transmissão continuamente variável)",
+  "tipo": "cvt",
+  "cabecalhos": ["7E1"],
+  "servico": null,
+  "pidsAtf": [],
+  "mapaAlavanca": null,
+  "limiteAtfC": 105,
+  "observacao": "Perfil base: sem marchas fixas, a marcha não é estimada pela razão rpm / velocidade.",
+  "faixas": [
+    { "parametro": "TEMP_ATF", "min": 60, "max": 105 }
+  ],
+  "relacoes": []
+}

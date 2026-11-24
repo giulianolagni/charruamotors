@@ -22,8 +22,8 @@ android {
         applicationId = "com.charruamotors.pro"
         minSdk = 26
         targetSdk = 37
-        versionCode = 19
-        versionName = "2.1.5"
+        versionCode = 20
+        versionName = "2.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -50,6 +50,11 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        // v2.2: os perfis de assets/perfis/ entram no classpath dos testes JVM (CarregadorPerfis sem Context).
+        getByName("test").resources.srcDir("src/main/assets")
     }
 
     buildFeatures {

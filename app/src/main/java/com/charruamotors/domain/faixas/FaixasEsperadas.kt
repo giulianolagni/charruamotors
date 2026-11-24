@@ -172,13 +172,41 @@ data class FaixasVeiculo(val perfil: String, val faixas: List<FaixaEsperada>) {
         }
 
         const val PERFIL_GENERICO = "Genérico (limites do cadastro)"
+        const val SUFIXO_LIMITES_CADASTRO = "(limites do cadastro)"
         private const val TENSAO_MAX_GENERICA = 14.8
+        private const val AGUA_MIN_GENERICA = 75.0
+        private const val ATF_MIN_GENERICA = 50.0
 
-        /** Preset do veículo, se reconhecido; senão, as genéricas pelos limites do cadastro. */
+        /**
+         * Faixas de um perfil genérico do catálogo ([generico]) com os limites do cadastro por cima:
+         * água e ATF máximos e a tensão mínima do alternador são os que o usuário configurou (o ATF
+         * entra sempre, como nas [genericas], porque o genérico não conhece o câmbio).
+         */
+        fun comLimitesDoCadastro(generico: PresetVeiculo, limites: LimitesProtecao): FaixasVeiculo {
+            val base = generico.faixas.faixas.associateBy { it.parametro }.toMutableMap()
+            base[ParametroFaixa.TEMP_AGUA] = faixaSegura(
+                ParametroFaixa.TEMP_AGUA, base[ParametroFaixa.TEMP_AGUA]?.min ?: AGUA_MIN_GENERICA, limites.aguaMaxC,
+            )
+            base[ParametroFaixa.TEMP_ATF] = faixaSegura(
+                ParametroFaixa.TEMP_ATF, base[ParametroFaixa.TEMP_ATF]?.min ?: ATF_MIN_GENERICA, limites.atfMaxC,
+            )
+            base[ParametroFaixa.TENSAO] = faixaSegura(
+                ParametroFaixa.TENSAO, limites.tensaoMinV, base[ParametroFaixa.TENSAO]?.max ?: TENSAO_MAX_GENERICA,
+            )
+            return FaixasVeiculo("${generico.titulo} $SUFIXO_LIMITES_CADASTRO", base.values.sortedBy { it.parametro.ordinal })
+        }
+
+        /** Faixa que nunca fica inválida: se o limite do cadastro cruzar o outro lado, só ele vale. */
+        private fun faixaSegura(p: ParametroFaixa, min: Double, max: Double): FaixaEsperada =
+            if (min < max) FaixaEsperada(p, min, max) else if (p == ParametroFaixa.TENSAO) FaixaEsperada(p, min, null) else FaixaEsperada(p, null, max)
+
+        /**
+         * Cascata de fallback: perfil exato do catálogo → perfil genérico pela motorização com os
+         * limites do cadastro → [genericas] (OBD2 modo 01 padrão). Ver [ResolucaoPerfil.resolver].
+         */
         fun paraVeiculo(v: Veiculo?): FaixasVeiculo {
             if (v == null) return genericas(null)
-            return PresetVeiculo.detectar(v.marca, v.modelo, v.ano)?.faixas
-                ?: genericas(v.tipoCombustivel, LimitesProtecao.deVeiculo(v))
+            return ResolucaoPerfil.deVeiculo(v).faixas
         }
     }
 }

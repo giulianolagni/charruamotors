@@ -52,6 +52,7 @@ import com.charruamotors.ui.componentes.GaugeView
 import com.charruamotors.ui.painel.ClusterPainelActivity
 import com.charruamotors.ui.painel.EditorConfigHud
 import com.charruamotors.ui.painel.MontadorMostradores
+import com.charruamotors.domain.perfis.DecodificadorVin
 import com.charruamotors.domain.calculo.AlertaProtecao
 import com.charruamotors.domain.calculo.EstadoCronometro
 import com.charruamotors.domain.calculo.EstequiometriaFlex
@@ -689,12 +690,19 @@ class ObdFragment : Fragment() {
         })
     }
 
+    /** v2.2: VIN com a montadora (WMI) e o ano-modelo (10º caractere), ex.: `9BG... · Chevrolet 2018`. */
+    private fun vinComMontadora(vin: String): String {
+        val d = DecodificadorVin.decodificar(vin) ?: return vin
+        val extra = listOfNotNull(d.montadora, d.anoModelo?.toString()).joinToString(" ")
+        return if (extra.isEmpty()) vin else "$vin · $extra"
+    }
+
     private fun mostrarInfoEcu(info: InfoEcu) = with(binding) {
         val conectado = viewModel.estado.value is EstadoConexaoObd.Conectado
         textoVin.definirTexto(when {
             !conectado -> getString(R.string.obd_ecu_desconectado)
             !info.vinLido -> getString(R.string.obd_ecu_vin_lendo)
-            else -> info.vin ?: getString(R.string.obd_ecu_vin_indisponivel)
+            else -> info.vin?.let(::vinComMontadora) ?: getString(R.string.obd_ecu_vin_indisponivel)
         })
         textoPidsSuportados.definirTexto(if (conectado) {
             getString(R.string.obd_ecu_pids_qtd, info.quantidadePids, viewModel.totalPidsCatalogo)

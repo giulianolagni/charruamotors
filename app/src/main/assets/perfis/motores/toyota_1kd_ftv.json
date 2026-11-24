@@ -1,0 +1,31 @@
+{
+  "id": "toyota_1kd_ftv",
+  "status": "validado",
+  "nome": "Toyota 1KD-FTV 3.0 D-4D (Diesel Common Rail turbo)",
+  "codigo": "1KD-FTV",
+  "combustivel": "DIESEL",
+  "turbo": true,
+  "protocolo": "ATSP6",
+  "descricaoProtocolo": "ISO 15765-4 CAN 11 bits / 500 kbps (M-OBD, KWP modo 21)",
+  "cabecalho": "7E0",
+  "servicoExtra": "21",
+  "pidsOpcionais": ["TOYOTA_INJ1", "TOYOTA_INJ2", "TOYOTA_INJ3", "TOYOTA_INJ4", "TOYOTA_TENSAO_ECU", "TOYOTA_BARO", "TOYOTA_PEDAL_D", "TOYOTA_PEDAL_E"],
+  "limites": { "aguaMaxC": 98, "tensaoMinV": 13.4 },
+  "observacao": "Validado em carro (SW4 2013). Em altitude a marcha lenta fica em 73–75 kPa: o MAP mínimo é 60 kPa.",
+  "faixas": [
+    { "parametro": "RPM_LENTA", "min": 650, "max": 800 },
+    { "parametro": "RPM_MAXIMO", "min": null, "max": 4200 },
+    { "parametro": "TEMP_AGUA", "min": 80, "max": 98 },
+    { "parametro": "TENSAO", "min": 13.4, "max": 14.6 },
+    { "parametro": "RAIL", "min": 280, "max": 1800 },
+    { "parametro": "RAIL_LENTA", "min": 280, "max": 600 },
+    { "parametro": "MAP_TURBO", "min": 60, "max": 215 },
+    { "parametro": "BICOS", "min": -3, "max": 3 },
+    { "parametro": "CARGA_MOTOR", "min": 0, "max": 100 },
+    { "parametro": "TEMP_ADMISSAO", "min": 10, "max": 65 },
+    { "parametro": "MAF", "min": 10, "max": 170 },
+    { "parametro": "BORBOLETA", "min": 0, "max": 100 },
+    { "parametro": "PRESSAO_BARO", "min": 85, "max": 105 },
+    { "parametro": "TENSAO_ECU", "min": 13.4, "max": 14.6 }
+  ]
+}

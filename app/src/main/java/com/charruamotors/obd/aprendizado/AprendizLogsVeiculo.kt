@@ -74,6 +74,33 @@ class AprendizLogsVeiculo(
         return modelo
     }
 
+    /**
+     * v2.2.5: os arquivos [nomes] foram apagados do Histórico. Tira os vínculos do índice e refaz o
+     * modelo de cada veículo afetado só com os logs que sobraram (o cache guarda estatísticas somadas,
+     * que não dá para "subtrair"): o `modelo_aprendido_<id>.json` é descartado e reconstruído de
+     * imediato; sem nenhum log real restante, o veículo volta ao simulador sintético. Também pega
+     * caches que citam o arquivo mesmo que o índice o tenha perdido. Devolve os veículos refeitos.
+     */
+    @Synchronized
+    fun logsApagados(nomes: Collection<String>): Set<Long> {
+        if (nomes.isEmpty()) return emptySet()
+        val alvo = nomes.toSet()
+        val afetados = indice.remover(alvo).toMutableSet()
+        val caches = pasta.listFiles { f -> f.isFile && f.name.startsWith("modelo_aprendido_") && f.name.endsWith(".json") }.orEmpty()
+        for (cache in caches) {
+            val id = cache.name.removePrefix("modelo_aprendido_").removeSuffix(".json").toLongOrNull() ?: continue
+            val modelo = carregar(id)
+            // Cache ilegível não dá para conferir: refaz também (é barato e evita manter dados velhos).
+            if (modelo == null || modelo.logs.any { it.nome in alvo } || modelo.ignorados.any { it in alvo }) afetados += id
+        }
+        for (id in afetados) {
+            arquivoCache(id).delete()
+            File(pasta, arquivoCache(id).name + ".tmp").delete()
+            atualizar(id) // reconstrói com o que restou no índice (null = sem logs: fica sem cache)
+        }
+        return afetados
+    }
+
     // ------------------------------------------------------------------ consolidação
 
     private class Acumulador {

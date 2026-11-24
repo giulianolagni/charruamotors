@@ -58,7 +58,7 @@ class SessaoIdentificacaoTest {
 
     private fun TestScope.novaSessao(v: VeiculoSessao, fake: ObdClientFake) = SessaoObd(
         clientePorModo = { fake },
-        modoInicial = ModoObd.SIMULADO,
+        modoInicial = ModoObd.BLUETOOTH,
         catalogoPids = CatalogoTeste.padrao,
         catalogoDtc = CatalogoDtc.VAZIO,
         config = { ConfigAutoConexao(veiculoId = v.id) },

@@ -1,5 +1,6 @@
 package com.charruamotors.obd.log
 
+import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.calculo.ComputadorBordo
 import com.charruamotors.domain.calculo.EstequiometriaFlex
 import com.charruamotors.domain.calculo.ParametrosMotor
@@ -13,6 +14,7 @@ import com.charruamotors.domain.perfis.OrigemPerfil
 import com.charruamotors.domain.perfis.VinDecodificado
 import com.charruamotors.obd.DtcLido
 import com.charruamotors.obd.ValoresSensores
+import com.charruamotors.obd.pid.DefinicaoPid
 import com.charruamotors.obd.pid.Pids
 import java.text.Normalizer
 import java.text.NumberFormat
@@ -32,6 +34,27 @@ class Extremos {
         if (valor == null || !valor.isFinite()) return
         minimo = minimo?.coerceAtMost(valor) ?: valor
         maximo = maximo?.coerceAtLeast(valor) ?: valor
+    }
+}
+
+/** Mínimo, máximo e média de um sensor ao longo da sessão (v2.2.5): só valores finitos entram. */
+class ResumoSensor {
+    var amostras: Int = 0
+        private set
+    var minimo: Double = Double.NaN
+        private set
+    var maximo: Double = Double.NaN
+        private set
+    private var soma = 0.0
+
+    val media: Double get() = if (amostras == 0) Double.NaN else soma / amostras
+
+    fun registrar(valor: Double) {
+        if (!valor.isFinite()) return
+        amostras++
+        soma += valor
+        if (minimo.isNaN() || valor < minimo) minimo = valor
+        if (maximo.isNaN() || valor > maximo) maximo = valor
     }
 }
 
@@ -105,6 +128,12 @@ class EstatisticasViagem(
     val etanol = Extremos()
     val relacaoAf = Extremos()
 
+    /** Mín/máx/média de **todo** sensor lido na sessão, por comando (ordem de primeira leitura). */
+    val sensores: MutableMap<String, ResumoSensor> = LinkedHashMap()
+
+    /** Amostras por marcha (valor de `TOYOTA_MARCHA` arredondado), para o resumo de marchas. */
+    val marchas: MutableMap<Int, Int> = java.util.TreeMap()
+
     /** Uma por faixa esperada do veículo, na ordem do preset. */
     var acompanhamentoFaixas: List<AcompanhamentoFaixa> = faixas?.faixas.orEmpty().map(::AcompanhamentoFaixa)
         private set
@@ -117,6 +146,8 @@ class EstatisticasViagem(
 
     fun registrar(dados: ValoresSensores, instanteMs: Long? = null) {
         amostras++
+        for ((comando, valor) in dados.valores) sensores.getOrPut(comando) { ResumoSensor() }.registrar(valor)
+        dados[CambioA750f.CHAVE_MARCHA]?.takeIf { it.isFinite() }?.let { marchas.merge(it.toInt(), 1, Int::plus) }
         if (motor != null && instanteMs != null) {
             bordo.registrar(TelemetriaCalculada.consumoInstantaneo(dados, motor), dados[Pids.VELOCIDADE], instanteMs)
         }
@@ -190,6 +221,12 @@ data class ResumoSessao(
     val origemPerfil: OrigemPerfil = OrigemPerfil.MANUAL,
     /** Perfil aplicado automaticamente (título e motivo); null = o do cadastro. */
     val perfilAutomatico: String? = null,
+    /** Definições dos sensores da sessão (nome, unidade, casas) para a tabela de mín/máx/média. */
+    val colunas: List<DefinicaoPid> = emptyList(),
+    /** Alertas de proteção (água, ATF, alternador) disparados na sessão, na ordem. */
+    val alertas: List<String> = emptyList(),
+    /** O log bruto detalhado foi gravado nesta sessão (opção das Configurações, desligada por padrão). */
+    val logBruto: Boolean = false,
 )
 
 /**
@@ -200,6 +237,8 @@ data class ResumoSessao(
 object RelatorioSessaoTxt {
 
     const val TITULO_LOG_BRUTO = "LOG BRUTO DE COMUNICAÇÃO E EVENTOS"
+    const val TITULO_EVENTOS = "EVENTOS DA SESSÃO (log bruto desligado)"
+    const val TITULO_SENSORES = "SENSORES DA SESSÃO (mínimo / máximo / média)"
     private const val LINHA = "=================================================================="
     private const val PRESSAO_ATMOSFERICA_KPA = 101.3
 
@@ -327,9 +366,64 @@ object RelatorioSessaoTxt {
                 saida.append("  • ${p.titulo} (${a.faixa.texto}): $lido · ${a.situacao}\n")
             }
         }
+        escreverAlertas(r.alertas, saida)
+        escreverMarchas(e, saida)
+        escreverSensores(e, r.colunas, saida)
         saida.append('\n').append(LINHA).append('\n')
-        saida.append(TITULO_LOG_BRUTO).append('\n')
+        saida.append(if (r.logBruto) TITULO_LOG_BRUTO else TITULO_EVENTOS).append('\n')
         saida.append(LINHA).append('\n')
+    }
+
+    private fun escreverAlertas(alertas: List<String>, saida: Appendable) {
+        saida.append('\n').append("ALERTAS DA SESSÃO\n")
+        if (alertas.isEmpty()) {
+            saida.append("  Nenhum alerta de proteção.\n")
+        } else {
+            saida.append("  ${alertas.size} alerta(s):\n")
+            alertas.forEach { saida.append("    • $it\n") }
+        }
+    }
+
+    /** Resumo de marchas: amostras (e % do total com marcha) por posição; só quando a sessão tem marcha. */
+    private fun escreverMarchas(e: EstatisticasViagem, saida: Appendable) {
+        if (e.marchas.isEmpty()) return
+        val total = e.marchas.values.sum()
+        val rotulos = DefinicaoPid.MARCHA_ESTIMADA_A750F.rotulos
+        saida.append('\n').append("MARCHAS\n")
+        e.marchas.forEach { (valor, n) ->
+            saida.append("  ${(rotulos[valor] ?: valor.toString()).padEnd(8)}: ${numero(n.toDouble(), 0)} amostras (${numero(n * 100.0 / total, 1)} %)\n")
+        }
+    }
+
+    /**
+     * Tabela com **todo** sensor lido: mínimo, máximo e média (formato brasileiro). A ordem é a das
+     * colunas do CSV; o que não tiver definição (chave solta) vem depois, pelo próprio comando.
+     */
+    private fun escreverSensores(e: EstatisticasViagem, colunas: List<DefinicaoPid>, saida: Appendable) {
+        saida.append('\n').append(TITULO_SENSORES).append('\n')
+        if (e.sensores.isEmpty()) {
+            saida.append("  Nenhum sensor lido nesta sessão.\n")
+            return
+        }
+        val porComando = colunas.associateBy { it.comando }
+        val ordem = colunas.map { it.comando }.distinct().filter { it in e.sensores } + e.sensores.keys.filter { it !in porComando }
+        for (comando in ordem) {
+            val s = e.sensores[comando]?.takeIf { it.amostras > 0 } ?: continue
+            val def = porComando[comando]
+            val casas = def?.casasDecimais ?: 1
+            val unidade = def?.unidade?.takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty()
+            val nome = def?.nome ?: comando
+            if (def != null && def.rotulos.isNotEmpty()) {
+                // Estado/categoria (alavanca, marcha): média não faz sentido; mostra os extremos pelo rótulo.
+                fun rotulo(v: Double) = def.rotulos[v.toInt()] ?: numero(v, 0)
+                saida.append("  • $nome [$comando]: estados de ${rotulo(s.minimo)} a ${rotulo(s.maximo)} (${numero(s.amostras.toDouble(), 0)} leituras)\n")
+                continue
+            }
+            saida.append(
+                "  • $nome [$comando]: mín ${numero(s.minimo, casas)} · máx ${numero(s.maximo, casas)} · " +
+                    "média ${numero(s.media, casas)}$unidade (${numero(s.amostras.toDouble(), 0)} leituras)\n",
+            )
+        }
     }
 
     private fun listaDtcs(rotulo: String, lista: List<DtcLido>?, saida: Appendable) {

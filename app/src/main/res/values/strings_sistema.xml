@@ -49,8 +49,8 @@
     <string name="config_secao_caixa">Caixa-preta automática</string>
     <string name="config_secao_caixa_descricao">Sessão OBD2 em segundo plano iniciada pelo Bluetooth do carro, com logs .txt + .csv em Downloads/CharruaOBD.</string>
     <string name="config_auto_conexao">Auto-conexão em segundo plano</string>
-    <string name="config_logs">Gravar logs automaticamente (.txt + .csv)</string>
-    <string name="config_log_completo">Log completo de tráfego bruto (testes)</string>
+    <string name="config_logs">Gravar logs automaticamente (.txt + .csv; não grava no Modo Simulado)</string>
+    <string name="config_log_completo">Log bruto detalhado (uso esporádico: comandos, bytes e tempos no .txt)</string>
     <string name="config_gatilho">Bluetooth gatilho do carro</string>
     <string name="config_scanner">Scanner OBD2 padrão</string>
     <string name="config_veiculo">Veículo favorito (padrão)</string>

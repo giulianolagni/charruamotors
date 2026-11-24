@@ -56,7 +56,7 @@ class SessaoPerfisVinTest {
 
     private fun TestScope.novaSessao(v: VeiculoSessao) = SessaoObd(
         clientePorModo = { fake },
-        modoInicial = ModoObd.SIMULADO,
+        modoInicial = ModoObd.BLUETOOTH,
         catalogoPids = CatalogoTeste.padrao,
         catalogoDtc = CatalogoDtc.VAZIO,
         config = { ConfigAutoConexao(veiculoId = v.id) },
@@ -109,7 +109,7 @@ class SessaoPerfisVinTest {
         val (txt, mensagens) = run {
             val sessao = SessaoObd(
                 clientePorModo = { ObdClientFake(random = Random(7), latenciaMs = 50, vin = "8AGXX69S0JR104567") },
-                modoInicial = ModoObd.SIMULADO, catalogoPids = CatalogoTeste.padrao, catalogoDtc = CatalogoDtc.VAZIO,
+                modoInicial = ModoObd.BLUETOOTH, catalogoPids = CatalogoTeste.padrao, catalogoDtc = CatalogoDtc.VAZIO,
                 config = { ConfigAutoConexao(veiculoId = spin.id) }, buscarVeiculo = { spin },
                 destinoLogs = destino, pastaTemporaria = pasta.newFolder(), escopo = escopo(),
                 io = StandardTestDispatcher(testScheduler), relogio = { inicio + testScheduler.currentTime }, zona = ZoneOffset.UTC,

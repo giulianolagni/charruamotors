@@ -10,6 +10,7 @@ import com.charruamotors.obd.dtc.CatalogoDtc
 import com.charruamotors.obd.log.DestinoMemoria
 import com.charruamotors.obd.log.GeradorCsv
 import com.charruamotors.obd.log.OrganizadorLogs
+import com.charruamotors.obd.log.RelatorioSessaoTxt
 import com.charruamotors.obd.pid.CatalogoTeste
 import com.charruamotors.obd.pid.Pids
 import com.charruamotors.oficina.replay.LeitorCsvLog
@@ -61,7 +62,7 @@ class SessaoObdTest {
     fun cancelarEscopos() = escopos.forEach { it.cancel() }
 
     private fun TestScope.novaSessao(
-        modo: ModoObd = ModoObd.SIMULADO,
+        modo: ModoObd = ModoObd.BLUETOOTH,
         gpsAtivo: Boolean = false,
         velocidadeGps: () -> Double? = { null },
     ) = SessaoObd(
@@ -82,7 +83,10 @@ class SessaoObdTest {
         zona = ZoneOffset.UTC,
         gpsAtivo = { gpsAtivo },
         velocidadeGps = velocidadeGps,
+        aoSalvarLogReal = { _, csv -> logsReaisSalvos += csv.nome },
     )
+
+    private val logsReaisSalvos = mutableListOf<String>()
 
     // ---------------------------------------------------------------- velocidade GPS (v2.0)
 
@@ -143,19 +147,55 @@ class SessaoObdTest {
     }
 
     @Test
-    fun `modo simulado sinaliza SIMULADO no nome dos arquivos e no cabecalho do txt`() = runTest {
+    fun `modo simulado nao grava csv nem txt e nao alimenta o indice`() = runTest {
         val sessao = novaSessao(ModoObd.SIMULADO)
+        sessao.conectar(scanner, veiculoId = 7, origem = OrigemSessao.MANUAL)
+        avancar(5_000)
+        assertNotNull("a telemetria simulada segue funcionando", sessao.dados.value)
+        assertFalse(sessao.estadoSessao.value.gravandoLogs)
+        sessao.desconectar()
+        advanceUntilIdle()
+
+        assertTrue("nenhum arquivo no Histórico", destino.arquivos.isEmpty())
+        assertTrue("nada vai para o aprendizado de logs reais", logsReaisSalvos.isEmpty())
+    }
+
+    @Test
+    fun `modo real grava os arquivos e avisa o aprendizado`() = runTest {
+        val sessao = novaSessao(ModoObd.BLUETOOTH)
         sessao.conectar(scanner, veiculoId = 7, origem = OrigemSessao.MANUAL)
         avancar(5_000)
         sessao.desconectar()
         advanceUntilIdle()
+        assertEquals(listOf("CharruaOBD_20261122_143005_Toyota_SW4.csv"), logsReaisSalvos)
+        assertFalse(destino.arquivos.any { OrganizadorLogs.ehSimulado(it.nome) })
+    }
 
-        val csv = destino.terminadoEm(".csv")
-        val txt = destino.terminadoEm(".txt")
-        assertEquals("CharruaOBD_SIMULADO_20261122_143005_Toyota_SW4.csv", csv.nome)
-        assertEquals("CharruaOBD_SIMULADO_20261122_143005_Toyota_SW4.txt", txt.nome)
-        assertTrue(txt.conteudo.lines().any { it.trimStart().startsWith("Modo") && it.endsWith(": SIMULADO") })
-        assertTrue(OrganizadorLogs.ehSimulado(csv.nome) && OrganizadorLogs.ehSimulado(txt.nome))
+    @Test
+    fun `log bruto desligado por padrao e o txt traz o relatorio basico`() = runTest {
+        assertFalse(ConfigAutoConexao().logCompletoTrafego)
+        val sessao = novaSessao(ModoObd.BLUETOOTH)
+        sessao.conectar(scanner, veiculoId = 7, origem = OrigemSessao.MANUAL)
+        avancar(5_000)
+        sessao.desconectar()
+        advanceUntilIdle()
+        val txt = destino.terminadoEm(".txt").conteudo
+        assertTrue(txt.contains(RelatorioSessaoTxt.TITULO_SENSORES))
+        assertTrue(txt.contains(RelatorioSessaoTxt.TITULO_EVENTOS))
+        assertFalse(txt.contains(" TX "))
+    }
+
+    @Test
+    fun `log bruto ligado registra tempos, bytes e estados da conexao`() = runTest {
+        config = config.copy(logCompletoTrafego = true)
+        val sessao = novaSessao(ModoObd.BLUETOOTH)
+        sessao.conectar(scanner, veiculoId = 7, origem = OrigemSessao.MANUAL)
+        avancar(5_000)
+        sessao.desconectar()
+        advanceUntilIdle()
+        val txt = destino.terminadoEm(".txt").conteudo
+        assertTrue(txt.contains(RelatorioSessaoTxt.TITULO_LOG_BRUTO))
+        assertTrue(txt.contains("Estado da conexão Bluetooth/ELM327: Conectado"))
     }
 
     @Test

@@ -31,21 +31,29 @@ import com.charruamotors.R
 import com.charruamotors.databinding.HudFlutuanteBinding
 import com.charruamotors.databinding.ItemHudCelulaBinding
 import com.charruamotors.direcao.painel.EstiloHud
+import com.charruamotors.direcao.painel.PresetHud
 import com.charruamotors.direcao.painel.SensorPainel
 import com.charruamotors.direcao.painel.TamanhoHud
 import com.charruamotors.direcao.waze.AbridorWaze
 import com.charruamotors.direcao.waze.AcaoWaze
+import com.charruamotors.obd.DadosObd
+import com.charruamotors.ui.componentes.HudEsportivoView
 import com.charruamotors.ui.util.definirTexto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 /**
  * Modo HUD: painel compacto e semitransparente numa janela `TYPE_APPLICATION_OVERLAY` sobre o
- * Waze, arrastável com o dedo. Tamanho (Minimizado: RPM e Turbo; Expandido: até 4 sensores),
+ * Waze, arrastável com o dedo. v2.2.7: dois visuais ([PresetHud], salvo nas preferências do Painel):
+ * o painel de células de sempre ("Padrão") e o conta-giros "Esportivo" ([HudEsportivoView]); dois
+ * toques rápidos no HUD alternam entre eles. Tamanho (Minimizado: RPM e Turbo; Expandido: até 4 sensores),
  * sensores fixados e estilo (números, números grandes ou com barra) vêm da tela de ativação, e os
  * valores seguem as unidades globais (métrico/imperial).
  *
@@ -59,9 +67,21 @@ class HudFlutuanteService : Service() {
     private val escopo = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val telemetria: TelemetriaCompartilhada get() = (application as CharruaMotorsApp).telemetriaCompartilhada
 
+    private val app: CharruaMotorsApp get() = application as CharruaMotorsApp
+
     private var gerenciadorJanelas: WindowManager? = null
     private var binding: HudFlutuanteBinding? = null
+    private var esportiva: HudEsportivoView? = null
     private var parametros: WindowManager.LayoutParams? = null
+
+    /** Visual na tela agora (null antes da primeira janela). */
+    private var presetAtual: PresetHud? = null
+
+    /** Último painel padrão recebido, para redesenhar ao voltar do esportivo. */
+    private var ultimoPainel: PainelHud? = null
+
+    /** Repouso e teto do pedal (auto-calibração), enquanto este HUD estiver aberto. */
+    private val calibradorPedal = CalibradorPedal()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -75,6 +95,13 @@ class HudFlutuanteService : Service() {
         }
         telemetria.definirHudAtivo(true)
         escopo.launch { telemetria.painel.collect(::desenhar) }
+        escopo.launch {
+            app.preferenciasPainel.config.map { it.hud.preset }.distinctUntilChanged().collect(::aplicarPreset)
+        }
+        escopo.launch {
+            combine(telemetria.dados, telemetria.conectado) { dados, conectado -> dados to conectado }
+                .collect { (dados, conectado) -> desenharEsportivo(dados, conectado) }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -86,8 +113,11 @@ class HudFlutuanteService : Service() {
     override fun onDestroy() {
         telemetria.definirHudAtivo(false)
         escopo.cancel()
-        binding?.let { b -> runCatching { gerenciadorJanelas?.removeView(b.root) } }
+        viewAtual()?.let { v -> runCatching { gerenciadorJanelas?.removeView(v) } }
         binding = null
+        esportiva = null
+        presetAtual = null
+        ultimoPainel = null
         celulas = emptyList()
         assinatura = null
         parametros = null
@@ -176,16 +206,54 @@ class HudFlutuanteService : Service() {
             stopSelf()
         }
         habilitarArraste(b.root)
+        val esportivo = HudEsportivoView(this)
+        habilitarArraste(esportivo)
+        val preset = app.preferenciasPainel.config.value.hud.preset
+        if (preset == PresetHud.ESPORTIVO) p.width = WindowManager.LayoutParams.WRAP_CONTENT
         try {
-            wm.addView(b.root, p)
+            wm.addView(if (preset == PresetHud.ESPORTIVO) esportivo else b.root, p)
         } catch (e: RuntimeException) {
             Log.w(TAG, "Sem permissão para desenhar sobre outros apps", e)
             return false
         }
         gerenciadorJanelas = wm
         binding = b
+        esportiva = esportivo
         parametros = p
+        presetAtual = preset
         return true
+    }
+
+    private fun viewAtual(): View? = if (presetAtual == PresetHud.ESPORTIVO) esportiva else binding?.root
+
+    /** Troca o visual na mesma janela (mesma posição), sem reiniciar o serviço nem a conexão. */
+    private fun aplicarPreset(preset: PresetHud) {
+        val wm = gerenciadorJanelas ?: return
+        val p = parametros ?: return
+        if (preset == presetAtual) return
+        viewAtual()?.let { runCatching { wm.removeView(it) } }
+        presetAtual = preset
+        val nova = viewAtual() ?: return
+        if (preset == PresetHud.ESPORTIVO) {
+            p.width = WindowManager.LayoutParams.WRAP_CONTENT
+            desenharEsportivo(telemetria.dados.value, telemetria.conectado.value)
+        } else {
+            assinatura = null // refaz as células e a largura do painel padrão
+        }
+        try {
+            wm.addView(nova, p)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Não foi possível trocar o visual do HUD", e)
+            stopSelf()
+            return
+        }
+        if (preset == PresetHud.PADRAO) ultimoPainel?.let(::desenhar)
+    }
+
+    private fun desenharEsportivo(dados: DadosObd?, conectado: Boolean) {
+        if (presetAtual != PresetHud.ESPORTIVO) return
+        val v = esportiva ?: return
+        v.estado = FormatadorHudEsportivo.montar(dados, conectado, app.centralAlertas.faixas, calibradorPedal)
     }
 
     /** Arrasta a janela pelo painel (os botões continuam recebendo os próprios toques). */
@@ -197,6 +265,8 @@ class HudFlutuanteService : Service() {
         var toqueX = 0f
         var toqueY = 0f
         var arrastando = false
+        var ultimoToqueMs = 0L
+        val intervaloDuploToque = ViewConfiguration.getDoubleTapTimeout().toLong()
         alvo.setOnTouchListener { _, evento ->
             val p = parametros ?: return@setOnTouchListener false
             when (evento.actionMasked) {
@@ -221,6 +291,18 @@ class HudFlutuanteService : Service() {
                     }
                     true
                 }
+                MotionEvent.ACTION_UP -> {
+                    if (!arrastando) {
+                        // Atalho discreto: dois toques rápidos alternam Padrão ↔ Esportivo (salvo).
+                        if (evento.eventTime - ultimoToqueMs <= intervaloDuploToque) {
+                            ultimoToqueMs = 0L
+                            app.preferenciasPainel.alternarPresetHud()
+                        } else {
+                            ultimoToqueMs = evento.eventTime
+                        }
+                    }
+                    true
+                }
                 else -> arrastando
             }
         }
@@ -231,6 +313,8 @@ class HudFlutuanteService : Service() {
     private var assinatura: Pair<List<SensorPainel>, EstiloHud>? = null
 
     private fun desenhar(painel: PainelHud) {
+        ultimoPainel = painel
+        if (presetAtual != PresetHud.PADRAO) return
         val b = binding ?: return
         val nova = painel.celulas.map { it.sensor } to painel.estilo
         if (nova != assinatura) montarCelulas(b, painel)

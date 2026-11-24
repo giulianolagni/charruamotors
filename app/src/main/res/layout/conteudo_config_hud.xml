@@ -1,11 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Escolhas do HUD flutuante: tamanho, sensores fixados e estilo. Usado no diálogo de ativação do
+<!-- Escolhas do HUD flutuante: visual (v2.2.7), tamanho, sensores fixados e estilo. Usado no diálogo de ativação do
      HUD (aba Painel) e na tela Personalizar Painel (EditorConfigHud). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/hud_config_visual"
+        android:textAppearance="?attr/textAppearanceLabelLarge" />
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/grupo_preset_hud"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/espaco_minimo"
+        app:selectionRequired="true"
+        app:singleSelection="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/botao_hud_preset_padrao"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:paddingHorizontal="4dp"
+            android:text="@string/hud_config_preset_padrao" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/botao_hud_preset_esportivo"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:paddingHorizontal="4dp"
+            android:text="@string/hud_config_preset_esportivo" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+    <TextView
+        android:id="@+id/texto_preset_hud"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/espaco_minimo"
+        android:text="@string/hud_config_esportivo_dica"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="@color/texto_secundario" />
+
+    <!-- Tamanho, sensores e estilo: só no visual Padrão. -->
+    <LinearLayout
+        android:id="@+id/opcoes_padrao_hud"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/espaco_medio"
+        android:orientation="vertical">
 
     <TextView
         android:layout_width="wrap_content"
@@ -120,4 +170,5 @@
             android:paddingHorizontal="4dp"
             android:text="@string/hud_config_barras" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
+    </LinearLayout>
 </LinearLayout>

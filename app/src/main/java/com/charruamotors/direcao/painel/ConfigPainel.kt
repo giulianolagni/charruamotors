@@ -54,12 +54,27 @@ enum class EstiloHud(val titulo: String) {
     BARRAS("Números com barra"),
 }
 
+/**
+ * Visual do HUD flutuante (v2.2.7): o painel de células de sempre ou o conta-giros esportivo
+ * (RPM + turbo acoplados, marcha, velocidade e pedal), desenhado em Canvas.
+ */
+enum class PresetHud(val titulo: String) {
+    PADRAO("Padrão (Atual)"),
+    ESPORTIVO("Esportivo (Conta-giros)"),
+    ;
+
+    /** O outro preset (atalho de dois toques no HUD). */
+    val alternado: PresetHud get() = if (this == PADRAO) ESPORTIVO else PADRAO
+}
+
 /** Preferências do HUD flutuante (escolhidas na tela de ativação). */
 data class ConfigHud(
     val tamanho: TamanhoHud = TamanhoHud.EXPANDIDO,
     /** Sensores fixados no modo expandido (1 a [MAX_SENSORES]), na ordem em que aparecem. */
     val sensores: List<SensorPainel> = PADRAO_EXPANDIDO,
     val estilo: EstiloHud = EstiloHud.NUMEROS,
+    /** Visual do HUD (v2.2.7); tamanho, sensores e estilo só valem no [PresetHud.PADRAO]. */
+    val preset: PresetHud = PresetHud.PADRAO,
 ) {
     /** O que o HUD desenha: RPM e Turbo no minimizado; os escolhidos (sem repetir, até 4) no expandido. */
     val sensoresVisiveis: List<SensorPainel>

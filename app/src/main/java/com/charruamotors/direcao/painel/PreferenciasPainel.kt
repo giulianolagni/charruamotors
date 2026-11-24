@@ -31,6 +31,16 @@ class PreferenciasPainel(private val armazenamento: ArmazenamentoChaveValor) {
 
     fun definirHud(hud: ConfigHud) = atualizar { it.copy(hud = hud) }
 
+    /** Visual do HUD flutuante (v2.2.7): o overlay reabre sempre no preset salvo. */
+    fun definirPresetHud(preset: PresetHud) = atualizar { it.copy(hud = it.hud.copy(preset = preset)) }
+
+    /** Atalho do HUD (dois toques): troca Padrão ↔ Esportivo e devolve o novo. */
+    fun alternarPresetHud(): PresetHud {
+        val novo = config.value.hud.preset.alternado
+        definirPresetHud(novo)
+        return novo
+    }
+
     /** "Restaurar padrão" da tela de personalização. */
     fun restaurarPadrao() = atualizar { ConfigPainel() }
 

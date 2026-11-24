@@ -97,6 +97,9 @@ enum class ModoComunicacaoEcu(val servico: String) {
     MODO_22("22"),
     ;
 
+    /** Na tela de Erros, avisa que os modos 07/0A dependem de OBD2 padrão (só o KWP, Modo 21). */
+    val avisaModos07e0A: Boolean get() = this == MODO_21
+
     companion object {
         /** Serviço do catálogo (`"21"`, `"22"`) → modo; null se o app não souber falar esse serviço. */
         fun doServico(servico: String): ModoComunicacaoEcu? = entries.firstOrNull { it.servico == servico.uppercase() }

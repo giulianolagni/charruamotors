@@ -58,4 +58,24 @@ class LimpezaSensoresTest {
         assertEquals("Queda rápida (< 0,3 s); motor não pegou no tempo do teste", LaudoBateria.textoQueda(120, false))
         assertEquals("Queda de 1,2 s; motor pegou", LaudoBateria.textoQueda(1200, true))
     }
+
+    @Test
+    fun `titulo da marcha acompanha o maximo de marchas do cambio ativo`() {
+        val catalogo = com.charruamotors.domain.perfis.CatalogoPerfis.carregar(com.charruamotors.domain.perfis.FontePerfis.doClasspath())
+        fun titulo(id: String) = SensorPainel.MARCHA_ATUAL.tituloPara(catalogo.cambios[id])
+        assertEquals("Marcha (1ª–5ª)", titulo("toyota_a750f"))
+        assertEquals("Marcha (1ª–6ª)", titulo("gm_6t35"))
+        assertEquals("Marcha (1ª–6ª)", titulo("aisin_6m"))
+        assertEquals("Marcha", titulo("cvt"))
+        assertEquals("Marcha", titulo("manual"))
+        assertEquals("Marcha", SensorPainel.MARCHA_ATUAL.tituloPara(null))
+        assertEquals("Temp. Água (°C)", SensorPainel.TEMP_MOTOR.tituloPara(catalogo.cambios["gm_6t35"]))
+    }
+
+    @Test
+    fun `nota dos modos 07 e 0A so aparece no modo 21`() {
+        assertTrue((com.charruamotors.obd.ModoComunicacaoEcu.MODO_21).avisaModos07e0A)
+        assertFalse((com.charruamotors.obd.ModoComunicacaoEcu.MODO_22).avisaModos07e0A)
+        assertFalse((com.charruamotors.obd.ModoComunicacaoEcu.OBD2_PADRAO).avisaModos07e0A)
+    }
 }

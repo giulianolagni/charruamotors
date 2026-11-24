@@ -168,7 +168,7 @@ class ClusterPainelActivity : AppCompatActivity() {
             gauge.emAlerta = sensor.emAlerta(alertas) || app.centralAlertas.foraDaFaixa(sensor.comandos, dados)
             if (sensor != exibidos[i] || mudouConversor) {
                 exibidos[i] = sensor
-                MontadorMostradores.configurarGauge(gauge, sensor, EstiloMostrador.DIGITAL, conversor)
+                MontadorMostradores.configurarGauge(gauge, sensor, EstiloMostrador.DIGITAL, conversor, app.sessaoObd.cambioAtivo.value)
             }
             gauge.definirValor(valorExibido(sensor))
         }

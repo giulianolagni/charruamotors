@@ -47,6 +47,16 @@ enum class TamanhoHud(val titulo: String, val descricao: String) {
     EXPANDIDO("Expandido", "Até 4 sensores à sua escolha"),
 }
 
+/**
+ * Tamanho do HUD Esportivo (v2.2.8): largura em dp; a altura segue a proporção fixa do Canvas.
+ * Médio é o padrão; Pequeno é o tamanho da v2.2.7.
+ */
+enum class TamanhoHudEsportivo(val titulo: String, val larguraDp: Int) {
+    PEQUENO("P", 230),
+    MEDIO("M", 285),
+    GRANDE("G", 330),
+}
+
 /** Estilo de texto/gráficos das células do HUD. */
 enum class EstiloHud(val titulo: String) {
     NUMEROS("Números"),
@@ -73,8 +83,10 @@ data class ConfigHud(
     /** Sensores fixados no modo expandido (1 a [MAX_SENSORES]), na ordem em que aparecem. */
     val sensores: List<SensorPainel> = PADRAO_EXPANDIDO,
     val estilo: EstiloHud = EstiloHud.NUMEROS,
-    /** Visual do HUD (v2.2.7); tamanho, sensores e estilo só valem no [PresetHud.PADRAO]. */
+    /** Visual do HUD (v2.2.7); sensores, estilo e o tamanho Minimizado/Expandido só valem no [PresetHud.PADRAO]. */
     val preset: PresetHud = PresetHud.PADRAO,
+    /** Tamanho P/M/G do visual [PresetHud.ESPORTIVO] (v2.2.8). */
+    val tamanhoEsportivo: TamanhoHudEsportivo = TamanhoHudEsportivo.MEDIO,
 ) {
     /** O que o HUD desenha: RPM e Turbo no minimizado; os escolhidos (sem repetir, até 4) no expandido. */
     val sensoresVisiveis: List<SensorPainel>

@@ -23,7 +23,7 @@ import kotlin.math.sin
 
 /**
  * HUD flutuante esportivo (v2.2.7), desenhado só com `Canvas`/`Paint`: conta-giros grande à direita e
- * o mostrador de turbo (~45 % do diâmetro) acoplado embaixo à esquerda, ligados por uma base escura;
+ * o mostrador de turbo (~50 % do diâmetro) acoplado embaixo à esquerda, ligados por uma base escura;
  * fora deles o fundo é transparente para não tampar o Waze.
  *
  * Acabamento: miolo grafite com anéis concêntricos sutis, moldura cinza metálico, ponteiros
@@ -66,14 +66,23 @@ class HudEsportivoView @JvmOverloads constructor(
     private val cxRpm = 148f
     private val cyRpm = 106f
     private val raioRpm = 80f
-    private val raioTurbo = raioRpm * 0.45f
+    private val raioTurbo = raioRpm * PROPORCAO_TURBO
     private val cxTurbo = 44f
     private val cyTurbo = 160f
 
+    /** Largura em dp (P/M/G); a altura segue a proporção do Canvas. */
+    var larguraDp: Int = LARGURA_PADRAO_DP
+        set(v) {
+            if (v == field) return
+            field = v
+            requestLayout()
+            invalidate()
+        }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val d = resources.displayMetrics.density
-        val largura = resolveSize((LARGURA_PADRAO_DP * d).toInt(), widthMeasureSpec)
-        val altura = resolveSize((LARGURA_PADRAO_DP * d * ALTURA_BASE / LARGURA_BASE).toInt(), heightMeasureSpec)
+        val largura = resolveSize((larguraDp * d).toInt(), widthMeasureSpec)
+        val altura = resolveSize((larguraDp * d * ALTURA_BASE / LARGURA_BASE).toInt(), heightMeasureSpec)
         setMeasuredDimension(largura, altura)
     }
 
@@ -216,8 +225,8 @@ class HudEsportivoView @JvmOverloads constructor(
         val anguloRotulo = INICIO_PEDAL + VARREDURA_PEDAL + 9f
         canvas.save()
         canvas.rotate(anguloRotulo + 90f, cxRpm, cyRpm)
-        texto.textSize = raioRpm * 0.12f
-        texto.color = Color.argb(if (pedal == null) alfa / 3 else alfa, 120, 215, 245)
+        texto.textSize = raioRpm * 0.15f
+        texto.color = Color.argb(if (pedal == null) alfa / 3 else alfa, 150, 225, 250)
         canvas.drawText(FormatadorHudEsportivo.ROTULO_PEDAL, cxRpm, cyRpm - r + texto.textSize * 0.35f, texto)
         canvas.restore()
     }
@@ -292,22 +301,25 @@ class HudEsportivoView @JvmOverloads constructor(
             val f = escala.fracao(bar)
             val principal = i % 4 == 0 && bar <= escala.rotuloMaximo + 1e-9
             traco.color = if (f >= escala.fracaoRedline) Color.argb(alfa, 230, 70, 70) else Color.argb(alfa, 235, 235, 235)
-            traco.strokeWidth = if (principal) 1.6f else 0.9f
+            traco.strokeWidth = if (principal) 2.0f else 1.0f
             desenharMarca(canvas, cx, cy, if (principal) r * 0.7f else r * 0.78f, r * 0.86f, f)
         }
-        texto.textSize = r * 0.2f
-        texto.color = Color.argb(alfa, 245, 245, 245)
-        for (v in escala.rotulos) desenharRotulo(canvas, cx, cy, r * 0.5f, escala.fracao(v), String.format(Locale.ROOT, "%.1f", v))
-        texto.textSize = r * 0.17f
-        texto.color = Color.argb(alfa * 4 / 5, 210, 210, 210)
-        canvas.drawText("BAR", cx + r * 0.42f, cy + r * 0.55f, texto)
+        texto.textSize = r * 0.24f
+        texto.color = Color.argb(alfa, 255, 255, 255)
+        for (v in escala.rotulos) desenharRotulo(canvas, cx, cy, r * 0.52f, escala.fracao(v), String.format(Locale.ROOT, "%.1f", v))
+        texto.textSize = r * 0.21f
+        texto.color = Color.argb(alfa * 9 / 10, 225, 225, 225)
+        canvas.drawText("BAR", cx + r * 0.42f, cy + r * 0.58f, texto)
         desenharPonteiro(canvas, cx, cy, r, escala.fracao(boost))
     }
 
     companion object {
         const val LARGURA_BASE = 250f
         const val ALTURA_BASE = 200f
-        private const val LARGURA_PADRAO_DP = 230
+        const val LARGURA_PADRAO_DP = 285
+
+        /** Diâmetro do turbo relativo ao do conta-giros (v2.2.8: 45 % → 50 %). */
+        const val PROPORCAO_TURBO = 0.5f
 
         /** Escalas: de 135° (embaixo à esquerda) a 360° (direita), livrando o quadrante inferior direito. */
         private const val INICIO_ARCO = 135f

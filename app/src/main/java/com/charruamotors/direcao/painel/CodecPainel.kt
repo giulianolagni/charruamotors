@@ -19,13 +19,14 @@ object CodecPainel {
     const val HUD_SENSORES = "hud_sensores"
     const val HUD_ESTILO = "hud_estilo"
     const val HUD_PRESET = "hud_preset"
+    const val HUD_TAMANHO_ESPORTIVO = "hud_tamanho_esportivo"
 
     /** v1.4 (só leitura). */
     const val MOSTRADORES_LEGADO = "mostradores"
     const val ESTILO_LEGADO = "estilo"
 
     /** Todas as chaves que o codec grava. */
-    val CHAVES = listOf(ORDEM, OCULTAS, BOTOES_NAVEGACAO, ORDEM_BOTOES, MOSTRADORES_V2, LISTA_RAPIDA, HUD_TAMANHO, HUD_SENSORES, HUD_ESTILO, HUD_PRESET)
+    val CHAVES = listOf(ORDEM, OCULTAS, BOTOES_NAVEGACAO, ORDEM_BOTOES, MOSTRADORES_V2, LISTA_RAPIDA, HUD_TAMANHO, HUD_SENSORES, HUD_ESTILO, HUD_PRESET, HUD_TAMANHO_ESPORTIVO)
 
     fun codificar(c: ConfigPainel): Map<String, String> = mapOf(
         ORDEM to juntar(OrdemPainel.normalizar(c.ordem).map { it.name }),
@@ -38,6 +39,7 @@ object CodecPainel {
         HUD_SENSORES to juntar(c.hud.sensores.map { it.name }),
         HUD_ESTILO to c.hud.estilo.name,
         HUD_PRESET to c.hud.preset.name,
+        HUD_TAMANHO_ESPORTIVO to c.hud.tamanhoEsportivo.name,
     )
 
     /** Lê com [ler] (null = chave ausente); valores ausentes ou corrompidos voltam aos padrões. */
@@ -62,6 +64,7 @@ object CodecPainel {
                     estilo = enumOu(ler(HUD_ESTILO), EstiloHud.NUMEROS),
                     // Ausente (até a v2.2.6) ou desconhecido = o visual de sempre.
                     preset = enumOu(ler(HUD_PRESET), PresetHud.PADRAO),
+                    tamanhoEsportivo = enumOu(ler(HUD_TAMANHO_ESPORTIVO), TamanhoHudEsportivo.MEDIO),
                 ),
             ),
         )

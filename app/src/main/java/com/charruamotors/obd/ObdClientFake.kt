@@ -2,6 +2,9 @@ package com.charruamotors.obd
 
 import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.perfis.ImpressaoEcu
+import com.charruamotors.obd.aprendizado.FonteSimulacao
+import com.charruamotors.obd.aprendizado.ModeloAprendido
+import com.charruamotors.obd.aprendizado.ReprodutorTrechos
 import com.charruamotors.obd.log.EntradaRegistro
 import com.charruamotors.obd.log.RegistroComunicacao
 import com.charruamotors.obd.pid.CatalogoEstendido
@@ -105,6 +108,33 @@ class ObdClientFake(
      */
     @Volatile var perfilForcado: PerfilSimulacao? = null
 
+    // ---------------------------------------------------------------- aprendizado de logs reais (v2.2.4)
+
+    /** Modelo aprendido do veículo da próxima conexão (null = simulador sintético). */
+    @Volatile private var modeloPendente: ModeloAprendido? = null
+
+    /** Reprodução dos trechos reais nesta conexão; null = sintético. */
+    private var reprodutor: ReprodutorTrechos? = null
+
+    /** Comandos 01xx/ATRV que a reprodução responde como PIDs padrão (os de montadora entram pelo perfil). */
+    private var comandosAprendidos: Set<String> = emptySet()
+
+    /** Chaves aprendidas (inclusive as de montadora) que o perfil pode ativar. */
+    private var chavesAprendidas: Set<String> = emptySet()
+
+    private val _fonteSimulacao = MutableStateFlow<FonteSimulacao>(FonteSimulacao.Sintetica)
+
+    /** De onde vêm os dados desta conexão: logs reais do veículo ou o simulador sintético. */
+    val fonteSimulacao: StateFlow<FonteSimulacao> = _fonteSimulacao.asStateFlow()
+
+    /**
+     * Define o modelo aprendido do veículo selecionado (sempre só dele) para a **próxima** conexão;
+     * null, ou um modelo sem trecho utilizável, mantém o simulador sintético.
+     */
+    fun definirModeloAprendido(modelo: ModeloAprendido?) {
+        modeloPendente = modelo
+    }
+
     /** Teste de Atuadores: ignição ligada com o motor desligado (o `010C` manual devolve 0 rpm). */
     @Volatile private var motorDesligadoSimulado = false
     private val bateria = SimuladorBateria(random, relogioMs)
@@ -177,6 +207,7 @@ class ObdClientFake(
         vinConexao = vin ?: vinSimulado(perfilSimulacao, marcaVeiculo)
         marcaConexao = marcaVeiculo
         cruze.reiniciar()
+        prepararReproducao()
         velocidade = 0.0
         velocidadeAlvo = 40.0
         temperatura = 35.0
@@ -199,6 +230,26 @@ class ObdClientFake(
         _pidsSuportados.value = comandos
         _estado.value = EstadoConexaoObd.Conectado
         return Result.success(Unit)
+    }
+
+    /** Liga a reprodução dos logs reais se o modelo pendente tiver trecho com RPM e sensores padrão; senão, sintético. */
+    private fun prepararReproducao() {
+        val modelo = modeloPendente?.takeIf { it.utilizavel }
+        val r = modelo?.let { ReprodutorTrechos(it.trechos) }?.takeUnless { it.vazio }
+        val padrao = r?.comandos.orEmpty().filterTo(linkedSetOf()) { REGEX_PADRAO.matches(it) }
+        if (modelo == null || r == null || Pids.RPM !in padrao) {
+            reprodutor = null
+            comandosAprendidos = emptySet()
+            chavesAprendidas = emptySet()
+            _fonteSimulacao.value = FonteSimulacao.Sintetica
+            return
+        }
+        r.reiniciar()
+        reprodutor = r
+        comandosAprendidos = padrao
+        chavesAprendidas = r.comandos
+        _fonteSimulacao.value = FonteSimulacao.LogsReais(modelo.quantidadeLogs)
+        registro.evento("Modo simulado: reproduzindo ${modelo.quantidadeLogs} log(s) real(is) do veículo")
     }
 
     override fun lerDadosEmTempoReal(intervaloMs: Long, comandos: Collection<String>?): Flow<DadosObd> = flow {
@@ -242,7 +293,8 @@ class ObdClientFake(
             return ResultadoPerfil.Indisponivel(perfil.nome, "scanner não conectado")
         }
         delay(latenciaMs)
-        val ativos = perfil.pids.filter { it.comando in SIMULADOS_ESTENDIDOS }
+        // Com logs reais, só entram os PIDs de montadora que o carro de fato respondeu nos CSVs.
+        val ativos = perfil.pids.filter { if (reprodutor != null) it.comando in chavesAprendidas else it.comando in SIMULADOS_ESTENDIDOS }
         if (ativos.isEmpty()) return ResultadoPerfil.Indisponivel(perfil.nome, "a ECU não respondeu aos PIDs do perfil")
         estendidosAtivos = ativos.mapTo(linkedSetOf()) { it.comando }
         _pidsSuportados.value = _pidsSuportados.value + estendidosAtivos
@@ -408,6 +460,7 @@ class ObdClientFake(
         if (motorDesligadoSimulado) ultimaLeitura + mapOf(Pids.RPM to 0.0, Pids.VELOCIDADE to 0.0) else ultimaLeitura
 
     private fun comandosDoPerfil(): Set<String> = when {
+        reprodutor != null -> comandosAprendidos
         perfilSimulacao == PerfilSimulacao.CRUZE_14T_FLEX -> SimuladorCruze.COMANDOS
         // Aspirado de injeção indireta (marca informada, fora Toyota/GM/VW): sem o rail absoluto (0123) da GDI/diesel.
         // Sem marca (conexão de demonstração/testes antigos) segue o catálogo completo.
@@ -471,6 +524,7 @@ class ObdClientFake(
 
     /** Avança a simulação [dt] segundos de condução e devolve todos os PIDs "lidos" da ECU. */
     private fun proximaLeitura(dt: Double): Map<String, Double> {
+        reprodutor?.let { return leituraAprendida(it, dt) }
         val aceleracao = avancarVelocidade(dt)
 
         // Temperatura de trabalho: ~90 °C no genérico; ~97 °C no Cruze (termostato GM ~95–105 °C).
@@ -558,6 +612,16 @@ class ObdClientFake(
         return leitura
     }
 
+    /** Próximo instante dos trechos reais, só com os PIDs que a "ECU" anunciou (padrão + perfil ativado). */
+    private fun leituraAprendida(r: ReprodutorTrechos, dt: Double): Map<String, Double> {
+        segundosMotorLigado += dt
+        val suportados = _pidsSuportados.value
+        val leitura = r.proxima(dt).filterKeys { it in suportados }
+        leitura[Pids.VELOCIDADE]?.let { velocidade = it }
+        ultimaLeitura = leitura
+        return leitura
+    }
+
     /**
      * Valores dos PIDs de montadora simulados: ATF segue o óleo; injetores com desvios fixos; pedal
      * APP D/E (o E ~16 pontos acima); marcha pela velocidade (0xFF = parado) com a alavanca em D.
@@ -599,6 +663,9 @@ class ObdClientFake(
         const val VIN_VW_TSI = "9BWAG5BZ9KP012345"
 
         private const val NO_DATA = "NO DATA\r\r"
+
+        /** PID padrão (`01xx`) ou a tensão (`ATRV`): o que a ECU anuncia sem perfil de montadora. */
+        private val REGEX_PADRAO = Regex("^(01[0-9A-F]{2}|ATRV)$")
 
         /** VIN coerente com o carro simulado, para a detecção por VIN (`0902`) funcionar no Modo Simulado. */
         fun vinSimulado(perfil: PerfilSimulacao, marca: String?): String = when {

@@ -208,6 +208,19 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- Modo Simulado: de onde vêm os dados (logs reais do veículo ou simulador sintético) -->
+        <TextView
+            android:id="@+id/texto_fonte_simulacao"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/espaco_medio"
+            android:layout_marginEnd="@dimen/espaco_medio"
+            android:textAppearance="?attr/textAppearanceLabelSmall"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone"
+            tools:text="Baseado em 3 logs reais deste veículo"
+            tools:visibility="visible" />
+
         <!-- Perfil escolhido automaticamente (VDS do VIN / sondagem da ECU): aviso discreto, Manter ou Ignorar -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/card_perfil_automatico"

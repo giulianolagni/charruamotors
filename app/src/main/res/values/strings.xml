@@ -316,4 +316,11 @@ Toque em “Novo abastecimento” para começar.</string>
     <string name="hud_status_ao_vivo">● OBD AO VIVO</string>
     <string name="hud_status_desconectado">○ SEM CONEXÃO OBD</string>
     <string name="hud_status_alerta">▲ MOTOR QUENTE</string>
+
+    <!-- v2.2.4: indicador do Modo Simulado -->
+    <plurals name="simulado_fonte_logs_reais">
+        <item quantity="one">Baseado em %d log real deste veículo</item>
+        <item quantity="other">Baseado em %d logs reais deste veículo</item>
+    </plurals>
+    <string name="simulado_fonte_sintetica">Simulação sintética (sem logs reais)</string>
 </resources>

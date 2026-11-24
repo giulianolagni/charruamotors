@@ -42,7 +42,7 @@ class CompatibilidadeV215Test {
             FaixaEsperada(TEMP_AGUA, 80.0, 98.0),
             FaixaEsperada(TEMP_ATF, 60.0, 105.0),
             FaixaEsperada(TENSAO, 13.4, 14.6),
-            FaixaEsperada(RAIL, 280.0, 1_800.0),
+            FaixaEsperada(RAIL, 280.0, 2_000.0), // v2.2.6: teto do rail 1.800 → 2.000 bar
             FaixaEsperada(RAIL_LENTA, 280.0, 600.0),
             FaixaEsperada(MAP_TURBO, 60.0, 215.0),
             FaixaEsperada(BICOS, -3.0, 3.0),

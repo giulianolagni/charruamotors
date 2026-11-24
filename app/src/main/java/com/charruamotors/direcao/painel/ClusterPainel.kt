@@ -1,6 +1,7 @@
 package com.charruamotors.direcao.painel
 
 import com.charruamotors.domain.calculo.AlertasProtecao
+import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.calculo.LimitesProtecao
 import com.charruamotors.domain.calculo.TipoAlertaProtecao
 import com.charruamotors.obd.ValoresSensores
@@ -57,14 +58,14 @@ object ClusterPainel {
     }
 
     /**
-     * Marcha/alavanca do centro: com a alavanca em D/3/2/L e uma marcha válida (1ª..6ª) mostra a
+     * Marcha/alavanca do centro: com a alavanca em D/3/2/L e uma marcha válida (1ª..6ª, ou 1ª L..5ª L na reduzida) mostra a
      * marcha grande e a alavanca pequena; senão a alavanca (`P`, `R`, `N`, `D`); sem alavanca, a
      * marcha. `0xFF` (parado) e leituras fora das tabelas não contam.
      */
     fun indicadorMarcha(dados: ValoresSensores?): IndicadorMarcha {
         val alavanca = SensorPainel.MARCHA_ALAVANCA.ler(dados)?.let { SensorPainel.MARCHA_ALAVANCA.rotulos[it.toInt()] }
         val numero = SensorPainel.MARCHA_ATUAL.ler(dados)?.toInt()
-        val marcha = numero?.takeIf { it in 1..6 }?.let { SensorPainel.MARCHA_ATUAL.rotulos[it] }
+        val marcha = numero?.takeIf { it in 1..6 || CambioA750f.ehReduzida(it) }?.let { SensorPainel.MARCHA_ATUAL.rotulos[it] }
         return when {
             alavanca != null && alavanca !in ALAVANCAS_SEM_MARCHA && marcha != null -> IndicadorMarcha(marcha, alavanca)
             alavanca != null -> IndicadorMarcha(alavanca)

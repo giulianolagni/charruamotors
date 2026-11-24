@@ -244,4 +244,31 @@ class PollingCambio7E1Test {
         assertEquals(listOf(0, 4, 8), comLeve)
         assertTrue(ciclos.all { "010C" in it })
     }
+
+    @Test
+    fun `com o 7E1 respondendo a alavanca do 7E0 sai do polling`() = runTest {
+        // A SW4 2013 também responde ao 7E0 · 21D9 (sempre P): com o 7E1 vivo ele é redundante (v2.2.6).
+        val t = Ecu(sw4(comCambio = true).apply { put("7E0:21D9", "61D900\r\r") })
+        val obd = cliente(t)
+        obd.conectar(dispositivo, "Toyota Hilux SW4")
+
+        val perfil = obd.ativarPerfilFabricante("Toyota") as ResultadoPerfil.Ativo
+
+        assertTrue("TOYOTA_ALAVANCA" in obd.pidsSuportados.value)
+        assertFalse("TOYOTA_ALAVANCA_ECM" in obd.pidsSuportados.value)
+        assertTrue(perfil.pids.none { it.comando == "TOYOTA_ALAVANCA_ECM" })
+        assertTrue(obd.eventos().any { "TOYOTA_ALAVANCA_ECM (7E0 · 21D9) fora do polling" in it })
+    }
+
+    @Test
+    fun `sem o 7E1 a alavanca do 7E0 continua no polling`() = runTest {
+        val t = Ecu(sw4(comCambio = false).apply { put("7E0:21D9", "61D900\r\r") })
+        val obd = cliente(t)
+        obd.conectar(dispositivo, "Toyota Hilux SW4")
+
+        obd.ativarPerfilFabricante("Toyota")
+
+        assertTrue("TOYOTA_ALAVANCA_ECM" in obd.pidsSuportados.value)
+        assertFalse("TOYOTA_ALAVANCA" in obd.pidsSuportados.value)
+    }
 }

@@ -276,8 +276,11 @@ class SessaoObd(
     /** Combustível do veículo da sessão (Auto Flex por padrão): decide a estequiometria da A/F real. */
     @Volatile private var combustivelAtual: TipoCombustivel? = null
 
-    /** Alavanca P/N → P ou N e marcha estimada da A750F (SW4), com a memória do último movimento. */
-    private val estimadorCambio = EstimadorCambioA750f()
+    /**
+     * Marcha estimada da A750F (SW4) e, v2.2.6, a reduzida (4L) detectada pela razão rpm/velocidade
+     * com o `fatorReduzida` do câmbio em uso (relido a cada amostra).
+     */
+    private val estimadorCambio = EstimadorCambioA750f { _cambioAtivo.value }
 
     /** Marcha 1ª–6ª estimada do câmbio GM 6T35/6T40 (Cruze) pela razão rpm/velocidade. */
     private val estimadorCambioGm = EstimadorCambioGm6T()
@@ -461,6 +464,7 @@ class SessaoObd(
             marcaAtual = veiculo?.marca
             veiculoAtual = veiculo
             _cambioAtivo.value = veiculo?.cambio
+            estimadorCambio.reiniciar()
             combustivelAtual = veiculo?.combustivel
             // A750F (alavanca no 7E1) e GM têm estimador próprio; os demais automáticos usam as razões do perfil.
             estimadorPerfil = veiculo?.cambio?.takeIf { it.estimaMarcha && it.mapaAlavanca == null }?.let(::EstimadorMarchaPerfil)

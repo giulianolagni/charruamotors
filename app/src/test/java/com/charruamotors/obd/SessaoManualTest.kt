@@ -326,4 +326,29 @@ class SessaoManualTest {
         // De volta ao funcional 7DF: o serviço 21 só atende o endereço físico.
         assertEquals("NO DATA\r\r", obd.enviarComandoManual("21AD").getOrThrow().resposta)
     }
+
+    @Test
+    fun `ao retomar da sessao manual o ATRV em cache e descartado ate uma leitura fresca`() = runTest {
+        val (t, obd) = conectado()
+        val leituras = mutableListOf<DadosObd>()
+        backgroundScope.launch { obd.lerTelemetria(intervaloMinimoMs = 100).collect { leituras += it } }
+        advanceTimeBy(20_000)
+        assertTrue("o ATRV entrou no polling", leituras.any { it.valores["ATRV"] == 12.6 })
+
+        obd.iniciarSessaoManual()
+        advanceTimeBy(50)
+        // Teste de Bateria com o motor desligado; depois o motor pega e a tensão sobe.
+        t.respostas["ATRV"] = "14.1V\r\r"
+        obd.encerrarSessaoManual()
+        val retomada = leituras.size
+        advanceTimeBy(20_000)
+
+        val depois = leituras.drop(retomada)
+        assertTrue(depois.isNotEmpty())
+        // Nenhum instantâneo depois da retomada traz a tensão velha (12,6 V) do cache (v2.2.6).
+        assertTrue(depois.none { it.valores["ATRV"] == 12.6 })
+        // A primeira leitura pós-retomada ou não tem ATRV ou já tem o fresco.
+        assertTrue(depois.first().valores["ATRV"].let { it == null || it == 14.1 })
+        assertTrue(depois.any { it.valores["ATRV"] == 14.1 })
+    }
 }

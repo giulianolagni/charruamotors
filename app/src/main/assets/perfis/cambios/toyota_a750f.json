@@ -22,6 +22,7 @@
     ]
   },
   "limiteAtfC": 105,
+  "fatorReduzida": 2.57,
   "observacao": "O 7E1 · 2130 devolve 0xFF fixo mesmo andando: a marcha 1ª–5ª é estimada pela razão rpm / velocidade (km/h).",
   "faixas": [
     { "parametro": "TEMP_ATF", "min": 60, "max": 105 }

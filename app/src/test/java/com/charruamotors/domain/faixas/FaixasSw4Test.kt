@@ -29,7 +29,7 @@ class FaixasSw4Test {
         assertEquals(80.0 to 98.0, faixa(ParametroFaixa.TEMP_AGUA).let { it.min to it.max })
         assertEquals(60.0 to 105.0, faixa(ParametroFaixa.TEMP_ATF).let { it.min to it.max })
         assertEquals(13.4 to 14.6, faixa(ParametroFaixa.TENSAO).let { it.min to it.max })
-        assertEquals(280.0 to 1_800.0, faixa(ParametroFaixa.RAIL).let { it.min to it.max })
+        assertEquals(280.0 to 2_000.0, faixa(ParametroFaixa.RAIL).let { it.min to it.max }) // v2.2.6: teto 2.000 bar
         assertEquals(280.0 to 600.0, faixa(ParametroFaixa.RAIL_LENTA).let { it.min to it.max })
         // 60 kPa (v2.1.1): em altitude a marcha lenta fica em 73–75 kPa e não pode acender o vermelho.
         assertEquals(60.0 to 215.0, faixa(ParametroFaixa.MAP_TURBO).let { it.min to it.max })
@@ -49,7 +49,7 @@ class FaixasSw4Test {
         assertEquals("650 – 800 rpm", faixa(ParametroFaixa.RPM_LENTA).texto)
         assertEquals("máx. 4.200 rpm", faixa(ParametroFaixa.RPM_MAXIMO).texto)
         assertEquals("13,4 – 14,6 V", faixa(ParametroFaixa.TENSAO).texto)
-        assertEquals("280 – 1.800 bar", faixa(ParametroFaixa.RAIL).texto)
+        assertEquals("280 – 2.000 bar", faixa(ParametroFaixa.RAIL).texto)
         assertEquals("-3,00 a +3,00 mm³/st", faixa(ParametroFaixa.BICOS).texto)
         assertTrue(sw4.linhasFicha().contains("Pressão Turbo (MAP): 60 – 215 kPa"))
     }
@@ -83,12 +83,13 @@ class FaixasSw4Test {
 
     @Test
     fun `marcha lenta so vale parado e sem acelerar`() {
-        val lentaAlta = dados(Pids.RPM to 900.0, Pids.VELOCIDADE to 0.0)
+        val q = Pids.TEMPERATURA_MOTOR to 85.0 // motor aquecido (v2.2.6)
+        val lentaAlta = dados(Pids.RPM to 900.0, Pids.VELOCIDADE to 0.0, q)
         assertTrue(sw4.violacoes(lentaAlta).any { it.faixa.parametro == ParametroFaixa.RPM_LENTA && it.situacao == SituacaoFaixa.ACIMA })
         // Andando a 900 rpm não é marcha lenta; acelerando parado (pedal 30 %) também não.
-        assertFalse(sw4.violacoes(dados(Pids.RPM to 900.0, Pids.VELOCIDADE to 20.0)).any { it.faixa.parametro == ParametroFaixa.RPM_LENTA })
-        assertFalse(sw4.violacoes(dados(Pids.RPM to 900.0, Pids.VELOCIDADE to 0.0, "TOYOTA_PEDAL_D" to 30.0)).any { it.faixa.parametro == ParametroFaixa.RPM_LENTA })
-        assertTrue(sw4.violacoes(dados(Pids.RPM to 700.0, Pids.VELOCIDADE to 0.0)).isEmpty())
+        assertFalse(sw4.violacoes(dados(Pids.RPM to 900.0, Pids.VELOCIDADE to 20.0, q)).any { it.faixa.parametro == ParametroFaixa.RPM_LENTA })
+        assertFalse(sw4.violacoes(dados(Pids.RPM to 900.0, Pids.VELOCIDADE to 0.0, "TOYOTA_PEDAL_D" to 30.0, q)).any { it.faixa.parametro == ParametroFaixa.RPM_LENTA })
+        assertTrue(sw4.violacoes(dados(Pids.RPM to 700.0, Pids.VELOCIDADE to 0.0, q)).isEmpty())
     }
 
     @Test
@@ -101,7 +102,7 @@ class FaixasSw4Test {
     @Test
     fun `rail em bar e tensao so com o motor ligado`() {
         // 650 bar parado em lenta: dentro da faixa geral, acima da de marcha lenta (280–600).
-        val railAlto = sw4.violacoes(dados(Pids.RPM to 700.0, Pids.VELOCIDADE to 0.0, Pids.PRESSAO_RAIL to 65_000.0))
+        val railAlto = sw4.violacoes(dados(Pids.RPM to 700.0, Pids.VELOCIDADE to 0.0, Pids.PRESSAO_RAIL to 65_000.0, Pids.TEMPERATURA_MOTOR to 85.0))
         assertEquals(listOf(ParametroFaixa.RAIL_LENTA), railAlto.map { it.faixa.parametro })
         assertEquals(650.0, railAlto.single().valor, 1e-9)
         // Alternador baixo com o motor girando; com ele desligado a bateria em 12,5 V é normal.
@@ -131,8 +132,8 @@ class FaixasSw4Test {
     @Test
     fun `relatorio da sessao resume as faixas`() {
         val e = EstatisticasViagem(faixas = sw4)
-        e.registrar(dados(Pids.RPM to 700.0, Pids.VELOCIDADE to 0.0, Pids.PRESSAO_RAIL to 30_000.0, Pids.TENSAO_BATERIA to 14.1))
-        e.registrar(dados(Pids.RPM to 900.0, Pids.VELOCIDADE to 0.0, Pids.PRESSAO_RAIL to 39_000.0, Pids.TENSAO_BATERIA to 14.2))
+        e.registrar(dados(Pids.RPM to 700.0, Pids.VELOCIDADE to 0.0, Pids.PRESSAO_RAIL to 30_000.0, Pids.TENSAO_BATERIA to 14.1, Pids.TEMPERATURA_MOTOR to 85.0))
+        e.registrar(dados(Pids.RPM to 900.0, Pids.VELOCIDADE to 0.0, Pids.PRESSAO_RAIL to 39_000.0, Pids.TENSAO_BATERIA to 14.2, Pids.TEMPERATURA_MOTOR to 85.0))
         e.registrar(dados(Pids.RPM to 2_500.0, Pids.VELOCIDADE to 80.0, Pids.PRESSAO_RAIL to 120_000.0, Pids.TENSAO_BATERIA to 14.0))
         val lenta = e.acompanhamentoFaixas.first { it.faixa.parametro == ParametroFaixa.RPM_LENTA }
         assertEquals(2, lenta.amostras) // só as duas paradas

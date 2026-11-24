@@ -39,6 +39,7 @@ object ObdParser {
     /** 17 caracteres; o padrão ISO 3779 exclui I, O e Q (confundíveis com 1 e 0). */
     private val regexVin = Regex("^[A-HJ-NPR-Z0-9]{17}$")
     private const val TAMANHO_VIN = 17
+    private const val TAMANHO_CALID = 16
 
     // ---------------------------------------------------------------- PIDs do modo 01
 
@@ -284,6 +285,47 @@ object ObdParser {
             .joinToString("")
         val vin = texto.take(TAMANHO_VIN)
         return if (regexVin.matches(vin)) RespostaObd.Ok(vin) else RespostaObd.Invalido(bruto)
+    }
+
+    // ---------------------------------------------------------------- Impressão digital da ECU (0151, 0904)
+
+    /**
+     * `0151`: tipo de combustível (SAE J1979), resposta `41 51 XX`. Devolve o byte `XX` cru; quem
+     * decodifica é o [com.charruamotors.domain.perfis.CombustivelEcu]. `NO DATA`/`7F` viram erro tipado.
+     */
+    fun parseCombustivelEcu(bruto: String, comando: String? = "0151"): RespostaObd<Int> {
+        val linhas = linhasLimpas(bruto, comando)
+        for (linha in linhas) {
+            val compacta = compactar(linha)
+            val i = compacta.indexOf("4151")
+            if (i < 0) continue
+            hexParaBytes(compacta.substring(i + 4)).firstOrNull()?.let { return RespostaObd.Ok(it) }
+        }
+        return classificarErro(linhas, bruto)
+    }
+
+    /**
+     * `0904`: ID de Calibração (CALID). Resposta `49 04 NN` + `NN` blocos de 16 bytes ASCII (preenchidos
+     * com `00`): em CAN vem multi-frame ISO-TP (`0:`, `1:`...), em KWP/ISO 9141 uma linha `49 04 <seq> ...`
+     * por trecho. Devolve o texto limpo (sem nulos nem controles); vários CALIDs saem unidos por ` / `.
+     */
+    fun parseCalid(bruto: String, comando: String? = "0904"): RespostaObd<String> {
+        val linhas = linhasLimpas(bruto, comando)
+        val partes = linhas.mapNotNull { linha ->
+            val compacta = compactar(linha)
+            val i = compacta.indexOf("4904")
+            if (i < 0) null else hexParaBytes(compacta.substring(i + 4))
+        }.filter { it.isNotEmpty() }
+        if (partes.isEmpty()) return classificarErro(linhas, bruto)
+
+        // O 1º byte de cada parte é a quantidade de CALIDs (CAN) ou a sequência (KWP): ordena e descarta.
+        val ids = partes.sortedBy { it.first() }
+            .flatMap { it.drop(1) }
+            .chunked(TAMANHO_CALID)
+            .map { bloco -> bloco.filter { it in 0x20..0x7E }.map { it.toChar() }.joinToString("").trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+        return if (ids.isEmpty()) RespostaObd.Invalido(bruto) else RespostaObd.Ok(ids.joinToString(" / "))
     }
 
     // ---------------------------------------------------------------- DTCs (modos 03 e 04)

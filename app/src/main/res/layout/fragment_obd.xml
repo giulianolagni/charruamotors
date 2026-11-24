@@ -208,6 +208,51 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- Perfil escolhido automaticamente (VDS do VIN / sondagem da ECU): aviso discreto, Manter ou Ignorar -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_perfil_automatico"
+            style="@style/Widget.Material3.CardView.Filled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_pequeno"
+            android:visibility="gone"
+            app:cardCornerRadius="20dp"
+            tools:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/espaco_medio"
+                android:paddingEnd="@dimen/espaco_minimo">
+
+                <TextView
+                    android:id="@+id/texto_perfil_automatico"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:paddingTop="@dimen/espaco_pequeno"
+                    android:paddingBottom="@dimen/espaco_pequeno"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    tools:text="Perfil identificado: Toyota Hilux SW4 (VDS do VIN)" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_manter_perfil"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/obd_perfil_manter" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_ignorar_perfil"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/obd_perfil_ignorar" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- Blocos do Painel: o ObdFragment mostra, esconde e reposiciona os filhos conforme
              "Personalizar Painel" -->
         <!-- Alertas de proteção (água, ATF, alternador): vermelho enquanto algum limite estiver ultrapassado -->

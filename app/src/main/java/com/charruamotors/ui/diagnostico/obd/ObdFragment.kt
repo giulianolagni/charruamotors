@@ -53,6 +53,7 @@ import com.charruamotors.ui.painel.ClusterPainelActivity
 import com.charruamotors.ui.painel.EditorConfigHud
 import com.charruamotors.ui.painel.MontadorMostradores
 import com.charruamotors.domain.perfis.DecodificadorVin
+import com.charruamotors.domain.perfis.PerfilIdentificado
 import com.charruamotors.domain.calculo.AlertaProtecao
 import com.charruamotors.domain.calculo.EstadoCronometro
 import com.charruamotors.domain.calculo.EstequiometriaFlex
@@ -198,6 +199,8 @@ class ObdFragment : Fragment() {
         switchSimularFalha.setOnCheckedChangeListener { _, marcado -> viewModel.definirSimularFalha(marcado) }
         botaoCancelarConexao.setOnClickListener { viewModel.desconectar() }
         botaoDesconectar.setOnClickListener { viewModel.desconectar() }
+        botaoManterPerfil.setOnClickListener { viewModel.manterPerfilAutomatico() }
+        botaoIgnorarPerfil.setOnClickListener { viewModel.ignorarPerfilAutomatico() }
         botaoSalvarLeitura.setOnClickListener { viewModel.salvarLeitura() }
         botaoGravarLog.setOnClickListener { viewModel.alternarLog() }
         botaoArmarCronometro.setOnClickListener { viewModel.alternarCronometro() }
@@ -475,6 +478,7 @@ class ObdFragment : Fragment() {
                 launch { viewModel.dados.collect { mostrarDados(it) } }
                 launch { viewModel.sensores.collect { mostrarSensores(it) } }
                 launch { viewModel.infoEcu.collect { mostrarInfoEcu(it) } }
+                launch { viewModel.perfilAutomatico.collect { mostrarPerfilAutomatico(it) } }
                 launch { viewModel.estadoLog.collect { mostrarEstadoLog(it) } }
                 launch {
                     viewModel.computador.collect {
@@ -578,6 +582,14 @@ class ObdFragment : Fragment() {
             gauge.definirValor(m.sensor.ler(dados, consumoKmL)?.let { m.sensor.exibir(it, conversor).valor })
         }
         atualizarBotoes()
+    }
+
+    /** Aviso discreto do perfil escolhido pela sessão (VDS do VIN / sondagem da ECU), com Manter / Ignorar. */
+    private fun mostrarPerfilAutomatico(perfil: PerfilIdentificado?) = with(binding) {
+        cardPerfilAutomatico.isVisible = perfil != null
+        if (perfil != null) {
+            textoPerfilAutomatico.text = getString(R.string.obd_perfil_automatico, perfil.preset.titulo, perfil.origem.rotulo)
+        }
     }
 
     /** Faixa vermelha no topo dos blocos enquanto algum limite do veículo (água, ATF, alternador) está ultrapassado. */

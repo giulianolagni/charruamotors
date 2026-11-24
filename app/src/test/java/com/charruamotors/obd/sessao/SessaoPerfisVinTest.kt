@@ -95,9 +95,35 @@ class SessaoPerfisVinTest {
         assertEquals(ObdClientFake.VIN_CRUZE, campo(txt, "VIN (0902)"))
         assertEquals("Chevrolet (WMI 8AG, Argentina)", campo(txt, "Montadora (VIN)"))
         assertEquals("2018", campo(txt, "Ano-modelo (VIN)"))
-        assertEquals("Genérico · Flex Aspirado (limites do cadastro)", campo(txt, "Perfil de faixas"))
-        val sugestao = campo(txt, "Sugestão de perfil")!!
-        assertTrue(sugestao, "Chevrolet Cruze 1.4 Turbo Flex 2018 (LE2)" in sugestao)
+        // v2.2.2: o chassi (8AGB…) casa com o Cruze 1.4T, então o perfil é aplicado na hora (sem só sugerir).
+        assertEquals("Chevrolet Cruze 1.4 Turbo Flex 2018 (LE2)", campo(txt, "Perfil de faixas"))
+        assertTrue(campo(txt, "Origem do perfil")!!.startsWith("VDS do VIN"))
+        assertEquals(null, campo(txt, "Sugestão de perfil"))
+        assertFalse(mensagens.any { it.startsWith("VIN indica") })
+    }
+
+    @Test
+    fun `cadastro generico sem match por VDS ainda recebe a sugestao do VIN`() = runTest {
+        // Chassi da GM que não casa com padrão nenhum (8AGXX…): só a montadora é conhecida.
+        val spin = veiculo("Chevrolet", "Spin 1.8", 2018, TipoCombustivel.FLEX)
+        val (txt, mensagens) = run {
+            val sessao = SessaoObd(
+                clientePorModo = { ObdClientFake(random = Random(7), latenciaMs = 50, vin = "8AGXX69S0JR104567") },
+                modoInicial = ModoObd.SIMULADO, catalogoPids = CatalogoTeste.padrao, catalogoDtc = CatalogoDtc.VAZIO,
+                config = { ConfigAutoConexao(veiculoId = spin.id) }, buscarVeiculo = { spin },
+                destinoLogs = destino, pastaTemporaria = pasta.newFolder(), escopo = escopo(),
+                io = StandardTestDispatcher(testScheduler), relogio = { inicio + testScheduler.currentTime }, zona = ZoneOffset.UTC,
+            )
+            val msgs = mutableListOf<String>()
+            escopo().launch { sessao.eventos.collect { (it as? EventoSessao.Mensagem)?.let { m -> msgs += m.texto } } }
+            sessao.conectar(scanner, veiculoId = spin.id, origem = OrigemSessao.MANUAL)
+            advanceTimeBy(8_000)
+            runCurrent()
+            sessao.desconectar()
+            advanceUntilIdle()
+            destino.terminadoEm(".txt").conteudo to msgs
+        }
+        assertTrue(campo(txt, "Sugestão de perfil")!!.contains("Chevrolet Cruze 1.4 Turbo Flex 2018 (LE2)"))
         assertTrue(mensagens.toString(), mensagens.any { it.startsWith("VIN indica Chevrolet 2018") })
     }
 

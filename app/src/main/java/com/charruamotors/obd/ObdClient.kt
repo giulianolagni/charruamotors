@@ -1,6 +1,7 @@
 package com.charruamotors.obd
 
 import com.charruamotors.domain.model.EstadoConexaoObd
+import com.charruamotors.domain.perfis.ImpressaoEcu
 import com.charruamotors.obd.log.EntradaRegistro
 import com.charruamotors.obd.pid.Pids
 import kotlinx.coroutines.flow.Flow
@@ -85,6 +86,14 @@ interface ObdClient {
 
     /** Lê o VIN / número do chassi (modo 09, PID 02). */
     suspend fun lerVin(): Result<String>
+
+    /**
+     * Impressão digital leve da ECU na conexão: combustível (`0151`), CALID (`0904`) e, com
+     * [sondarTcm], a presença do TCM em `7E1`/`7E2` (restaurando sempre o cabeçalho e o filtro de
+     * recepção anteriores). Nunca lança nem derruba a sessão: `NO DATA`, `7F` ou timeout deixam o
+     * campo correspondente nulo. O padrão é uma sondagem vazia (clientes sem suporte).
+     */
+    suspend fun sondarEcu(sondarTcm: Boolean): ImpressaoEcu = ImpressaoEcu.VAZIA
 
     /** Limpa os códigos de falha (modo 04). A UI deve sempre pedir confirmação antes. */
     suspend fun limparCodigosFalha(): Result<Unit>

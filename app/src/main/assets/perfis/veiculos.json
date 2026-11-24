@@ -14,6 +14,7 @@
       "cambioId": "toyota_a750f",
       "status": "validado",
       "layoutSugerido": "padrao",
+      "padroesVin": ["^8AJ[YZ]Z59G", "^8AJFZ29G", "^8AJFR22G"],
       "deteccao": {
         "marcas": ["toyota"],
         "modelos": ["sw4", "hilux"],
@@ -33,6 +34,7 @@
       "cambioId": "gm_6t35",
       "status": "base",
       "layoutSugerido": "turbo_flex",
+      "padroesVin": ["^8AGB[TN][64]9S", "^8AGB[TN]"],
       "deteccao": {
         "marcas": ["chevrolet", "chevy", "gm", "general motors"],
         "modelos": ["cruze"],
@@ -71,6 +73,7 @@
       "cambioId": "aisin_6m",
       "status": "base",
       "layoutSugerido": "turbo_flex",
+      "padroesVin": ["^9BWA[GHJ]", "^9BWD[BE]"],
       "deteccao": {
         "marcas": ["volkswagen", "vw", "volks"],
         "modelos": ["polo", "virtus", "t-cross", "tcross", "t cross", "nivus"],
@@ -90,6 +93,7 @@
       "cambioId": "cvt",
       "status": "base",
       "layoutSugerido": "turbo_flex",
+      "padroesVin": ["^9BD363", "^9BD376"],
       "deteccao": {
         "marcas": ["fiat"],
         "modelos": ["pulse", "fastback"],
@@ -109,6 +113,7 @@
       "cambioId": "cvt",
       "status": "base",
       "layoutSugerido": "padrao",
+      "padroesVin": ["^93HFC", "^93HRU", "^93HGM"],
       "deteccao": {
         "marcas": ["honda"],
         "modelos": ["civic", "hr-v", "hrv", "hr v", "city"],

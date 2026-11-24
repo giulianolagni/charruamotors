@@ -66,6 +66,9 @@
 
     <!-- Aba OBD2 -->
     <string name="obd_desconectar">Desconectar</string>
+    <string name="obd_perfil_automatico">Perfil identificado: %1$s (%2$s)</string>
+    <string name="obd_perfil_manter">Manter</string>
+    <string name="obd_perfil_ignorar">Ignorar</string>
     <string name="obd_estado_conectando">Conectando…</string>
     <string name="obd_estado_conectado">Conectado</string>
     <string name="obd_estado_erro">Erro: %1$s</string>

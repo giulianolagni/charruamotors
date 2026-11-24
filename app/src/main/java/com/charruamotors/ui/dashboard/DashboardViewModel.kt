@@ -13,6 +13,7 @@ import com.charruamotors.data.repository.VeiculoRepository
 import com.charruamotors.domain.calculo.CalculosVeiculo
 import com.charruamotors.domain.calculo.ResumoVeiculo
 import com.charruamotors.domain.model.Veiculo
+import com.charruamotors.sistema.navegacao.VeiculoFavorito
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,11 +21,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
 
 class DashboardViewModel(
     veiculoRepository: VeiculoRepository,
+    /** Id do favorito salvo (veículo padrão da caixa-preta; 0 = nenhum). */
+    favoritoSalvo: Flow<Long>,
     private val manutencaoRepository: ManutencaoRepository,
     private val abastecimentoRepository: AbastecimentoRepository,
     private val diagnosticoRepository: DiagnosticoRepository,
@@ -47,6 +51,14 @@ class DashboardViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initialValue = null)
 
+    /** Cards de Meus Veículos com a estrela no favorito efetivo (o salvo ou, sem ele, o primeiro). */
+    val itens: StateFlow<List<ItemVeiculo>?> = combine(resumos, favoritoSalvo) { lista, favorito ->
+        lista?.let { r ->
+            val ids = r.map { it.veiculo.id }
+            r.map { ItemVeiculo(it, VeiculoFavorito.ehFavorito(it.veiculo.id, ids, favorito)) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initialValue = null)
+
     private fun observarResumo(veiculo: Veiculo): Flow<ResumoVeiculo> = combine(
         abastecimentoRepository.observarPorVeiculo(veiculo.id),
         manutencaoRepository.observarPorVeiculo(veiculo.id),
@@ -67,6 +79,7 @@ class DashboardViewModel(
                 val app = this[APPLICATION_KEY] as CharruaMotorsApp
                 DashboardViewModel(
                     app.veiculoRepository,
+                    app.preferenciasAutoConexao.config.map { it.veiculoId },
                     app.manutencaoRepository,
                     app.abastecimentoRepository,
                     app.diagnosticoRepository,

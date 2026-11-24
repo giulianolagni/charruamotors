@@ -63,9 +63,15 @@ object DescricaoDtc {
     )
 
     /** Descrição do [codigo] (ex.: `P0300`); usa um texto genérico pelo sistema se não for conhecido. */
-    fun descricaoDe(codigo: String): String {
+    fun descricaoDe(codigo: String): String =
+        conhecidos[codigo.trim().uppercase()] ?: descricaoPorSistema(codigo)
+
+    /**
+     * Texto genérico pelo sistema (1ª letra) e pelo tipo (2º caractere: 0 = padronizado SAE,
+     * demais = específico do fabricante). Fallback para códigos que nenhum catálogo conhece.
+     */
+    fun descricaoPorSistema(codigo: String): String {
         val c = codigo.trim().uppercase()
-        conhecidos[c]?.let { return it }
         val generico = c.getOrNull(1) == '0' // segundo dígito 0 = código padronizado SAE
         val sistema = when (c.firstOrNull()) {
             'P' -> "trem de força (motor/transmissão)"

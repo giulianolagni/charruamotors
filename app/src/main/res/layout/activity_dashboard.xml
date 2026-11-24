@@ -1,12 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Meus Veículos (v1.5): lista com o favorito (estrela), cadastro e o Painel de cada veículo. Sem
+     veículo cadastrado é a tela inicial, com o menu lateral; aberta pelo menu, tem a seta de Voltar. -->
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/gaveta"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".ui.dashboard.DashboardActivity"
+    tools:openDrawer="start">
+
+<LinearLayout
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="?android:colorBackground"
-    android:orientation="vertical"
-    tools:context=".ui.dashboard.DashboardActivity">
+    android:orientation="vertical">
 
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/appbar"
@@ -20,7 +28,9 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:theme="@style/ThemeOverlay.Material3.Dark.ActionBar"
-            app:title="@string/dashboard_titulo" />
+            app:navigationContentDescription="@string/menu_abrir"
+            app:navigationIcon="@drawable/ic_menu"
+            app:title="@string/veiculos_titulo" />
     </com.google.android.material.appbar.AppBarLayout>
 
     <FrameLayout
@@ -67,21 +77,14 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Atalho para o diagnóstico OBD2 -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/botao_scanner"
-                style="@style/Widget.Material3.Button.TonalButton"
+            <!-- Estrela = favorito: o app abre direto nele (cada veículo abre o Painel pelo próprio card) -->
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/espaco_medio"
-                android:text="@string/botao_conectar_scanner" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/espaco_grande"
-                android:text="@string/dashboard_meus_veiculos"
-                android:textAppearance="?attr/textAppearanceTitleLarge" />
+                android:text="@string/veiculos_dica_favorito"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="@color/texto_secundario" />
 
             <FrameLayout
                 android:layout_width="match_parent"
@@ -123,3 +126,13 @@
             app:iconTint="@color/branco" />
     </FrameLayout>
 </LinearLayout>
+
+    <com.google.android.material.navigation.NavigationView
+        android:id="@+id/menu_lateral"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:fitsSystemWindows="true"
+        app:headerLayout="@layout/menu_lateral_cabecalho"
+        app:menu="@menu/menu_lateral" />
+</androidx.drawerlayout.widget.DrawerLayout>

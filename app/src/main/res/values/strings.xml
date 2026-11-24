@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Charrua Motors</string>
+    <string name="app_name">Charrua OBD Pro</string>
 
     <!-- Login -->
     <string name="login_subtitulo">Manutenção, abastecimentos e diagnóstico do seu veículo</string>
@@ -9,13 +9,9 @@
     <string name="login_dica">Login simulado — use admin@charruamotors.com / 123456</string>
 
     <!-- Dashboard -->
-    <string name="dashboard_titulo">Charrua Motors</string>
     <string name="dashboard_boas_vindas">Olá, %1$s</string>
-    <string name="dashboard_meus_veiculos">Meus veículos</string>
     <string name="dashboard_lista_vazia">Nenhum veículo cadastrado.\nToque em “Novo veículo” para começar.</string>
-    <string name="botao_conectar_scanner">Conectar scanner OBD2</string>
     <string name="botao_novo_veiculo">Novo veículo</string>
-    <string name="acao_sair">Sair</string>
     <string name="item_veiculo_detalhes">%1$s km • %2$s</string>
     <string name="item_veiculo_consumo">Consumo médio: %1$s km/l</string>
     <string name="item_veiculo_sem_consumo">Sem dados de consumo</string>
@@ -46,6 +42,7 @@
     <string name="botao_salvar">Salvar</string>
     <string name="botao_excluir">Excluir</string>
     <string name="botao_cancelar">Cancelar</string>
+    <string name="botao_fechar">Fechar</string>
     <string name="voltar">Voltar</string>
     <string name="veiculo_excluir_titulo">Excluir veículo?</string>
     <string name="veiculo_excluir_mensagem">O veículo e todo o seu histórico serão removidos. Esta ação não pode ser desfeita.</string>
@@ -56,42 +53,49 @@
     <!-- Combustíveis -->
     <string name="combustivel_gasolina">Gasolina</string>
     <string name="combustivel_etanol">Etanol</string>
-    <string name="combustivel_flex">Flex</string>
+    <string name="combustivel_flex">Auto Flex</string>
     <string name="combustivel_diesel">Diesel</string>
     <string name="combustivel_gnv">GNV</string>
 
     <!-- Diagnóstico (Activity com abas) -->
-    <string name="diagnostico_titulo">Diagnóstico</string>
     <string name="aba_obd">Diagnóstico OBD2</string>
     <string name="aba_manutencoes">Manutenções</string>
     <string name="aba_abastecimentos">Abastecimentos</string>
-    <string name="botao_diagnostico">Diagnóstico</string>
-    <string name="scanner_sem_veiculo">Cadastre um veículo para usar o scanner</string>
-    <string name="scanner_escolher_veiculo">Escolha o veículo</string>
     <string name="seletor_data_titulo">Selecione a data</string>
     <string name="valor_indisponivel">—</string>
     <string name="prefixo_reais">R$</string>
     <string name="item_km">%1$s km</string>
 
     <!-- Aba OBD2 -->
-    <string name="obd_scanner">Scanner OBD2</string>
-    <string name="obd_modo_simulado">Simulado</string>
-    <string name="obd_modo_bluetooth">Bluetooth real</string>
-    <string name="obd_dispositivo">Scanner simulado</string>
-    <string name="obd_dispositivo_pareado">Scanner pareado</string>
-    <string name="obd_atualizar_dispositivos">Atualizar lista</string>
-    <string name="obd_conectar">Conectar</string>
     <string name="obd_desconectar">Desconectar</string>
-    <string name="obd_estado_desconectado">Desconectado</string>
     <string name="obd_estado_conectando">Conectando…</string>
     <string name="obd_estado_conectado">Conectado</string>
     <string name="obd_estado_erro">Erro: %1$s</string>
     <string name="obd_conectado">Scanner conectado</string>
-    <string name="obd_sem_pareados">Nenhum scanner pareado. Pareie o ELM327 nas configurações de Bluetooth.</string>
     <string name="obd_sem_bluetooth">Este aparelho não possui Bluetooth. Use o modo simulado.</string>
     <string name="obd_permissao_negada">Permissão de Bluetooth necessária para usar o scanner</string>
     <string name="obd_bluetooth_desligado">Ligue o Bluetooth para conectar ao scanner</string>
-    <string name="obd_erro_sem_dispositivo">Selecione um scanner</string>
+    <string name="obd_erro_sem_dispositivo">Selecione o scanner OBD2 na lista de pareados</string>
+    <string name="obd_permissao_bloqueada">A permissão \"Dispositivos próximos\" foi negada. Libere-a nas configurações do app para usar o scanner.</string>
+    <string name="obd_permissao_configuracoes">Configurações</string>
+    <string name="obd_cancelar_conexao">Cancelar</string>
+    <string name="obd_registro_botao">Log de comunicação</string>
+    <string name="obd_registro_titulo">Comunicação com o ELM327</string>
+    <string name="obd_registro_vazio">Nenhuma troca registrada ainda. Conecte ao scanner no modo Bluetooth.</string>
+    <string name="obd_registro_copiar">Copiar</string>
+    <string name="obd_registro_copiado">Log copiado</string>
+    <string name="obd_registro_compartilhar">Compartilhar</string>
+    <string name="obd_registro_rotulo">Log ELM327 — Charrua OBD Pro</string>
+    <string name="obd_registro_ver">Ver log</string>
+    <string name="obd_ecu_protocolo">Protocolo e camada de comunicação</string>
+    <string name="obd_ecu_protocolo_desconhecido">Protocolo não informado pelo ATDP</string>
+    <string name="obd_ecu_modo_padrao">%1$s (modo 01) · %2$s</string>
+    <string name="obd_ecu_modo_servico">%1$s · %2$s: %3$s</string>
+    <string name="obd_ecu_protocolo_forcado">%1$s\nFallback de protocolo físico: %2$s</string>
+    <plurals name="obd_ecu_sensores_responderam">
+        <item quantity="one">%d sensor respondeu</item>
+        <item quantity="other">%d sensores responderam</item>
+    </plurals>
     <string name="obd_erro_sem_leitura">Ainda não há leitura para salvar</string>
     <string name="obd_leitura_salva">Leitura salva no histórico</string>
     <string name="obd_tempo_real">Dados em tempo real</string>
@@ -105,7 +109,6 @@
     <string name="obd_valor_temperatura">%1$d °C</string>
     <string name="obd_valor_carga">%1$s %%</string>
     <string name="obd_valor_bateria">%1$s V</string>
-    <string name="obd_simular_falha">Simular falha de conexão (demonstração)</string>
     <string name="obd_historico_titulo">Leituras salvas</string>
     <string name="obd_historico_vazio">Nenhuma leitura salva ainda.</string>
     <string name="obd_historico_valores">%1$s • %2$s • %3$s</string>
@@ -113,13 +116,113 @@
     <string name="obd_codigos_falha">Códigos de falha</string>
     <string name="obd_ler_codigos">Ler códigos</string>
     <string name="obd_limpar_codigos">Limpar códigos</string>
-    <string name="obd_codigos_nao_lidos">Conecte o scanner e toque em “Ler códigos”.</string>
+    <string name="obd_codigos_nao_lidos">Conecte o scanner e toque em “Ler códigos” para ler as falhas confirmadas, pendentes, permanentes e o quadro congelado.</string>
     <string name="obd_sem_codigos">Nenhum código de falha armazenado.</string>
     <string name="obd_codigos_lidos">Códigos de falha lidos e salvos no histórico</string>
     <string name="obd_codigos_limpos">Códigos de falha limpos</string>
     <string name="obd_limpar_titulo">Limpar códigos de falha?</string>
     <string name="obd_limpar_mensagem">Os códigos serão apagados da memória da ECU e a luz de injeção pode voltar a acender se o problema persistir. Anote-os antes de continuar.</string>
     <string name="obd_limpar_confirmar">Limpar</string>
+
+    <!-- Painel de telemetria -->
+    <string name="obd_map">Pressão do coletor / turbo</string>
+    <string name="unidade_rpm">rpm</string>
+    <string name="unidade_kmh">km/h</string>
+    <string name="unidade_kpa">kPa</string>
+    <string name="unidade_celsius">°C</string>
+    <string name="obd_sensor_extremos">Mín %1$s · Máx %2$s</string>
+    <string name="obd_sensores_titulo">Sensores suportados pela ECU</string>
+    <string name="obd_sensores_titulo_qtd">Sensores suportados pela ECU (%1$d)</string>
+    <string name="obd_sensores_vazio">Conecte o scanner para detectar os sensores suportados.</string>
+    <string name="obd_valor_unidade">%1$s %2$s</string>
+
+    <!-- Data Logger CSV -->
+    <string name="obd_log_gravar">Gravar Log CSV</string>
+    <string name="obd_log_gravando">Parar e salvar log (%1$d leituras)</string>
+    <string name="obd_log_iniciado">Gravando log: todas as leituras serão salvas em CSV</string>
+    <string name="obd_log_sem_conexao">Conecte o scanner para gravar o log</string>
+    <string name="obd_log_sem_pids">A ECU não informou sensores suportados</string>
+    <string name="obd_log_vazio">Log encerrado sem leituras; nenhum arquivo salvo</string>
+    <string name="obd_log_limite">Limite de leituras do log atingido; salvando o arquivo</string>
+    <string name="obd_log_salvo">Log salvo em %1$s</string>
+    <string name="obd_log_compartilhar">Compartilhar</string>
+    <string name="obd_log_compartilhar_titulo">Compartilhar log OBD2</string>
+
+    <!-- Diagnóstico avançado -->
+    <string name="obd_diagnostico_titulo">Diagnóstico</string>
+    <string name="obd_ecu_titulo">Informações da ECU</string>
+    <string name="obd_ecu_vin">Número do chassi (VIN)</string>
+    <string name="obd_ecu_pids">PIDs suportados detectados</string>
+    <string name="obd_ecu_vin_lendo">Lendo…</string>
+    <string name="obd_ecu_vin_indisponivel">Não informado pela ECU</string>
+    <string name="obd_ecu_desconectado">Conecte o scanner</string>
+    <string name="obd_ecu_pids_qtd">%1$d de %2$d do catálogo</string>
+    <string name="dtc_tipo_confirmado">Confirmadas (Modo 03)</string>
+    <string name="dtc_tipo_pendente">Pendentes (Modo 07)</string>
+    <string name="dtc_tipo_permanente">Permanentes (Modo 0A)</string>
+    <string name="dtc_badge_confirmado">Confirmada · 03</string>
+    <string name="dtc_badge_pendente">Pendente · 07</string>
+    <string name="dtc_badge_permanente">Permanente · 0A</string>
+    <string name="dtc_categoria_qtd">%1$s · %2$d</string>
+    <string name="dtc_categoria_vazia">Nenhuma falha nesta categoria.</string>
+    <string name="dtc_categoria_nao_suportada">Não suportado por esta ECU.</string>
+    <string name="dtc_fabricante">Código específico: %1$s</string>
+    <string name="dtc_sem_descricao">Código fora do catálogo offline.</string>
+    <string name="obd_ff_titulo">Quadro congelado (Freeze Frame)</string>
+    <string name="obd_ff_subtitulo">Condições do motor no instante em que a falha foi registrada (Modo 02)</string>
+    <string name="obd_ff_vazio">Nenhum quadro congelado armazenado.</string>
+    <string name="obd_ff_nao_suportado">A ECU não informou o quadro congelado.</string>
+    <string name="obd_ff_sem_dtc">Código causador não informado</string>
+
+    <!-- Gráfico ao vivo -->
+    <string name="obd_grafico_titulo">Telemetria ao vivo (últimos 60 s)</string>
+    <string name="obd_grafico_agora">agora</string>
+    <string name="obd_grafico_legenda_rpm">RPM %1$s</string>
+    <string name="obd_grafico_legenda_map">MAP %1$s kPa</string>
+    <string name="obd_grafico_vazio">Gráfico de RPM e pressão do coletor: sem leituras</string>
+    <string name="obd_grafico_descricao">Gráfico dos últimos 60 segundos. RPM atual %1$s, pressão do coletor %2$s kPa</string>
+
+    <!-- Computador de bordo -->
+    <string name="obd_bordo_titulo">Computador de bordo</string>
+    <string name="obd_bordo_instantaneo">Consumo instantâneo</string>
+    <string name="obd_bordo_media">Média da viagem</string>
+    <string name="obd_bordo_km_l">%1$s km/L</string>
+    <string name="obd_bordo_l_h">%1$s L/h</string>
+    <string name="obd_bordo_parado">Parado</string>
+    <string name="obd_bordo_totais">%1$s %2$s · %3$s %4$s</string>
+    <string name="obd_bordo_zerar">Zerar viagem</string>
+    <string name="obd_bordo_metodo_maf">MAF</string>
+    <string name="obd_bordo_metodo_sd">Speed-Density</string>
+    <string name="obd_bordo_metodo_ecu">ECU (015E)</string>
+    <string name="obd_bordo_sem_dados">Sem dados para calcular o consumo (a ECU não informa MAF nem RPM/MAP/temperatura do ar).</string>
+    <string name="obd_bordo_motor">Motor %1$s L · %2$s</string>
+    <string name="obd_bordo_motor_etanol">Motor %1$s L · %2$s · %3$s</string>
+    <string name="obd_bordo_diesel_sem_ecu">Diesel: o consumo só é exibido se a ECU informar o PID 015E.</string>
+
+    <!-- Cronômetro 0–100 km/h -->
+    <string name="obd_cronometro_titulo">Cronômetro 0–100 km/h</string>
+    <string name="obd_cronometro_armar">Armar 0–100 km/h</string>
+    <string name="obd_cronometro_cancelar">Cancelar</string>
+    <string name="obd_cronometro_novamente">Armar novamente</string>
+    <string name="obd_cronometro_tempo">%1$s s</string>
+    <string name="obd_cronometro_desarmado">Arme o cronômetro com o carro parado. Só em local seguro e permitido.</string>
+    <string name="obd_cronometro_aguardando">Armado: pare o veículo para começar.</string>
+    <string name="obd_cronometro_pronto">Pronto: a contagem começa quando o carro sair do 0.</string>
+    <string name="obd_cronometro_medindo">Medindo… %1$d %2$s</string>
+    <string name="obd_cronometro_concluido">0–100 km/h concluído!</string>
+    <string name="obd_cronometro_melhor">Melhor tempo nesta sessão: %1$s s</string>
+    <string name="obd_cronometro_sem_conexao">Conecte o scanner para usar o cronômetro</string>
+    <string name="obd_cronometro_sem_velocidade">A ECU não informa a velocidade (PID 010D)</string>
+
+    <!-- Perfil de montadora (modos 21/22) -->
+    <string name="obd_ecu_perfil">PIDs da montadora (modo 21 / UDS 22)</string>
+    <string name="obd_perfil_verificando">Verificando…</string>
+    <string name="obd_perfil_sem">Sem perfil para a marca deste veículo</string>
+    <string name="obd_perfil_indisponivel">%1$s: %2$s</string>
+    <plurals name="obd_perfil_ativo">
+        <item quantity="one">%1$s: %2$d PID ativo</item>
+        <item quantity="other">%1$s: %2$d PIDs ativos</item>
+    </plurals>
 
     <!-- Aba Manutenções -->
     <string name="manutencoes_lista_vazia">Nenhuma manutenção registrada.
@@ -191,4 +294,45 @@ Toque em “Novo abastecimento” para começar.</string>
     <string name="erro_km_menor_que_ultimo">A km não pode ser menor que a do último registro</string>
     <string name="erro_maior_que_zero">O valor deve ser maior que zero</string>
     <string name="erro_litros_acima_do_tanque">Os litros excedem a capacidade do tanque</string>
+
+    <!-- Card de direção: mini-player (Spotify / YouTube Music) e atalhos do Waze -->
+    <string name="direcao_titulo">Direção</string>
+    <string name="midia_servico_nome">Controle de música do Charrua OBD Pro</string>
+    <string name="midia_ativar">Ativar controle de música</string>
+    <string name="midia_ativar_dica">Libere o Charrua OBD Pro em “Acesso a notificações”. Se o Android bloquear (configuração restrita), abra Informações do app › ⋮ › Permitir configurações restritas.</string>
+    <string name="midia_sem_player">Nenhuma música tocando. Abra o Spotify ou o YouTube Music.</string>
+    <string name="midia_capa">Capa do álbum — toque para abrir o player</string>
+    <string name="midia_anterior">Faixa anterior</string>
+    <string name="midia_tocar">Tocar</string>
+    <string name="midia_pausar">Pausar</string>
+    <string name="midia_proxima">Próxima faixa</string>
+    <string name="midia_erro_abrir">Não foi possível abrir o player</string>
+    <string name="waze_abrir">Waze</string>
+    <string name="maps_abrir">Maps</string>
+    <string name="spotify_abrir">Spotify</string>
+    <string name="waze_posto">Posto</string>
+    <string name="waze_oficina">Oficina</string>
+    <string name="waze_erro">Não foi possível abrir o Waze nem a Play Store</string>
+
+    <!-- Modo HUD flutuante sobre o Waze -->
+    <string name="hud_ativar">Modo HUD (sobre Waze)</string>
+    <string name="hud_desativar">Fechar HUD</string>
+    <string name="hud_permissao_overlay">Permita “Aparecer sobre outros apps” para o HUD flutuar sobre o Waze</string>
+    <string name="hud_permissao_bluetooth">O HUD precisa da permissão de Bluetooth (dispositivos próximos) para rodar em segundo plano</string>
+    <string name="hud_canal_nome">HUD flutuante</string>
+    <string name="hud_canal_descricao">Mantém o scanner OBD2 lendo enquanto o HUD está sobre o Waze</string>
+    <string name="hud_notificacao_titulo">HUD OBD2 ativo</string>
+    <string name="hud_notificacao_texto">Telemetria ao vivo sobre o Waze. Toque para voltar ao app.</string>
+    <string name="hud_fechar">Fechar HUD</string>
+    <string name="hud_abrir_waze">Abrir o Waze</string>
+    <string name="hud_voltar_app">Fechar o HUD e voltar ao Charrua OBD Pro</string>
+    <string name="hud_status_ao_vivo">● OBD AO VIVO</string>
+    <string name="hud_status_desconectado">○ SEM CONEXÃO OBD</string>
+    <string name="hud_status_alerta">▲ MOTOR QUENTE</string>
+    <string name="hud_rotulo_rpm">RPM</string>
+    <string name="hud_rotulo_map">TURBO/MAP %1$s</string>
+    <string name="hud_rotulo_map_padrao">TURBO/MAP kPa</string>
+    <string name="hud_rotulo_temperatura">MOTOR °C</string>
+    <string name="hud_rotulo_rail">RAIL bar</string>
+    <string name="hud_rotulo_tensao">BATERIA V</string>
 </resources>

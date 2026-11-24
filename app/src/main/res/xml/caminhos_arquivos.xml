@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pastas expostas pelo FileProvider: logs CSV salvos na pasta do app (Android 8/9) e o APK
+     baixado pelo atualizador (cacheDir/updates/), entregue ao instalador do Android. -->
+<paths>
+    <external-files-path
+        name="logs_externos"
+        path="Download/" />
+    <files-path
+        name="logs_internos"
+        path="logs/" />
+    <cache-path
+        name="atualizacoes"
+        path="updates/" />
+</paths>

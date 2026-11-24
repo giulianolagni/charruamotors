@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HUD flutuante (janela TYPE_APPLICATION_OVERLAY sobre o Waze): arrastável pelo painel.
+     As células (1 a 4 sensores) são montadas pelo HudFlutuanteService conforme a escolha da ativação. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="@dimen/largura_hud"
+    android:layout_height="wrap_content"
+    android:background="@drawable/fundo_hud"
+    android:orientation="vertical"
+    android:paddingStart="12dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="4dp"
+    android:paddingBottom="10dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/texto_hud_status"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/hud_rotulo"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            tools:text="● OBD AO VIVO" />
+
+        <ImageButton
+            android:id="@+id/botao_hud_waze"
+            android:layout_width="@dimen/botao_hud"
+            android:layout_height="@dimen/botao_hud"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/hud_abrir_waze"
+            android:src="@drawable/ic_navegacao"
+            android:tint="@color/hud_valor" />
+
+        <ImageButton
+            android:id="@+id/botao_hud_voltar"
+            android:layout_width="@dimen/botao_hud"
+            android:layout_height="@dimen/botao_hud"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/hud_voltar_app"
+            android:src="@drawable/ic_maximizar"
+            android:tint="@color/hud_valor" />
+    </LinearLayout>
+
+    <!-- Linhas de até 2 células cada (item_hud_celula). -->
+    <LinearLayout
+        android:id="@+id/grade_hud"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+</LinearLayout>

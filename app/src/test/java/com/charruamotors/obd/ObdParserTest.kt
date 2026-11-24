@@ -1,5 +1,6 @@
 package com.charruamotors.obd
 
+import com.charruamotors.obd.pid.CatalogoTeste
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -118,6 +119,196 @@ class ObdParserTest {
     fun `PIDs suportados`() {
         assertTrue(ObdParser.parsePidsSuportados("41 00 BE 3F A8 13\r>") is RespostaObd.Ok)
         assertTrue(ObdParser.parsePidsSuportados("41 00 BE\r>") is RespostaObd.Invalido)
+    }
+
+    // --- bitmasks de PIDs suportados (0100 / 0120 / 0140) ---
+
+    @Test
+    fun `bitmask 0100 decodifica os PIDs 01 a 20`() {
+        // Exemplo da SAE J1979: BE 1F A8 13
+        val esperado = setOf(0x01, 0x03, 0x04, 0x05, 0x06, 0x07, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x13, 0x15, 0x1C, 0x1F, 0x20)
+        assertEquals(esperado, ObdParser.parsePidsSuportados("41 00 BE 1F A8 13\r>").valor())
+    }
+
+    @Test
+    fun `bitmask 0120 usa a base 0x20`() {
+        // 80 02 20 01 → bits 0, 14, 18 e 31 da faixa 21..40
+        val r = ObdParser.parsePidsSuportados("41 20 80 02 20 01\r>", base = 0x20).valor()
+        assertEquals(setOf(0x21, 0x2F, 0x33, 0x40), r)
+        assertTrue("0x40 indica suporte à faixa 0140", 0x40 in r)
+    }
+
+    @Test
+    fun `bitmask 0140 sem suporte a proxima faixa`() {
+        // Sem espaços (ATS0): 44 00 00 10 → PIDs 42, 46 e 5C; bit de 0x60 desligado
+        val r = ObdParser.parsePidsSuportados("414044000010\r>", base = 0x40).valor()
+        assertEquals(setOf(0x42, 0x46, 0x5C), r)
+    }
+
+    @Test
+    fun `bitmask une respostas de varias ECUs`() {
+        // Motor suporta 01..08 (FF), transmissão suporta 0D (00 08)
+        val r = ObdParser.parsePidsSuportados("41 00 FF 00 00 00\r41 00 00 08 00 00\r>").valor()
+        assertEquals((0x01..0x08).toSet() + 0x0D, r)
+    }
+
+    @Test
+    fun `bitmask aceita a resposta ao comando com sufixo de resposta unica`() {
+        assertEquals(setOf(0x01), ObdParser.parsePidsSuportados("01001\r41 00 80 00 00 00\r>", comando = "01001").valor())
+    }
+
+    @Test
+    fun `bitmask zerado e bitmask de outra faixa`() {
+        assertEquals(emptySet<Int>(), ObdParser.parsePidsSuportados("41 00 00 00 00 00\r>").valor())
+        assertTrue(ObdParser.parsePidsSuportados("41 00 BE 1F A8 13\r>", base = 0x20) is RespostaObd.Invalido)
+        assertEquals(RespostaObd.SemDados, ObdParser.parsePidsSuportados("NO DATA\r>", base = 0x40))
+    }
+
+    @Test
+    fun `decodificar bitmask bit a bit`() {
+        assertEquals(setOf(0x01), ObdParser.decodificarBitmask(0x00, listOf(0x80, 0, 0, 0)))
+        assertEquals(setOf(0x20), ObdParser.decodificarBitmask(0x00, listOf(0, 0, 0, 0x01)))
+        assertEquals((0x41..0x60).toSet(), ObdParser.decodificarBitmask(0x40, listOf(0xFF, 0xFF, 0xFF, 0xFF)))
+    }
+
+    // --- PID genérico do catálogo ---
+
+    @Test
+    fun `pid generico aplica a formula do catalogo`() {
+        assertEquals(1726.0, ObdParser.parsePid("41 0C 1A F8\r>", CatalogoTeste.pid("010C")).valor(), 0.0)
+        assertEquals(5.0, ObdParser.parsePid("41 10 01 F4\r>", CatalogoTeste.pid("0110")).valor(), 1e-9)
+        assertEquals(95.0, ObdParser.parsePid("41 5C 87\r>", CatalogoTeste.pid("015C")).valor(), 0.0)
+        assertEquals(50_000.0, ObdParser.parsePid("41 23 13 88\r>", CatalogoTeste.pid("0123")).valor(), 0.0)
+    }
+
+    @Test
+    fun `pid generico com sufixo de resposta unica no eco`() {
+        val rpm = CatalogoTeste.pid("010C")
+        assertEquals(1000.0, ObdParser.parsePid("010C1\r41 0C 0F A0\r>", rpm, "010C1").valor(), 0.0)
+    }
+
+    @Test
+    fun `pid generico de comando AT`() {
+        assertEquals(12.6, ObdParser.parsePid("12.6V\r>", CatalogoTeste.pid("ATRV")).valor(), 0.0)
+        assertEquals(RespostaObd.SemDados, ObdParser.parsePid("NO DATA\r>", CatalogoTeste.pid("ATRV")))
+        assertTrue(ObdParser.parsePid("99.9V", CatalogoTeste.pid("ATRV")) is RespostaObd.Invalido)
+    }
+
+    @Test
+    fun `pid generico truncado ou de outro PID e invalido e erros sao preservados`() {
+        val maf = CatalogoTeste.pid("0110")
+        assertTrue(ObdParser.parsePid("41 10 01\r>", maf) is RespostaObd.Invalido)
+        assertTrue(ObdParser.parsePid("41 0C 1A F8\r>", maf) is RespostaObd.Invalido)
+        assertEquals(RespostaObd.SemDados, ObdParser.parsePid("NO DATA\r>", maf))
+        assertEquals(RespostaObd.SemConexao, ObdParser.parsePid("CAN ERROR\r>", maf))
+    }
+
+    // --- Freeze Frame (modo 02) ---
+
+    @Test
+    fun `freeze frame de rpm velocidade temperatura e carga`() {
+        assertEquals(2350.0, ObdParser.parseFreezeFrame("42 0C 00 24 B8\r>", CatalogoTeste.pid("010C")).valor(), 0.0)
+        assertEquals(62.0, ObdParser.parseFreezeFrame("42 0D 00 3E\r>", CatalogoTeste.pid("010D")).valor(), 0.0)
+        assertEquals(97.0, ObdParser.parseFreezeFrame("42 05 00 89\r>", CatalogoTeste.pid("0105")).valor(), 0.0)
+        assertEquals(78.4, ObdParser.parseFreezeFrame("42 04 00 C8\r>", CatalogoTeste.pid("0104")).valor(), 0.05)
+    }
+
+    @Test
+    fun `comando do freeze frame inclui o numero do quadro`() {
+        assertEquals("020C00", ObdParser.comandoFreezeFrame(CatalogoTeste.pid("010C")))
+        assertEquals("020D00", ObdParser.comandoFreezeFrame(CatalogoTeste.pid("010D")))
+        assertEquals("020501", ObdParser.comandoFreezeFrame(CatalogoTeste.pid("0105"), quadro = 1))
+    }
+
+    @Test
+    fun `freeze frame ignora eco e nao aceita resposta do modo 01 nem de outro quadro`() {
+        val rpm = CatalogoTeste.pid("010C")
+        assertEquals(1000.0, ObdParser.parseFreezeFrame("020C00\r42 0C 00 0F A0\r>", rpm).valor(), 0.0)
+        assertTrue(ObdParser.parseFreezeFrame("41 0C 0F A0\r>", rpm) is RespostaObd.Invalido)
+        assertTrue(ObdParser.parseFreezeFrame("42 0C 01 0F A0\r>", rpm) is RespostaObd.Invalido)
+        assertEquals(RespostaObd.SemDados, ObdParser.parseFreezeFrame("NO DATA\r>", rpm))
+    }
+
+    @Test
+    fun `dtc que disparou o freeze frame`() {
+        assertEquals("P0300", ObdParser.parseDtcFreezeFrame("42 02 00 03 00\r>").valor())
+        assertEquals(null, ObdParser.parseDtcFreezeFrame("42 02 00 00 00\r>").valor()) // nenhum quadro
+        assertEquals(RespostaObd.SemDados, ObdParser.parseDtcFreezeFrame("NO DATA\r>"))
+    }
+
+    // --- VIN (modo 09, PID 02) ---
+
+    @Test
+    fun `vin CAN multi frame`() {
+        val bruto = "014\r0: 49 02 01 31 44 34\r1: 47 50 30 30 52 35 35\r2: 42 31 32 33 34 35 36\r\r>"
+        assertEquals("1D4GP00R55B123456", ObdParser.parseVin(bruto).valor())
+    }
+
+    @Test
+    fun `vin ISO 9141 e KWP em cinco linhas com padding`() {
+        val bruto = "49 02 01 00 00 00 31\r49 02 02 44 34 47 50\r49 02 03 30 30 52 35\r" +
+            "49 02 04 35 42 31 32\r49 02 05 33 34 35 36\r>"
+        assertEquals("1D4GP00R55B123456", ObdParser.parseVin(bruto).valor())
+    }
+
+    @Test
+    fun `vin com linhas fora de ordem sem espacos e com eco`() {
+        val bruto = "0902\r490203303052 35\r4902010000 0031\r4902053334 3536\r49020244344750\r4902043542 3132\r>"
+        assertEquals("1D4GP00R55B123456", ObdParser.parseVin(bruto).valor())
+    }
+
+    @Test
+    fun `vin brasileiro`() {
+        val ascii = "9BWZZZ377VT004251".map { "%02X".format(it.code) }
+        val bruto = "014\r0: 49 02 01 ${ascii.take(3).joinToString(" ")}\r" +
+            "1: ${ascii.subList(3, 10).joinToString(" ")}\r2: ${ascii.subList(10, 17).joinToString(" ")}\r>"
+        assertEquals("9BWZZZ377VT004251", ObdParser.parseVin(bruto).valor())
+    }
+
+    @Test
+    fun `vin incompleto ou com caracteres proibidos e invalido`() {
+        assertTrue(ObdParser.parseVin("49 02 01 00 00 00 31\r49 02 02 44 34 47 50\r>") is RespostaObd.Invalido)
+        // 'O' (0x4F) não existe em VIN (ISO 3779)
+        val comO = "014\r0: 49 02 01 4F 44 34\r1: 47 50 30 30 52 35 35\r2: 42 31 32 33 34 35 36\r>"
+        assertTrue(ObdParser.parseVin(comO) is RespostaObd.Invalido)
+        assertEquals(RespostaObd.SemDados, ObdParser.parseVin("NO DATA\r>"))
+        assertEquals(RespostaObd.ComandoInvalido, ObdParser.parseVin("?\r>"))
+    }
+
+    // --- DTCs pendentes (modo 07) e permanentes (modo 0A) ---
+
+    @Test
+    fun `pendentes CAN com byte de quantidade`() {
+        assertEquals(listOf("P0133", "P0420"), ObdParser.parseDtcsPendentes("47 02 01 33 04 20\r>").valor())
+    }
+
+    @Test
+    fun `pendentes ISO com padding e eco`() {
+        assertEquals(listOf("P0171"), ObdParser.parseDtcsPendentes("07\r47 01 71 00 00 00 00\r>").valor())
+    }
+
+    @Test
+    fun `pendentes multi frame e sem codigos`() {
+        val bruto = "00A\r0: 47 04 01 33\r1: 03 00 40 35\r2: 80 01 00 00\r>"
+        assertEquals(listOf("P0133", "P0300", "C0035", "B0001"), ObdParser.parseDtcsPendentes(bruto).valor())
+        assertEquals(emptyList<String>(), ObdParser.parseDtcsPendentes("47 00\r>").valor())
+        assertEquals(RespostaObd.SemDados, ObdParser.parseDtcsPendentes("NO DATA\r>"))
+    }
+
+    @Test
+    fun `permanentes modo 0A`() {
+        assertEquals(listOf("P0420"), ObdParser.parseDtcsPermanentes("4A 01 04 20\r>").valor())
+        assertEquals(listOf("P0300", "U0100"), ObdParser.parseDtcsPermanentes("0A\r4A 03 00 C1 00 00 00\r>").valor())
+        assertEquals(emptyList<String>(), ObdParser.parseDtcsPermanentes("4A 00\r>").valor())
+        assertEquals(RespostaObd.ComandoInvalido, ObdParser.parseDtcsPermanentes("?\r>"))
+    }
+
+    @Test
+    fun `cada modo so aceita o proprio prefixo de resposta`() {
+        val armazenados = "43 01 01 33 00 00 00 00\r>"
+        assertTrue(ObdParser.parseDtcsPendentes(armazenados) is RespostaObd.Invalido)
+        assertTrue(ObdParser.parseDtcsPermanentes(armazenados) is RespostaObd.Invalido)
+        assertTrue(ObdParser.parseDtcs("47 01 01 33\r>") is RespostaObd.Invalido)
     }
 
     // --- DTCs (modo 03) ---

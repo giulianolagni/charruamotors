@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cabeçalho do menu lateral: usuário logado, veículo ativo e status da sessão OBD2. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/colorPrimary"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/espaco_medio"
+    android:paddingTop="@dimen/espaco_grande"
+    android:paddingEnd="@dimen/espaco_medio"
+    android:paddingBottom="@dimen/espaco_medio">
+
+    <ImageView
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:contentDescription="@null"
+        android:src="@mipmap/ic_launcher_round" />
+
+    <TextView
+        android:id="@+id/texto_usuario"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/espaco_pequeno"
+        android:textAppearance="?attr/textAppearanceTitleMedium"
+        android:textColor="@color/branco"
+        tools:text="Administrador" />
+
+    <TextView
+        android:id="@+id/texto_veiculo_ativo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:drawablePadding="@dimen/espaco_minimo"
+        android:gravity="center_vertical"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        android:textColor="@color/branco_secundario"
+        tools:text="Toyota SW4 2013" />
+
+    <LinearLayout
+        android:id="@+id/grupo_status_sessao"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/espaco_pequeno"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <View
+            android:id="@+id/ponto_status_sessao"
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:background="@drawable/ponto_status"
+            android:backgroundTint="@color/status_espera" />
+
+        <TextView
+            android:id="@+id/texto_status_sessao"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/espaco_pequeno"
+            android:layout_weight="1"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="@color/branco"
+            tools:text="Conectado · Gravando log" />
+    </LinearLayout>
+</LinearLayout>

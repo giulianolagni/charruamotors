@@ -14,10 +14,50 @@
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
 
+    <!-- Modo HUD: janela flutuante sobre o Waze, em serviço de primeiro plano ligado ao scanner
+         Bluetooth (tipo connectedDevice, exigido a partir do Android 14). -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Velocidade GPS (v2.0, opcional): sensor do Painel/HUD e fonte do cronômetro 0–100. Só com o
+         app em uso ou com o HUD aberto (serviço em primeiro plano do tipo location); nunca em segundo plano puro. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!-- Caixa-preta: atalho para liberar a bateria do app ("Sem restrições"), para o One UI / Android 14+
+         não bloquear o serviço da sessão OBD iniciado pelo Bluetooth do carro com o app fechado. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Atualizador (v1.5): consulta a última GitHub Release, baixa o APK e abre o instalador nativo. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <!-- Bluetooth opcional: o app também roda no emulador usando o scanner simulado. -->
     <uses-feature
         android:name="android.hardware.bluetooth"
         android:required="false" />
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="false" />
+
+    <!-- Visibilidade de pacotes (Android 11+): abrir o player de música ativo e o Waze pelo ícone
+         do app, e saber se o Waze está instalado (senão, Play Store). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="waze" />
+        </intent>
+        <package android:name="com.waze" />
+        <package android:name="com.google.android.apps.maps" />
+        <package android:name="com.spotify.music" />
+    </queries>
 
     <application
         android:name=".CharruaMotorsApp"
@@ -41,7 +81,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Activity 2: Dashboard / Home -->
+        <!-- Activity 2: Meus Veículos (tela inicial só sem veículo cadastrado; v1.5) -->
         <activity
             android:name=".ui.dashboard.DashboardActivity"
             android:exported="false" />
@@ -53,12 +93,110 @@
             android:parentActivityName=".ui.dashboard.DashboardActivity"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- Activity 4: Diagnóstico OBD2, Manutenções e Abastecimentos (abas) -->
+        <!-- Activity 4: tela principal com as 4 abas do veículo favorito e o menu lateral (v1.5) -->
         <activity
             android:name=".ui.diagnostico.DiagnosticoActivity"
             android:exported="false"
-            android:parentActivityName=".ui.dashboard.DashboardActivity"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- v1.6: Modo Painel Automotivo (cluster em tela cheia), aberto pela aba Painel ao girar o celular
+             para a horizontal. Trata a rotação sozinho: ao voltar à vertical, fecha. -->
+        <activity
+            android:name=".ui.painel.ClusterPainelActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.CharruaMotors.Cluster" />
+
+        <!-- Ferramentas de Oficina (abertas pelo hub da aba OBD2) -->
+        <activity
+            android:name=".ui.oficina.bateria.TesteBateriaActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
+        <activity
+            android:name=".ui.oficina.atuadores.TesteAtuadoresActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
+        <activity
+            android:name=".ui.oficina.replay.ReplayLogActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
+        <activity
+            android:name=".ui.oficina.terminal.TerminalObdActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- v1.4: Diagnóstico de Erros (aba Oficina) e Personalizar Painel (engrenagem da aba Painel) -->
+        <activity
+            android:name=".ui.oficina.falhas.DiagnosticoErrosActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
+        <activity
+            android:name=".ui.painel.PersonalizarPainelActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
+
+        <!-- v1.3: Assistente de Primeira Abertura, Configurações e Checklist de Permissões (menu lateral).
+             Sem parentActivityName: o Voltar retorna para a tela/aba de onde foram abertas. -->
+        <activity
+            android:name=".ui.assistente.AssistenteActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".ui.configuracoes.ConfiguracoesActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.permissoes.ChecklistPermissoesActivity"
+            android:exported="false" />
+
+        <!-- Mini-player: o Acesso a Notificações libera a leitura das sessões de mídia
+             (Spotify, YouTube Music...). Nenhuma notificação é lida. -->
+        <service
+            android:name=".direcao.midia.MidiaNotificacaoService"
+            android:exported="true"
+            android:label="@string/midia_servico_nome"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- HUD flutuante sobre o Waze: mantém a conexão OBD2 e o polling com o app minimizado. -->
+        <service
+            android:name=".direcao.hud.HudFlutuanteService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|location" />
+
+        <!-- Sessão OBD2 compartilhada (caixa-preta): mantém a conexão, o polling e a gravação dos logs
+             em segundo plano, para a aba OBD2 e o HUD assumirem a sessão já ativa. -->
+        <service
+            android:name=".obd.sessao.ObdSessaoService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- Gatilho pelo Bluetooth do carro (padrão "Toyota SW4"): ACL conectado/desconectado são
+             broadcasts protegidos do sistema, entregues mesmo com o app fechado. -->
+        <receiver
+            android:name=".obd.sessao.GatilhoBluetoothReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Compartilhamento dos logs CSV salvos na pasta do app (Android 8/9) e entrega do APK
+             baixado pelo atualizador (cacheDir/updates/) ao instalador do Android. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.arquivos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/caminhos_arquivos" />
+        </provider>
     </application>
 
 </manifest>

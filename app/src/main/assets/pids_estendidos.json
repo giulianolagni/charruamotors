@@ -1,0 +1,49 @@
+{
+  "versao": 1,
+  "descricao": "PIDs específicos de montadora, lidos com cabeçalho CAN físico (ATSH; fora de 7E0–7E7 o app também ajusta o filtro de recepção com ATCRA) fora do OBD2 genérico. 'servico': 21 (KWP2000 readDataByLocalIdentifier, Toyota) ou 22 (UDS readDataByIdentifier, VW). 'identificador': 1 byte hex no serviço 21, 2 bytes (DID) no 22. 'formula': A..H = bytes de dados após o identificador. 'rotulos' (opcional): estados discretos exibidos como texto (ex.: alavanca 0 = P). PIDs com o mesmo cabecalho+servico+identificador são decodificados da mesma resposta. Só CAN 11 bits (protocolos 6 e 8); cada requisição é testada na conexão e só entra no painel se a ECU responder positivamente com valor dentro de min..max.",
+  "perfis": [
+    {
+      "fabricante": "Toyota",
+      "aliases": ["toyota", "lexus"],
+      "observacao": "Endereços e fórmulas de referência da comunidade (Techstream/Torque) para Hilux/SW4 D-4D (1KD/2KD/1GD) e câmbios automáticos Aisin. Variam por motor e ano: confirme os valores com o Techstream antes de usá-los para diagnóstico. Mapeado com capturas reais da SW4 1KD-FTV + A750F: motor 7E0 (pedal 2149/214A, tensão da ECU 2142, barômetro 2133, bicos injetores 21AD = 4 × signed short ÷ 512 em mm³/st) e câmbio 7E1 (alavanca nos bytes C/D e ATF no 21D9; o 2130 devolve 0xFF fixo mesmo em movimento na SW4 2013, então fica fora do polling e a marcha é estimada pelo app pela razão RPM/velocidade; o 7E0 2130 é o contador de aquecimentos, não marcha). 21D9 e 21AD são multi-frame e nunca recebem o sufixo de resposta única. 4x4 (7C0 · 2101) e VSC (7B0 · 2103) não responderam nessa plataforma: seguem como presets manuais da Oficina e aparecem como N/D. Só entra no painel o que o módulo responder dentro da faixa.",
+      "pids": [
+        { "id": "TOYOTA_ATF", "cabecalho": "7E1", "servico": "21", "identificador": "82", "nome": "Temperatura do fluido da transmissão automática (ATF)", "unidade": "°C", "bytes": 4, "formula": "((256*C+D)*7/100-400)/10", "min": -40, "max": 215, "casas": 0 },
+        { "id": "TOYOTA_ALAVANCA", "cabecalho": "7E1", "servico": "21", "identificador": "D9", "nome": "Posição da alavanca do câmbio A750F (P R D 4 3 2 L)", "unidade": "", "bytes": 4, "decodificador": "ALAVANCA_A750F", "min": 0, "max": 9, "casas": 0, "rotulos": { "0": "P", "1": "R", "2": "N", "3": "D", "4": "3", "5": "M", "6": "L", "7": "P/N", "8": "4", "9": "2" } },
+        { "id": "TOYOTA_ATF_CAMBIO", "cabecalho": "7E1", "servico": "21", "identificador": "D9", "nome": "Temperatura do óleo do câmbio A750F (ATF, 21D9)", "unidade": "°C", "bytes": 6, "formula": "(256*E+F-10880)/240", "min": -40, "max": 215, "casas": 0 },
+        { "id": "TOYOTA_INJ1", "cabecalho": "7E0", "servico": "21", "identificador": "AD", "nome": "Bico injetor #1 (1KD-FTV)", "unidade": "mm³/st", "bytes": 8, "decodificador": "BICO_1", "min": -10, "max": 10, "casas": 2 },
+        { "id": "TOYOTA_INJ2", "cabecalho": "7E0", "servico": "21", "identificador": "AD", "nome": "Bico injetor #2 (1KD-FTV)", "unidade": "mm³/st", "bytes": 8, "decodificador": "BICO_2", "min": -10, "max": 10, "casas": 2 },
+        { "id": "TOYOTA_INJ3", "cabecalho": "7E0", "servico": "21", "identificador": "AD", "nome": "Bico injetor #3 (1KD-FTV)", "unidade": "mm³/st", "bytes": 8, "decodificador": "BICO_3", "min": -10, "max": 10, "casas": 2 },
+        { "id": "TOYOTA_INJ4", "cabecalho": "7E0", "servico": "21", "identificador": "AD", "nome": "Bico injetor #4 (1KD-FTV)", "unidade": "mm³/st", "bytes": 8, "decodificador": "BICO_4", "min": -10, "max": 10, "casas": 2 },
+        { "id": "TOYOTA_TENSAO_ECU", "cabecalho": "7E0", "servico": "21", "identificador": "42", "nome": "Tensão da ECU (módulo do motor)", "unidade": "V", "bytes": 2, "formula": "(256*A+B)/1000", "min": 0, "max": 32, "casas": 2 },
+        { "id": "TOYOTA_BARO", "cabecalho": "7E0", "servico": "21", "identificador": "33", "nome": "Pressão barométrica (ECU Toyota)", "unidade": "kPa", "bytes": 1, "formula": "A", "min": 0, "max": 255, "casas": 0 },
+        { "id": "TOYOTA_MARCHA", "cabecalho": "7E1", "servico": "21", "identificador": "30", "nome": "Marcha engatada (câmbio automático; 0xFF = parado)", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 255, "casas": 0, "rotulos": { "0": "N", "1": "1ª", "2": "2ª", "3": "3ª", "4": "4ª", "5": "5ª", "6": "6ª", "254": "R", "255": "Parado" } },
+        { "id": "TOYOTA_PEDAL_D", "cabecalho": "7E0", "servico": "21", "identificador": "49", "nome": "Pedal do acelerador — sensor D (APP D, Toyota)", "unidade": "%", "bytes": 1, "formula": "A*100/255", "min": 0, "max": 100, "casas": 1 },
+        { "id": "TOYOTA_PEDAL_E", "cabecalho": "7E0", "servico": "21", "identificador": "4A", "nome": "Pedal do acelerador — sensor E (APP E, Toyota)", "unidade": "%", "bytes": 1, "formula": "A*100/255", "min": 0, "max": 100, "casas": 1 },
+        { "id": "TOYOTA_ATF_ECM", "cabecalho": "7E0", "servico": "21", "identificador": "82", "nome": "Temperatura do fluido do câmbio (ATF, pelo motor)", "unidade": "°C", "bytes": 4, "formula": "((256*C+D)*7/100-400)/10", "min": -40, "max": 215, "casas": 0 },
+        { "id": "TOYOTA_ALAVANCA_ECM", "cabecalho": "7E0", "servico": "21", "identificador": "D9", "nome": "Posição da alavanca (pelo motor)", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 6, "casas": 0, "rotulos": { "0": "P", "1": "R", "2": "N", "3": "D", "4": "3", "5": "M", "6": "L", "7": "P/N", "8": "4", "9": "2" } },
+        { "id": "TOYOTA_4WD", "cabecalho": "7C0", "servico": "21", "identificador": "01", "nome": "Tração 4x4 / bloqueio do diferencial", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 4, "casas": 0, "rotulos": { "0": "4x2 (H2)", "1": "4x4 (H4)", "2": "H4 bloqueado", "3": "Reduzida (L4)", "4": "L4 + bloqueio traseiro" } },
+        { "id": "TOYOTA_VSC", "cabecalho": "7B0", "servico": "21", "identificador": "03", "nome": "VSC / controle de estabilidade", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 4, "casas": 0, "rotulos": { "0": "Normal", "1": "Atuando", "2": "VSC OFF", "3": "TRC OFF", "4": "Falha" } }
+      ]
+    },
+    {
+      "fabricante": "Volkswagen",
+      "aliases": ["vw", "volkswagen", "volks", "audi", "seat", "skoda"],
+      "observacao": "DIDs UDS de referência para motores EA211/EA888 (plataforma MQB) e câmbio DSG. Variam por central e versão de software: confirme com ODIS/VCDS antes de usá-los para diagnóstico.",
+      "pids": [
+        { "id": "VW_TEMP_OLEO", "cabecalho": "7E0", "servico": "22", "identificador": "11BD", "nome": "Temperatura do óleo do motor (VW)", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -40, "max": 215, "casas": 0 },
+        { "id": "VW_TURBO_REAL", "cabecalho": "7E0", "servico": "22", "identificador": "2029", "nome": "Pressão do turbo real (VW)", "unidade": "kPa", "bytes": 2, "formula": "(256*A+B)/10", "min": 0, "max": 400, "casas": 0 },
+        { "id": "VW_TURBO_ALVO", "cabecalho": "7E0", "servico": "22", "identificador": "202A", "nome": "Pressão do turbo especificada (VW)", "unidade": "kPa", "bytes": 2, "formula": "(256*A+B)/10", "min": 0, "max": 400, "casas": 0 },
+        { "id": "VW_TEMP_DSG", "cabecalho": "7E1", "servico": "22", "identificador": "2109", "nome": "Temperatura do óleo do câmbio DSG (VW)", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -40, "max": 215, "casas": 0 }
+      ]
+    },
+    {
+      "fabricante": "Chevrolet / GM",
+      "aliases": ["chevrolet", "gm", "chevy", "general motors"],
+      "observacao": "Perfil GM (CAN 11 bits / 500 kbps, ATSP6, UDS serviço 22) com preset para o Cruze 1.4 Turbo Flex 2018 (LE2) + câmbio automático de 6 marchas. O motor (7E0) responde ao OBD2 padrão (RPM, MAP/turbo, MAF, rail GDI 0123, avanço 010E, sonda lambda 0114/0124, etanol 0152, STFT/LTFT, tensão 0142). A temperatura do ATF é lida por UDS 22 1940 (referência da comunidade, °C = A − 40): primeiro no TCM 7E1 e, como alternativa segura, no 7E2 (endereço do TCM em parte da plataforma Global A). Cada requisição é testada na conexão; um módulo que não responder fica fora do polling sem derrubar a sessão. Confirme os DIDs com o GDS2 antes de usá-los para diagnóstico.",
+      "pids": [
+        { "id": "GM_ATF", "cabecalho": "7E1", "servico": "22", "identificador": "1940", "nome": "Temperatura do fluido do câmbio (ATF, TCM 7E1)", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -40, "max": 215, "casas": 0 },
+        { "id": "GM_ATF_7E2", "cabecalho": "7E2", "servico": "22", "identificador": "1940", "nome": "Temperatura do fluido do câmbio (ATF, TCM 7E2)", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -40, "max": 215, "casas": 0 }
+      ]
+    }
+  ]
+}

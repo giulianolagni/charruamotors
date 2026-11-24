@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Código de falha: código + badge da categoria (03/07/0A), título, descrição técnica e fabricante. -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -14,20 +15,61 @@
         android:orientation="vertical"
         android:padding="@dimen/espaco_medio">
 
-        <TextView
-            android:id="@+id/texto_codigo"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textAppearance="?attr/textAppearanceTitleMedium"
-            android:textColor="@color/erro"
-            tools:text="P0300" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/texto_codigo"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="monospace"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
+                android:textColor="@color/erro"
+                tools:text="P0300" />
+
+            <TextView
+                android:id="@+id/badge_tipo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/fundo_badge"
+                android:paddingHorizontal="@dimen/espaco_pequeno"
+                android:paddingVertical="2dp"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
+                android:textColor="@color/branco"
+                tools:backgroundTint="@color/dtc_confirmado"
+                tools:text="Confirmada · 03" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/texto_titulo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            tools:text="Falhas de ignição aleatórias ou em múltiplos cilindros" />
 
         <TextView
             android:id="@+id/texto_descricao"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:textAppearance="?attr/textAppearanceBodyMedium"
-            tools:text="Falhas de ignição aleatórias ou múltiplos cilindros" />
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="@color/texto_secundario"
+            tools:text="Combustão falhando em vários cilindros. Verificar velas, bobinas..." />
+
+        <TextView
+            android:id="@+id/texto_fabricante"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="?attr/textAppearanceLabelSmall"
+            android:textColor="@color/texto_secundario"
+            android:visibility="gone"
+            tools:text="Código específico: Volkswagen"
+            tools:visibility="visible" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

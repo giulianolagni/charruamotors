@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Tema único usado por todas as Activities (layout consistente). -->
-    <style name="Theme.CharruaMotors" parent="Theme.Material3.Light.NoActionBar">
+    <!-- Tema único usado por todas as Activities (layout consistente). DayNight: claro/escuro
+         conforme Configurações → Aparência (cores do escuro em values-night/colors.xml). -->
+    <style name="Theme.CharruaMotors" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/azul_primario</item>
         <item name="colorOnPrimary">@color/branco</item>
         <item name="colorPrimaryContainer">@color/azul_primario_escuro</item>
@@ -10,6 +11,19 @@
         <item name="colorError">@color/erro</item>
         <item name="android:colorBackground">@color/fundo</item>
         <item name="android:statusBarColor">@color/azul_primario_escuro</item>
+    </style>
+
+    <!-- Modo Painel Automotivo: sempre escuro (independe do tema do app), cores vivas para os relógios. -->
+    <style name="Theme.CharruaMotors.Cluster" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/cluster_destaque</item>
+        <item name="colorSecondary">@color/cluster_ponteiro</item>
+        <item name="colorError">@color/cluster_alerta</item>
+        <item name="colorOnSurface">@color/cluster_valor</item>
+        <item name="colorOnSurfaceVariant">@color/cluster_rotulo</item>
+        <item name="android:colorBackground">@color/cluster_fundo</item>
+        <item name="android:windowBackground">@color/cluster_fundo</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
     <!-- Toolbar padrão das telas. -->
@@ -22,5 +36,34 @@
     <!-- Campo de texto padrão dos formulários. -->
     <style name="Widget.CharruaMotors.TextInput" parent="Widget.Material3.TextInputLayout.OutlinedBox">
         <item name="android:layout_marginTop">@dimen/espaco_pequeno</item>
+    </style>
+
+    <!-- HUD flutuante: números grandes, brancos e com algarismos de largura fixa (não "dançam"). -->
+    <style name="HudValor">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/hud_valor</item>
+        <item name="android:textSize">30sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- Ferramentas de Oficina: linha de resultado do teste de bateria. -->
+    <style name="OficinaLinhaResultado">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/espaco_minimo</item>
+        <item name="android:textAppearance">?attr/textAppearanceBodyMedium</item>
+    </style>
+
+    <style name="HudRotulo">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/hud_rotulo</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:textStyle">bold</item>
     </style>
 </resources>

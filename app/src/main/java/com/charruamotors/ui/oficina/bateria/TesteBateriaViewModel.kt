@@ -242,7 +242,6 @@ class TesteBateriaViewModel(
         amostragem?.cancel()
         simulador?.invoke(null)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { cliente.encerrarSessaoManual() }
-        super.onCleared()
     }
 
     companion object {

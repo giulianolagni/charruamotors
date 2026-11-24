@@ -153,6 +153,11 @@ O modo é escolhido na própria aba OBD2. O padrão inicial fica em `CharruaMoto
 - O `ObdViewModel` mantém a conexão durante a rotação de tela.
 - O socket é fechado em `onCleared()`, quando a tela é encerrada de vez.
 - O estado da conexão é exposto como `StateFlow<EstadoConexaoObd>`: `Desconectado`, `Conectando`, `Conectado` ou `Erro(mensagem)`.
+- Robustez (v2.2.1): `conectar` reserva o estado com compare-and-set (nunca dois sockets), resposta de um
+  comando da sessão já encerrada é descartada (nada vaza para a reconexão), comando cancelado no meio deixa o
+  canal marcado para ressincronizar e exceções não documentadas da pilha Bluetooth viram link perdido (`Erro`),
+  nunca um polling morto com o estado ainda "Conectado". Streams e socket RFCOMM são sempre fechados, e a
+  reconexão ao mesmo adaptador respeita uma pausa curta para a pilha liberar o canal.
 
 ---
 
@@ -585,7 +590,12 @@ O emulador não tem Bluetooth, então lá use o modo simulado.
 ./gradlew assembleDebug          # gera o APK de debug
 ./gradlew test                   # roda os testes unitários
 ./gradlew connectedAndroidTest   # testes instrumentados (exige emulador/aparelho)
+./gradlew lintDebug              # Android Lint
+./gradlew bundleRelease          # App Bundle (.aab) da Play Store, com R8
 ```
+
+O build de release roda o **R8** (`isMinifyEnabled` + `isShrinkResources`, regras em `app/proguard-rules.pro`);
+o `mapping.txt` para desofuscar stack traces no Play Console fica em `app/build/outputs/mapping/release/`.
 
 No Windows (cmd ou PowerShell), use `gradlew.bat` no lugar de `./gradlew`.
 

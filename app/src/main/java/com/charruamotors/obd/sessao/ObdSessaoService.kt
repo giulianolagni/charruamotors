@@ -195,7 +195,6 @@ class ObdSessaoService : Service() {
         }
 
         private fun criarCanais(context: Context) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
             val gerenciador = context.getSystemService(NotificationManager::class.java) ?: return
             if (gerenciador.getNotificationChannel(CANAL) == null) {
                 gerenciador.createNotificationChannel(

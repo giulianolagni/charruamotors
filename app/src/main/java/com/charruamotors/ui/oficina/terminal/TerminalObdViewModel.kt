@@ -345,7 +345,6 @@ class TerminalObdViewModel(
     override fun onCleared() {
         jobVarredura?.cancel()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { cliente.encerrarSessaoManual() }
-        super.onCleared()
     }
 
     companion object {

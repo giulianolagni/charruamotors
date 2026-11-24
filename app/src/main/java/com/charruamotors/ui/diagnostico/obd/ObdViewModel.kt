@@ -497,7 +497,6 @@ class ObdViewModel(
         val log = logger.parar()?.takeUnless { it.vazia }
         if (log != null) CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { runCatching { exportar(log) } }
         if (sessao.modo.value == ModoObd.SIMULADO && sessao.estadoSessao.value.ativa) sessao.desconectar()
-        super.onCleared()
     }
 
     companion object {

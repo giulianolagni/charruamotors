@@ -21,7 +21,8 @@ import java.io.OutputStream
  * estourar, enquanto um adaptador mudo estoura no prazo. Um teto de [FATOR_TETO]× o prazo impede
  * laço infinito se o adaptador ficar mandando bytes sem nunca enviar o prompt (lixo, modo monitor).
  *
- * **Ressincronização.** Se um comando estourou o prazo ou voltou `STOPPED`, a resposta atrasada
+ * **Ressincronização.** Se um comando estourou o prazo, voltou `STOPPED` ou teve a corrotina
+ * cancelada no meio (tela fechada, prazo do perfil, sessão manual interrompida), a resposta atrasada
  * dele ainda pode chegar. Antes do próximo comando, o canal descarta tudo até o `>` pendente (ou até
  * um silêncio curto), para que a resposta de um comando nunca seja lida como a do seguinte.
  *
@@ -48,26 +49,38 @@ class CanalElm327(
      */
     suspend fun enviar(comando: String, timeoutMs: Long): String {
         require(timeoutMs > 0) { "timeoutMs deve ser positivo" }
-        if (dessincronizado) ressincronizar() else descartarPendentes()
+        if (!dessincronizado) descartarPendentes()
+        if (dessincronizado) ressincronizar()
+        // Daqui até o prompt, qualquer saída antecipada (timeout, corrotina cancelada no meio do
+        // comando, link caindo) deixa a resposta deste comando a caminho: o próximo envio precisa
+        // descartá-la, senão cada comando passaria a ler a resposta do anterior.
+        dessincronizado = true
         saida.write("$comando\r".toByteArray(Charsets.US_ASCII))
         saida.flush()
-        val resposta = try {
-            lerAtePrompt(comando, timeoutMs)
-        } catch (e: ObdTimeoutException) {
-            dessincronizado = true
-            throw e
-        }
+        val resposta = lerAtePrompt(comando, timeoutMs)
+        dessincronizado = false
         // STOPPED: o ELM327 foi interrompido e o resto do comando pode virar um "?" atrasado.
         if (ObdParser.interrompido(resposta)) dessincronizado = true
         return resposta
     }
 
-    /** Descarta resíduos já recebidos (eco atrasado, prompt extra de clones). */
+    /**
+     * Descarta resíduos já recebidos (eco atrasado, prompt extra de clones). Limitado a
+     * [MAX_BYTES_DESCARTE]: um adaptador despejando dados sem parar (modo monitor esquecido ligado)
+     * não prende a thread aqui — o canal fica dessincronizado e o próximo envio espera o silêncio.
+     */
     private fun descartarPendentes() {
+        var descartados = 0
         var pendentes = entrada.available()
         while (pendentes > 0) {
             val lidos = entrada.read(buffer, 0, minOf(pendentes, buffer.size))
             if (lidos < 0) throw IOException("Fim do fluxo do scanner")
+            if (lidos == 0) break
+            descartados += lidos
+            if (descartados >= MAX_BYTES_DESCARTE) {
+                dessincronizado = true
+                return
+            }
             pendentes = entrada.available()
         }
     }
@@ -82,9 +95,9 @@ class CanalElm327(
         var ultimoByte = inicio
         while (true) {
             val pendentes = entrada.available()
-            if (pendentes > 0) {
-                val lidos = entrada.read(buffer, 0, minOf(pendentes, buffer.size))
-                if (lidos < 0) throw IOException("Fim do fluxo do scanner")
+            val lidos = if (pendentes > 0) entrada.read(buffer, 0, minOf(pendentes, buffer.size)) else 0
+            if (lidos < 0) throw IOException("Fim do fluxo do scanner")
+            if (lidos > 0) {
                 ultimoByte = agoraMs()
                 val prompt = (0 until lidos).indexOfFirst { buffer[it] == PROMPT }
                 if (prompt >= 0) {
@@ -107,9 +120,11 @@ class CanalElm327(
         val teto = timeoutMs * FATOR_TETO
         while (true) {
             val pendentes = entrada.available()
-            if (pendentes > 0) {
-                val lidos = entrada.read(buffer, 0, minOf(pendentes, buffer.size))
-                if (lidos < 0) throw IOException("Fim do fluxo do scanner")
+            // read() devolvendo 0 com available() > 0 (pilha Bluetooth de alguns aparelhos depois de
+            // uma queda de sinal) conta como silêncio: espera e deixa o prazo de inatividade correr.
+            val lidos = if (pendentes > 0) entrada.read(buffer, 0, minOf(pendentes, buffer.size)) else 0
+            if (lidos < 0) throw IOException("Fim do fluxo do scanner")
+            if (lidos > 0) {
                 ultimoByte = agoraMs()
                 for (i in 0 until lidos) {
                     if (buffer[i] == PROMPT) {
@@ -146,6 +161,9 @@ class CanalElm327(
 
         /** Maior resposta legítima (VIN/DTCs multi-frame têm algumas centenas de caracteres). */
         const val MAX_CARACTERES_RESPOSTA = 4_096
+
+        /** Descarte máximo antes de um envio; passou disso, o canal espera o silêncio ([ressincronizar]). */
+        const val MAX_BYTES_DESCARTE = 8_192
 
         const val SILENCIO_RESSINCRONIA_MS = 200L
         const val TETO_RESSINCRONIA_MS = 1_500L

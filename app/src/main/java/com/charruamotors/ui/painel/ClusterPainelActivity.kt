@@ -112,7 +112,8 @@ class ClusterPainelActivity : AppCompatActivity() {
         super.onStop()
     }
 
-    /** Vertical de novo: volta ao layout padrão da aba Painel. */
+    /** Vertical de novo: volta ao layout padrão da aba Painel (o finish() aqui é o comportamento desejado). */
+    @android.annotation.SuppressLint("ChromeOsOnConfigurationChanged")
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         if (newConfig.orientation != Configuration.ORIENTATION_LANDSCAPE) finish()

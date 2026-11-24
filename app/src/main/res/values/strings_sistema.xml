@@ -3,7 +3,6 @@
 <resources>
     <!-- Menu lateral -->
     <string name="menu_abrir">Abrir menu</string>
-    <string name="menu_fechar">Fechar menu</string>
     <string name="menu_secao_navegacao">Navegação rápida</string>
     <string name="menu_secao_sistema">Sistema &amp; App</string>
     <string name="menu_veiculos">Meus Veículos (Trocar / Favorito)</string>
@@ -25,7 +24,6 @@
     <string name="sair_confirmar">Sair</string>
 
     <!-- Sobre -->
-    <string name="sobre_titulo">Sobre o App</string>
     <string name="sobre_versao">Charrua OBD Pro v%1$s</string>
     <string name="sobre_detalhes">versionCode %1$d · %2$s\n\nCatálogo: %3$d PIDs padrão · %4$d perfis de montadora (%5$d PIDs) · %6$d códigos de falha offline\nCascata de conexão: %7$d protocolos físicos · %8$d modos de serviço (21/22)\n\nProtocolo atual: %9$s</string>
     <string name="sobre_sem_conexao">sem conexão OBD2 ativa</string>
@@ -104,7 +102,6 @@
     <string name="permissao_erro_abrir">Não foi possível abrir a tela do sistema</string>
 
     <!-- Assistente de Primeira Abertura -->
-    <string name="assistente_titulo">Assistente inicial</string>
     <string name="assistente_passo">Passo %1$d de %2$d</string>
     <string name="assistente_pular">Pular</string>
     <string name="assistente_proximo">Próximo</string>

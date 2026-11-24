@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Bluetooth Clássico (SPP) para o scanner OBD2 ELM327.
          Android 11 e anterior: permissões legadas. Android 12+: permissões em tempo de execução. -->
@@ -12,7 +13,8 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
-        android:usesPermissionFlags="neverForLocation" />
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
 
     <!-- Modo HUD: janela flutuante sobre o Waze, em serviço de primeiro plano ligado ao scanner
          Bluetooth (tipo connectedDevice, exigido a partir do Android 14). -->

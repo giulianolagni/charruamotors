@@ -2,19 +2,7 @@
 <!-- Caixa-preta: sessão OBD2 em segundo plano, gatilho pelo Bluetooth do carro e logs automáticos. -->
 <resources>
     <!-- Card da aba OBD2 -->
-    <string name="caixa_titulo">Caixa-preta automática</string>
-    <string name="caixa_auto_conexao">Auto-conexão em segundo plano</string>
-    <string name="caixa_logs_automaticos">Gravar logs automaticamente ao conectar</string>
-    <string name="caixa_gatilho">Bluetooth gatilho do carro: %1$s</string>
-    <string name="caixa_trocar">Trocar</string>
-    <string name="caixa_vinculos">Scanner OBD2: %1$s · Veículo: %2$s</string>
-    <string name="caixa_scanner_nenhum">o próximo conectado</string>
     <string name="caixa_veiculo_nenhum">nenhum (abra o Painel de um veículo)</string>
-    <string name="caixa_liberar_bateria">Liberar bateria do app (Sem restrições)</string>
-    <string name="caixa_bateria_erro">Abra Configurações → Apps → Charrua OBD Pro → Bateria → Sem restrições</string>
-    <string name="caixa_status_inativa">Sem sessão ativa. Com a auto-conexão ligada, a sessão começa sozinha quando o celular conectar ao Bluetooth do carro; os logs .txt e .csv vão para Downloads/CharruaOBD.</string>
-    <string name="caixa_status_automatica">Sessão automática: %1$s</string>
-    <string name="caixa_permissao_bluetooth">A auto-conexão precisa da permissão de Bluetooth (dispositivos próximos) para reconhecer o carro com o app fechado</string>
     <string name="caixa_logs_salvos">Logs da sessão (.txt e .csv) salvos em %1$s</string>
     <string name="caixa_ver_logs">Ver logs</string>
     <string name="caixa_salvar">Salvar</string>
@@ -43,7 +31,6 @@
     <string name="sessao_bloqueada_acao">Iniciar sessão</string>
 
     <!-- Visualizador de logs: relatórios .txt -->
-    <string name="replay_txt_titulo">Relatório da sessão</string>
     <string name="replay_txt_truncado">\n\n… (visualização limitada aos primeiros %1$s; compartilhe o arquivo para ver tudo)</string>
     <string name="replay_compartilhar_titulo">Compartilhar log</string>
 </resources>

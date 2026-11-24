@@ -2,6 +2,7 @@
 <!-- HUD flutuante (janela TYPE_APPLICATION_OVERLAY sobre o Waze): arrastável pelo painel.
      As células (1 a 4 sensores) são montadas pelo HudFlutuanteService conforme a escolha da ativação. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="@dimen/largura_hud"
     android:layout_height="wrap_content"
@@ -30,23 +31,27 @@
             android:textStyle="bold"
             tools:text="● OBD AO VIVO" />
 
-        <ImageButton
+        <!-- AppCompatImageButton explícito: o HUD é inflado num Service (sem a fábrica do AppCompat),
+             então só assim o app:tint é aplicado. -->
+        <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/botao_hud_waze"
             android:layout_width="@dimen/botao_hud"
             android:layout_height="@dimen/botao_hud"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/hud_abrir_waze"
             android:src="@drawable/ic_navegacao"
-            android:tint="@color/hud_valor" />
+            app:tint="@color/hud_valor" />
 
-        <ImageButton
+        <!-- AppCompatImageButton explícito: o HUD é inflado num Service (sem a fábrica do AppCompat),
+             então só assim o app:tint é aplicado. -->
+        <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/botao_hud_voltar"
             android:layout_width="@dimen/botao_hud"
             android:layout_height="@dimen/botao_hud"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/hud_voltar_app"
             android:src="@drawable/ic_maximizar"
-            android:tint="@color/hud_valor" />
+            app:tint="@color/hud_valor" />
     </LinearLayout>
 
     <!-- Linhas de até 2 células cada (item_hud_celula). -->

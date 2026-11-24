@@ -49,6 +49,54 @@
         android:textAppearance="?attr/textAppearanceBodySmall"
         android:textColor="@color/texto_secundario" />
 
+    <!-- Tamanho P/M/G: só no visual Esportivo (v2.2.8). -->
+    <LinearLayout
+        android:id="@+id/opcoes_esportivo_hud"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/espaco_medio"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/hud_config_tamanho"
+            android:textAppearance="?attr/textAppearanceLabelLarge" />
+
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/grupo_tamanho_esportivo_hud"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_minimo"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_hud_esportivo_p"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/hud_config_esportivo_p" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_hud_esportivo_m"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/hud_config_esportivo_m" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_hud_esportivo_g"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/hud_config_esportivo_g" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+    </LinearLayout>
+
     <!-- Tamanho, sensores e estilo: só no visual Padrão. -->
     <LinearLayout
         android:id="@+id/opcoes_padrao_hud"

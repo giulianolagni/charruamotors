@@ -6,6 +6,7 @@ import com.charruamotors.direcao.painel.ConfigPainel
 import com.charruamotors.direcao.painel.PreferenciasPainel
 import com.charruamotors.direcao.painel.PresetHud
 import com.charruamotors.direcao.painel.TamanhoHud
+import com.charruamotors.direcao.painel.TamanhoHudEsportivo
 import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.faixas.PresetVeiculo
 import com.charruamotors.obd.DadosObd
@@ -64,6 +65,30 @@ class HudEsportivoTest {
         assertEquals(PresetHud.PADRAO, CodecPainel.decodificar { lixo[it] }.hud.preset)
         val esportivo = CodecPainel.codificar(ConfigPainel(hud = ConfigHud(preset = PresetHud.ESPORTIVO)))
         assertEquals(PresetHud.ESPORTIVO, CodecPainel.decodificar { esportivo[it] }.hud.preset)
+    }
+
+    // ---------------------------------------------------------------- tamanho P / M / G (v2.2.8)
+
+    @Test
+    fun `tamanhos do esportivo mapeiam para 230 285 e 330 dp com medio como padrao`() {
+        assertEquals(230, TamanhoHudEsportivo.PEQUENO.larguraDp)
+        assertEquals(285, TamanhoHudEsportivo.MEDIO.larguraDp)
+        assertEquals(330, TamanhoHudEsportivo.GRANDE.larguraDp)
+        assertEquals(TamanhoHudEsportivo.MEDIO, ConfigHud().tamanhoEsportivo)
+    }
+
+    @Test
+    fun `tamanho do esportivo e persistido e preferencias antigas abrem no medio`() {
+        val memoria = Memoria()
+        val prefs = PreferenciasPainel(memoria)
+        prefs.definirHud(prefs.config.value.hud.copy(preset = PresetHud.ESPORTIVO, tamanhoEsportivo = TamanhoHudEsportivo.GRANDE))
+        assertEquals("GRANDE", memoria.valores[CodecPainel.HUD_TAMANHO_ESPORTIVO])
+        assertEquals(TamanhoHudEsportivo.GRANDE, PreferenciasPainel(memoria).config.value.hud.tamanhoEsportivo)
+
+        val semChave = CodecPainel.codificar(ConfigPainel()) - CodecPainel.HUD_TAMANHO_ESPORTIVO
+        assertEquals(TamanhoHudEsportivo.MEDIO, CodecPainel.decodificar { semChave[it] }.hud.tamanhoEsportivo)
+        val lixo = CodecPainel.codificar(ConfigPainel()) + (CodecPainel.HUD_TAMANHO_ESPORTIVO to "ENORME")
+        assertEquals(TamanhoHudEsportivo.MEDIO, CodecPainel.decodificar { lixo[it] }.hud.tamanhoEsportivo)
     }
 
     // ---------------------------------------------------------------- pedal auto-calibrado

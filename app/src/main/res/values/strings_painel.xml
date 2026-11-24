@@ -47,6 +47,9 @@
     <string name="hud_config_preset_padrao">Padrão (Atual)</string>
     <string name="hud_config_preset_esportivo">Esportivo (Conta-giros)</string>
     <string name="hud_config_esportivo_dica">Conta-giros com marcha e velocidade GPS (KPH), turbo em bar e o pedal (PED) no arco azul. Dois toques no HUD alternam entre os visuais.</string>
+    <string name="hud_config_esportivo_p">P (pequeno)</string>
+    <string name="hud_config_esportivo_m">M (médio)</string>
+    <string name="hud_config_esportivo_g">G (grande)</string>
     <string name="hud_config_tamanho">Tamanho</string>
     <string name="hud_config_minimizado">Minimizado</string>
     <string name="hud_config_expandido">Expandido</string>

@@ -34,6 +34,7 @@ import com.charruamotors.direcao.painel.EstiloHud
 import com.charruamotors.direcao.painel.PresetHud
 import com.charruamotors.direcao.painel.SensorPainel
 import com.charruamotors.direcao.painel.TamanhoHud
+import com.charruamotors.direcao.painel.TamanhoHudEsportivo
 import com.charruamotors.direcao.waze.AbridorWaze
 import com.charruamotors.direcao.waze.AcaoWaze
 import com.charruamotors.obd.DadosObd
@@ -97,6 +98,9 @@ class HudFlutuanteService : Service() {
         escopo.launch { telemetria.painel.collect(::desenhar) }
         escopo.launch {
             app.preferenciasPainel.config.map { it.hud.preset }.distinctUntilChanged().collect(::aplicarPreset)
+        }
+        escopo.launch {
+            app.preferenciasPainel.config.map { it.hud.tamanhoEsportivo }.distinctUntilChanged().collect(::aplicarTamanhoEsportivo)
         }
         escopo.launch {
             combine(telemetria.dados, telemetria.conectado) { dados, conectado -> dados to conectado }
@@ -209,6 +213,7 @@ class HudFlutuanteService : Service() {
         val esportivo = HudEsportivoView(this)
         habilitarArraste(esportivo)
         val preset = app.preferenciasPainel.config.value.hud.preset
+        esportivo.larguraDp = app.preferenciasPainel.config.value.hud.tamanhoEsportivo.larguraDp
         if (preset == PresetHud.ESPORTIVO) p.width = WindowManager.LayoutParams.WRAP_CONTENT
         try {
             wm.addView(if (preset == PresetHud.ESPORTIVO) esportivo else b.root, p)
@@ -248,6 +253,11 @@ class HudFlutuanteService : Service() {
             return
         }
         if (preset == PresetHud.PADRAO) ultimoPainel?.let(::desenhar)
+    }
+
+    /** Aplica na hora o tamanho P/M/G do Esportivo (a janela é WRAP_CONTENT: remede ao mudar a View). */
+    private fun aplicarTamanhoEsportivo(tamanho: TamanhoHudEsportivo) {
+        esportiva?.larguraDp = tamanho.larguraDp
     }
 
     private fun desenharEsportivo(dados: DadosObd?, conectado: Boolean) {

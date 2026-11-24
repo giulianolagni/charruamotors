@@ -1,5 +1,8 @@
 package com.charruamotors.obd.log
 
+import com.charruamotors.domain.faixas.FaixasVeiculo
+import com.charruamotors.domain.perfis.ImpressaoEcu
+import com.charruamotors.domain.perfis.OrigemPerfil
 import com.charruamotors.domain.perfis.VinDecodificado
 import com.charruamotors.obd.InfoConexao
 import com.charruamotors.obd.ValoresSensores
@@ -71,6 +74,9 @@ class GravadorLogsSessao(
     private var vin: String? = null
     private var vinDecodificado: VinDecodificado? = null
     private var sugestaoPerfil: String? = null
+    private var impressao: ImpressaoEcu? = null
+    private var origemPerfil: OrigemPerfil = OrigemPerfil.MANUAL
+    private var perfilAutomatico: String? = null
     private var finalizado = false
 
     /** Amostras já gravadas no CSV (as da fila ainda não contam). */
@@ -107,6 +113,19 @@ class GravadorLogsSessao(
         this.vin = vin
         this.vinDecodificado = decodificado
         this.sugestaoPerfil = sugestao
+    }
+
+    /** Impressão digital da ECU (`0151`, `0904`, TCM) para o cabeçalho do relatório. */
+    fun registrarImpressao(impressao: ImpressaoEcu): Unit = synchronized(trava) { this.impressao = impressao }
+
+    /**
+     * Perfil escolhido automaticamente ([origem] ≠ Manual) e as faixas dele, que passam a ser as do
+     * resumo da viagem; [origem] = Manual com [descricao] null desfaz (o usuário ignorou o aviso).
+     */
+    fun registrarPerfil(origem: OrigemPerfil, descricao: String?, faixas: FaixasVeiculo?): Unit = synchronized(trava) {
+        origemPerfil = origem
+        perfilAutomatico = descricao
+        estatisticas.trocarFaixas(faixas)
     }
 
     /**
@@ -238,6 +257,9 @@ class GravadorLogsSessao(
             vin = vin,
             vinDecodificado = vinDecodificado,
             sugestaoPerfil = sugestaoPerfil,
+            impressao = impressao,
+            origemPerfil = origemPerfil,
+            perfilAutomatico = perfilAutomatico,
         )
         var txt: ArquivoLogAberto? = null
         try {

@@ -3,6 +3,7 @@ package com.charruamotors.obd
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import com.charruamotors.domain.model.EstadoConexaoObd
+import com.charruamotors.domain.perfis.ImpressaoEcu
 import com.charruamotors.obd.log.EntradaRegistro
 import com.charruamotors.obd.log.RegistroComunicacao
 import com.charruamotors.obd.pid.CatalogoCascata
@@ -546,6 +547,75 @@ class Elm327BluetoothClient(
             when (val r = ObdParser.parseVin(bruto)) {
                 is RespostaObd.Ok -> r.valor
                 else -> throw respostaInesperada(r, "ler o VIN", bruto)
+            }
+        }
+    }
+
+    /**
+     * Impressão digital da ECU (v2.2.2): `0151` (combustível) e `0904` (CALID) com o cabeçalho de
+     * diagnóstico e, se pedido, o TCM (`0100` em `ATSH 7E1`, depois `7E2`). Nada aqui derruba a
+     * sessão: `NO DATA`, `7F` e timeout só deixam o campo nulo (só a queda do adaptador propaga, pelo
+     * caminho normal do estado). O cabeçalho/filtro anteriores voltam sempre ao fim da visita ao TCM.
+     * No modo 21/22 (sem OBD2 padrão) não há o que sondar.
+     */
+    override suspend fun sondarEcu(sondarTcm: Boolean): ImpressaoEcu = withContext(dispatcher) {
+        if (_estado.value != EstadoConexaoObd.Conectado || modoServico != null) return@withContext ImpressaoEcu.VAZIA
+        var combustivel: Int? = null
+        var calid: String? = null
+        var tcm: Boolean? = null
+        var tcmCabecalho: String? = null
+        try {
+            combustivel = (ObdParser.parseCombustivelEcu(sondar("0151", cabecalhoDiagnostico).orEmpty()) as? RespostaObd.Ok)?.valor
+            calid = (ObdParser.parseCalid(sondar("0904", cabecalhoDiagnostico, TIMEOUT_DTC_MS).orEmpty()) as? RespostaObd.Ok)?.valor
+            if (sondarTcm) {
+                tcm = false
+                val anterior = cabecalhoAtivo.takeIf { it != CABECALHO_INDEFINIDO }
+                try {
+                    for (cabecalho in CABECALHOS_TCM) {
+                        val bruto = sondar("0100", cabecalho).orEmpty()
+                        if (ObdParser.parsePidsSuportados(bruto, 0x00, "0100") is RespostaObd.Ok) {
+                            tcm = true
+                            tcmCabecalho = cabecalho
+                            break
+                        }
+                    }
+                } finally {
+                    withContext(NonCancellable) { restaurarCabecalho(anterior) }
+                }
+            }
+        } catch (e: ObdException) {
+            registro.evento("Sondagem da ECU interrompida: ${e.message}")
+        }
+        registro.evento(
+            "Impressão da ECU: combustível 0151=${combustivel?.let { "%02X".format(it) } ?: "sem resposta"}, " +
+                "CALID 0904=${calid ?: "sem resposta"}" +
+                (tcm?.let { ", TCM=${if (it) "detectado em $tcmCabecalho" else "não detectado (7E1/7E2)"}" }.orEmpty()),
+        )
+        ImpressaoEcu(combustivel, calid, tcm, tcmCabecalho)
+    }
+
+    /**
+     * Devolve o adaptador ao cabeçalho [alvo] (null = funcional `7DF`) e ao filtro de recepção que
+     * ele pede (`ATCRA` padrão), depois de uma visita a outro módulo. Se o `ATSH` não confirmar, o
+     * cabeçalho fica indefinido e o próximo comando à ECU o reenvia.
+     */
+    private suspend fun restaurarCabecalho(alvo: String?) {
+        mutexComandos.withLock {
+            val canal = transporte ?: return
+            try {
+                if (cabecalhoAtivo != alvo) {
+                    val resposta = try {
+                        trocar(canal, "ATSH" + (alvo ?: RequisicaoEstendida.CABECALHO_FUNCIONAL), timeoutComandoMs, true)
+                    } catch (_: ObdTimeoutException) {
+                        ""
+                    }
+                    cabecalhoAtivo = if ("OK" in resposta.uppercase()) alvo else CABECALHO_INDEFINIDO
+                }
+                if (cabecalhoAtivo == alvo) ajustarFiltroRecepcao(canal, alvo, true)
+            } catch (e: IOException) {
+                if (transporte !== canal) throw ObdException("Scanner desconectado", e)
+                perderConexao(canal, "Conexão Bluetooth com o scanner perdida")
+                throw ObdException("Conexão com o scanner perdida", e)
             }
         }
     }
@@ -1771,6 +1841,9 @@ class Elm327BluetoothClient(
 
         /** Câmbio automático (A750F): cabeçalho `7E1`, resposta em `7E9`. */
         private const val CABECALHO_CAMBIO = "7E1"
+
+        /** TCM (câmbio automático) no padrão ISO 15765-4: `7E1` e, se mudo, `7E2`. */
+        private val CABECALHOS_TCM = listOf("7E1", "7E2")
         private const val FILTRO_CAMBIO = "7E9"
 
         /** Filtro de recepção desconhecido (a volta ao padrão falhou): difere de qualquer alvo, então o próximo comando insiste. */

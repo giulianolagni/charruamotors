@@ -8,6 +8,8 @@ import com.charruamotors.domain.calculo.TelemetriaCalculada
 import com.charruamotors.domain.faixas.FaixaEsperada
 import com.charruamotors.domain.faixas.FaixasVeiculo
 import com.charruamotors.domain.faixas.SituacaoFaixa
+import com.charruamotors.domain.perfis.ImpressaoEcu
+import com.charruamotors.domain.perfis.OrigemPerfil
 import com.charruamotors.domain.perfis.VinDecodificado
 import com.charruamotors.obd.DtcLido
 import com.charruamotors.obd.ValoresSensores
@@ -78,8 +80,12 @@ class EstatisticasViagem(
     /** Combustível e calibração do veículo para o consumo via MAF; null = sem resumo de consumo. */
     private val motor: ParametrosMotor? = null,
     /** Faixas mínimas/máximas esperadas do veículo (v2.1); null = sem resumo de faixas. */
-    val faixas: FaixasVeiculo? = null,
+    faixas: FaixasVeiculo? = null,
 ) {
+    /** Faixas em acompanhamento; troca em [trocarFaixas] quando a sessão identifica um perfil melhor (v2.2.2). */
+    var faixas: FaixasVeiculo? = faixas
+        private set
+
     var amostras: Int = 0
         private set
 
@@ -100,7 +106,14 @@ class EstatisticasViagem(
     val relacaoAf = Extremos()
 
     /** Uma por faixa esperada do veículo, na ordem do preset. */
-    val acompanhamentoFaixas: List<AcompanhamentoFaixa> = faixas?.faixas.orEmpty().map(::AcompanhamentoFaixa)
+    var acompanhamentoFaixas: List<AcompanhamentoFaixa> = faixas?.faixas.orEmpty().map(::AcompanhamentoFaixa)
+        private set
+
+    /** Passa a acompanhar as faixas de [novas] (a contagem das faixas recomeça; os extremos da viagem seguem). */
+    fun trocarFaixas(novas: FaixasVeiculo?) {
+        faixas = novas
+        acompanhamentoFaixas = novas?.faixas.orEmpty().map(::AcompanhamentoFaixa)
+    }
 
     fun registrar(dados: ValoresSensores, instanteMs: Long? = null) {
         amostras++
@@ -171,6 +184,12 @@ data class ResumoSessao(
     val vinDecodificado: VinDecodificado? = null,
     /** Sugestão de perfil do catálogo quando o veículo cadastrado está num perfil genérico. */
     val sugestaoPerfil: String? = null,
+    /** Impressão digital da ECU (`0151`, `0904`, TCM); null = a sondagem não rodou nesta sessão. */
+    val impressao: ImpressaoEcu? = null,
+    /** Como o perfil em uso foi escolhido (Manual / VDS do VIN / Sondagem ECU). */
+    val origemPerfil: OrigemPerfil = OrigemPerfil.MANUAL,
+    /** Perfil aplicado automaticamente (título e motivo); null = o do cadastro. */
+    val perfilAutomatico: String? = null,
 )
 
 /**
@@ -222,7 +241,22 @@ object RelatorioSessaoTxt {
                 campo("Ano-modelo (VIN)", d.anoModelo?.toString() ?: "—")
             }
         }
-        c.faixas?.perfil?.let { campo("Perfil de faixas", it) }
+        if (r.conectou) {
+            val i = r.impressao
+            val semResposta = "sem resposta (NO DATA)"
+            campo("Combustível (0151)", if (i == null) "não sondado" else i.descricaoCombustivel ?: semResposta)
+            campo("CALID (0904)", if (i == null) "não sondado" else i.calid ?: semResposta)
+            campo(
+                "TCM detectado",
+                when {
+                    i?.tcmDetectado == true -> "sim (${i.tcmCabecalho})"
+                    i?.tcmDetectado == false -> "não (sem resposta em 7E1/7E2)"
+                    else -> "não sondado"
+                },
+            )
+        }
+        campo("Origem do perfil", r.origemPerfil.rotulo + (r.perfilAutomatico?.let { " — $it" }.orEmpty()))
+        (r.estatisticas.faixas ?: c.faixas)?.perfil?.let { campo("Perfil de faixas", it) }
         r.sugestaoPerfil?.let { campo("Sugestão de perfil", it) }
         campo("Modo de início", c.modoInicio)
         campo("Scanner", c.scanner ?: "—")

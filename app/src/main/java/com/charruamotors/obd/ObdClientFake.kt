@@ -1,6 +1,7 @@
 package com.charruamotors.obd
 
 import com.charruamotors.domain.model.EstadoConexaoObd
+import com.charruamotors.domain.perfis.ImpressaoEcu
 import com.charruamotors.obd.log.EntradaRegistro
 import com.charruamotors.obd.log.RegistroComunicacao
 import com.charruamotors.obd.pid.CatalogoEstendido
@@ -52,6 +53,11 @@ class ObdClientFake(
     private val vin: String? = null,
     private val catalogoEstendido: CatalogoEstendido = CatalogoEstendido.VAZIO,
     private val latenciaComandoMs: Long = 35,
+    /**
+     * Cenário "ECU sem impressão": `0151`, `0904` e o TCM respondem `NO DATA` (ECU antiga/básica), para
+     * demonstrar e testar que a identificação nunca derruba a sessão. Também alterável em [ecuSemImpressao].
+     */
+    ecuSemImpressao: Boolean = false,
     private val relogioMs: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : ObdClient {
 
@@ -113,9 +119,16 @@ class ObdClientFake(
     /** Quadro congelado quando a primeira falha armazenada foi registrada (apagado pelo modo 04). */
     private var freezeFrame: FreezeFrame = freezeFrameDe(codigosIniciais.firstOrNull())
 
+    /** A ECU simulada responde `NO DATA` ao `0151`, ao `0904` e ao TCM (vale já na próxima sondagem). */
+    @Volatile
+    var ecuSemImpressao: Boolean = ecuSemImpressao
+
     /** Permite demonstrar o tratamento de erro de conexão na apresentação. */
     @Volatile
     var simularFalhaNaConexao: Boolean = false
+
+    /** Marca do veículo desta conexão (null = demonstração sem veículo). */
+    @Volatile private var marcaConexao: String? = null
 
     /** VIN respondido nesta conexão (ver [vinSimulado]). */
     @Volatile private var vinConexao: String = VIN_PADRAO
@@ -162,6 +175,7 @@ class ObdClientFake(
         perfilSimulacao = perfilForcado ?: PerfilSimulacao.paraMarca(marcaVeiculo)
         ecu.perfil = perfilSimulacao
         vinConexao = vin ?: vinSimulado(perfilSimulacao, marcaVeiculo)
+        marcaConexao = marcaVeiculo
         cruze.reiniciar()
         velocidade = 0.0
         velocidadeAlvo = 40.0
@@ -263,6 +277,55 @@ class ObdClientFake(
         return Result.success(vinConexao)
     }
 
+    /**
+     * Impressão digital simulada, coerente com o carro (SW4 diesel, Cruze flex turbo, VW TSI ou
+     * genérico aspirado, pelo VIN) e passando pelos mesmos parsers do cliente real; com
+     * [ecuSemImpressao], `NO DATA` em tudo.
+     */
+    override suspend fun sondarEcu(sondarTcm: Boolean): ImpressaoEcu {
+        if (_estado.value != EstadoConexaoObd.Conectado) return ImpressaoEcu.VAZIA
+        val carro = CarroImpressao.de(vinConexao)
+        val mudo = ecuSemImpressao
+        suspend fun trocar(comando: String, resposta: String): String {
+            delay(latenciaComandoMs)
+            registro.comando(comando, resposta, latenciaComandoMs)
+            return resposta
+        }
+        val combustivel = (ObdParser.parseCombustivelEcu(
+            trocar("0151", if (mudo) NO_DATA else "41 51 %02X\r\r".format(carro.codigoCombustivel)),
+        ) as? RespostaObd.Ok)?.valor
+        val calid = (ObdParser.parseCalid(
+            trocar("0904", if (mudo) NO_DATA else respostaCalid(carro.calid)),
+        ) as? RespostaObd.Ok)?.valor
+        var tcm: Boolean? = null
+        var tcmCabecalho: String? = null
+        if (sondarTcm) {
+            registro.evento("Sondagem do TCM: ATSH 7E1 / 7E2 (cabeçalho do motor restaurado ao fim)")
+            tcm = false
+            for (cabecalho in listOf("7E1", "7E2")) {
+                val bruto = trocar("0100 ($cabecalho)", if (!mudo && carro.temTcm && cabecalho == "7E1") "41 00 98 18 80 01\r\r" else NO_DATA)
+                if (ObdParser.parsePidsSuportados(bruto, 0x00, "0100 ($cabecalho)") is RespostaObd.Ok) {
+                    tcm = true
+                    tcmCabecalho = cabecalho
+                    break
+                }
+            }
+        }
+        return ImpressaoEcu(combustivel, calid, tcm, tcmCabecalho)
+    }
+
+    /** `0904` em CAN multi-frame (ISO-TP): `49 04 01` + o CALID de 16 bytes, no formato do ELM327 (`0:`, `1:`...). */
+    private fun respostaCalid(calid: String): String {
+        val bytes = listOf(0x49, 0x04, 0x01) + calid.padEnd(16, '\u0000').take(16).map { it.code }
+        val quadros = buildList {
+            add(bytes.take(6))
+            addAll(bytes.drop(6).chunked(7))
+        }
+        return "%03X\r".format(bytes.size) + quadros.withIndex().joinToString("\r") { (i, q) ->
+            "$i: " + q.joinToString(" ") { "%02X".format(it) }
+        } + "\r\r"
+    }
+
     /** Como numa ECU real: apaga armazenados, pendentes e o Freeze Frame; os permanentes ficam. */
     override suspend fun limparCodigosFalha(): Result<Unit> {
         if (_estado.value != EstadoConexaoObd.Conectado) return Result.failure(naoConectado())
@@ -344,8 +407,13 @@ class ObdClientFake(
     private fun leituraParaComandoManual(): Map<String, Double> =
         if (motorDesligadoSimulado) ultimaLeitura + mapOf(Pids.RPM to 0.0, Pids.VELOCIDADE to 0.0) else ultimaLeitura
 
-    private fun comandosDoPerfil(): Set<String> =
-        if (perfilSimulacao == PerfilSimulacao.CRUZE_14T_FLEX) SimuladorCruze.COMANDOS else COMANDOS_SIMULADOS
+    private fun comandosDoPerfil(): Set<String> = when {
+        perfilSimulacao == PerfilSimulacao.CRUZE_14T_FLEX -> SimuladorCruze.COMANDOS
+        // Aspirado de injeção indireta (marca informada, fora Toyota/GM/VW): sem o rail absoluto (0123) da GDI/diesel.
+        // Sem marca (conexão de demonstração/testes antigos) segue o catálogo completo.
+        marcaConexao != null && CarroImpressao.de(vinConexao) == CarroImpressao.GENERICO_ASPIRADO -> COMANDOS_SIMULADOS - "0123"
+        else -> COMANDOS_SIMULADOS
+    }
 
     override suspend fun desconectar() {
         _sessaoManual.value = false
@@ -527,10 +595,16 @@ class ObdClientFake(
         /** Hilux SW4 2013 (Argentina, WMI `8AJ`; `D` = 2013). */
         const val VIN_TOYOTA = "8AJFZ29G4D6012345"
 
+        /** VW Polo 1.0 TSI 2019 (WMI `9BW` + VDS `AG5BZ9`; `K` = 2019), casa com `^9BWA[GHJ]`. */
+        const val VIN_VW_TSI = "9BWAG5BZ9KP012345"
+
+        private const val NO_DATA = "NO DATA\r\r"
+
         /** VIN coerente com o carro simulado, para a detecção por VIN (`0902`) funcionar no Modo Simulado. */
         fun vinSimulado(perfil: PerfilSimulacao, marca: String?): String = when {
             perfil == PerfilSimulacao.CRUZE_14T_FLEX -> VIN_CRUZE
             marca?.contains("toyota", ignoreCase = true) == true -> VIN_TOYOTA
+            marca?.let { Regex("\\b(volkswagen|vw|volks)\\b", RegexOption.IGNORE_CASE).containsMatchIn(it) } == true -> VIN_VW_TSI
             else -> VIN_PADRAO
         }
 
@@ -595,5 +669,30 @@ class ObdClientFake(
                     ),
                 )
             }
+    }
+}
+
+/** Carro simulado para a impressão digital da ECU (`0151`, `0904`, TCM), escolhido pelo VIN da conexão. */
+private enum class CarroImpressao(val codigoCombustivel: Int, val calid: String, val temTcm: Boolean) {
+    /** Hilux SW4 3.0 D-4D: diesel (`04`), A750F no `7E1`. */
+    SW4_DIESEL(0x04, "TY1KDFTV16A750F1", true),
+
+    /** Cruze 1.4 Turbo Flex: bicombustível gasolina/etanol (`09`), 6T35 no `7E1`. */
+    CRUZE_FLEX_TURBO(0x09, "GM6T35LE2CAL018A", true),
+
+    /** VW TSI: bicombustível (`09`), câmbio automático Aisin no `7E1`. */
+    VW_TSI(0x09, "VWEA211TSI0019AB", true),
+
+    /** Aspirado de injeção indireta, câmbio manual: gasolina (`01`), sem TCM. */
+    GENERICO_ASPIRADO(0x01, "GENASP0000000001", false),
+    ;
+
+    companion object {
+        fun de(vin: String): CarroImpressao = when {
+            vin.startsWith("8AJ") -> SW4_DIESEL
+            vin.startsWith("8AG") -> CRUZE_FLEX_TURBO
+            vin.startsWith("9BWA") || vin.startsWith("9BWD") -> VW_TSI
+            else -> GENERICO_ASPIRADO
+        }
     }
 }

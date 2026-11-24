@@ -2,11 +2,13 @@ package com.charruamotors.domain.perfis
 
 import java.time.LocalDate
 
-/** O que o VIN (`0902`) revela: fabricante pelo WMI (3 primeiros caracteres) e o ano-modelo (10º). */
+/** O que o VIN (`0902`) revela: fabricante pelo WMI (1–3), o VDS (4–9) e o ano-modelo (10º). */
 data class VinDecodificado(
     val vin: String,
     /** World Manufacturer Identifier (`9BG`, `8AJ`...). */
     val wmi: String,
+    /** Vehicle Descriptor Section: caracteres 4–9 (modelo, motor, carroceria, dígito verificador). */
+    val vds: String,
     /** Montadora pelo WMI; null = WMI fora da tabela. */
     val montadora: String?,
     /** País/fábrica do WMI (`Brasil`, `Argentina`); null = desconhecido. */
@@ -14,6 +16,9 @@ data class VinDecodificado(
     /** Ano-modelo pelo 10º caractere (ciclo de 30 anos resolvido pelo ano de referência); null = código inválido. */
     val anoModelo: Int?,
 ) {
+    /** WMI + VDS (os 9 primeiros caracteres), a base dos `padroesVin` do catálogo. */
+    val wmiVds: String get() = wmi + vds
+
     /** `Chevrolet · 2018 (WMI 9BG, Brasil)`. */
     val descricao: String
         get() = buildString {
@@ -74,7 +79,7 @@ object DecodificadorVin {
         val v = normalizar(vin) ?: return null
         val wmi = v.substring(0, 3)
         val fabricante = WMI[wmi]
-        return VinDecodificado(v, wmi, fabricante?.montadora, fabricante?.origem, anoModelo(v[9], anoReferencia))
+        return VinDecodificado(v, wmi, v.substring(3, 9), fabricante?.montadora, fabricante?.origem, anoModelo(v[9], anoReferencia))
     }
 
     /** Ano-modelo do código [c] (10º caractere); null se o código não for de ano (`0`, `U`, `Z`...). */

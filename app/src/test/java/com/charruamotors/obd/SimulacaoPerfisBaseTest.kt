@@ -36,7 +36,7 @@ class SimulacaoPerfisBaseTest {
         val leitura = vw.lerDadosEmTempoReal(10, null).take(2).toList().last()
         assertTrue(leitura[Pids.RPM] != null && leitura["VW_TURBO_REAL"] != null)
         assertEquals(EstadoConexaoObd.Conectado, vw.estado.value)
-        assertEquals(ObdClientFake.VIN_PADRAO, vw.lerVin().getOrThrow())
+        assertEquals(ObdClientFake.VIN_VW_TSI, vw.lerVin().getOrThrow())
     }
 
     @Test

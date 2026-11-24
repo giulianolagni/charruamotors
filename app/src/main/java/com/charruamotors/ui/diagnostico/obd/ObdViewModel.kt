@@ -34,6 +34,7 @@ import com.charruamotors.obd.log.RegistroComunicacao
 import com.charruamotors.obd.log.SessaoLog
 import com.charruamotors.obd.pid.CatalogoPids
 import com.charruamotors.obd.pid.Pids
+import com.charruamotors.domain.perfis.PerfilIdentificado
 import com.charruamotors.obd.sessao.ConfigAutoConexao
 import com.charruamotors.obd.sessao.EscolhaScanner
 import com.charruamotors.obd.sessao.EstadoSessao
@@ -181,6 +182,13 @@ class ObdViewModel(
         combine(sessao.vin, sessao.vinLido, pidsSuportados, sessao.perfil, sessao.infoConexao) { vin, lido, pids, perfil, conexao ->
             InfoEcu(vin, lido, pids.count { it in catalogoPids }, perfil, conexao)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InfoEcu())
+
+    /** Perfil que a sessão escolheu sozinho (VDS do VIN / sondagem da ECU), até o usuário manter ou ignorar. */
+    val perfilAutomatico: StateFlow<PerfilIdentificado?> = sessao.perfilAutomatico
+
+    fun manterPerfilAutomatico() = sessao.manterPerfilAutomatico()
+
+    fun ignorarPerfilAutomatico() = sessao.ignorarPerfilAutomatico()
 
     private val logger = DataLogger()
     private val _estadoLog = MutableStateFlow(EstadoLog())

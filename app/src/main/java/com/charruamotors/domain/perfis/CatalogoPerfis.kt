@@ -145,7 +145,15 @@ data class PerfilVeiculo(
     /** Fallback por motorização/combustível (sem detecção pelo cadastro). */
     val generico: Boolean,
     val deteccao: DeteccaoVeiculo?,
+    /**
+     * Padrões (regex sobre o VIN completo, ancorados no início: WMI + VDS, ex. `^8AGB[TN]`) que
+     * identificam este perfil pelo chassi, sem depender do cadastro. Vazio = sem identificação por VIN.
+     */
+    val padroesVin: List<Regex> = emptyList(),
 ) {
+    /** O [vin] (já normalizado, maiúsculas) casa com algum dos [padroesVin]? */
+    fun casaVin(vin: String): Boolean = padroesVin.any { it.containsMatchIn(vin) }
+
     /** `2005–2015`, `2020+`. */
     val faixaAnos: String
         get() = when {
@@ -181,6 +189,17 @@ class CatalogoPerfis(
     /** Perfil exato reconhecido pela marca/modelo/ano do cadastro (os genéricos nunca entram). */
     fun detectar(marca: String?, modelo: String?, ano: Int?): PresetVeiculo? =
         presets.firstOrNull { p -> !p.generico && p.perfil.deteccao?.reconhece(marca, modelo, ano) == true }
+
+    /**
+     * Perfil exato pelo chassi: o primeiro perfil não genérico cujo [PerfilVeiculo.padroesVin] casa com
+     * o VIN (WMI + VDS) e cujos anos cobrem o ano-modelo do 10º caractere (ano inválido não restringe).
+     */
+    fun detectarPorVin(vin: VinDecodificado?): PresetVeiculo? {
+        if (vin == null) return null
+        return presets.firstOrNull { p ->
+            !p.generico && p.perfil.padroesVin.isNotEmpty() && p.perfil.casaVin(vin.vin) && p.perfil.cobreAno(vin.anoModelo)
+        }
+    }
 
     /**
      * Perfil genérico pela motorização: diesel → Diesel Common Rail; demais combustíveis → Flex
@@ -340,6 +359,7 @@ class CatalogoPerfis(
                     layoutSugerido = o.optString("layoutSugerido", "padrao"),
                     generico = generico,
                     deteccao = deteccao,
+                    padroesVin = o.optJSONArray("padroesVin").textos().map { padraoVin(id, it) },
                 ).also { v ->
                     require(v.anoInicio == null || v.anoFim == null || v.anoInicio <= v.anoFim) { "$id: anoInicio > anoFim" }
                 }
@@ -351,6 +371,22 @@ class CatalogoPerfis(
 
         private fun id(o: JSONObject): String =
             o.getString("id").also { require(REGEX_ID.matches(it)) { "id inválido: \"$it\" (só a-z, 0-9 e _)" } }
+
+        /**
+         * Regex de um `padroesVin` (maiúsculas): texto sem `^` é tratado como prefixo literal do
+         * VIN (WMI+VDS, 8–9 caracteres). Regex inválida ou que casa com texto vazio derruba o arquivo.
+         */
+        fun padraoVin(id: String, texto: String): Regex {
+            val t = texto.trim().uppercase()
+            require(t.isNotEmpty()) { "$id: padrão de VIN vazio" }
+            val regex = try {
+                Regex(if (t.startsWith("^")) t else "^" + Regex.escape(t))
+            } catch (e: Exception) {
+                throw IllegalArgumentException("$id: padrão de VIN inválido ($texto): ${e.message}")
+            }
+            require(!regex.matches("")) { "$id: padrão de VIN casa com texto vazio ($texto)" }
+            return regex
+        }
 
         private fun cabecalho(texto: String, id: String): String =
             texto.uppercase().also { require(REGEX_CABECALHO.matches(it)) { "$id: cabeçalho CAN inválido ($texto)" } }

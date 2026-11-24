@@ -49,6 +49,17 @@
                 android:textAppearance="?attr/textAppearanceBodyMedium"
                 android:textColor="@color/texto_secundario" />
 
+            <!-- Só no Modo 21 (KWP): 07/0A pedem OBD2 padrão -->
+            <TextView
+                android:id="@+id/texto_falhas_modo21"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:text="@string/falhas_nota_modo21"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="@color/texto_secundario"
+                android:visibility="gone" />
+
             <!-- Códigos de falha por categoria -->
             <TextView
                 android:layout_width="wrap_content"

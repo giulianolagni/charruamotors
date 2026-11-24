@@ -53,6 +53,7 @@ import com.charruamotors.ui.painel.ClusterPainelActivity
 import com.charruamotors.ui.painel.EditorConfigHud
 import com.charruamotors.ui.painel.MontadorMostradores
 import com.charruamotors.domain.perfis.DecodificadorVin
+import com.charruamotors.domain.perfis.PerfilCambio
 import com.charruamotors.domain.perfis.PerfilIdentificado
 import com.charruamotors.domain.calculo.AlertaProtecao
 import com.charruamotors.domain.calculo.EstadoCronometro
@@ -123,7 +124,7 @@ class ObdFragment : Fragment() {
     private var configPainel: ConfigPainel = ConfigPainel()
 
     /** Mostradores desenhados agora (sensores + estilos + unidades), para não recriar a cada mudança. */
-    private var assinaturaMostradores: Pair<List<Mostrador>, ConversorUnidades>? = null
+    private var assinaturaMostradores: Triple<List<Mostrador>, ConversorUnidades, PerfilCambio?>? = null
 
     /** "Ver todos": ignora a lista rápida e mostra todos os sensores suportados. */
     private var mostrarTodosSensores = false
@@ -498,6 +499,7 @@ class ObdFragment : Fragment() {
                 launch { app.preferenciasApp.config.collect { aplicarConversor(it.conversor) } }
                 launch { app.preferenciasPainel.config.collect { aplicarConfigPainel(it) } }
                 launch { viewModel.estadoSessao.collect { mostrarEstadoSessao(it) } }
+                launch { app.sessaoObd.cambioAtivo.collect { configurarMostradores() } }
                 launch {
                     viewModel.simularFalha.collect { ativa ->
                         if (binding.switchSimularFalha.isChecked != ativa) binding.switchSimularFalha.isChecked = ativa
@@ -659,10 +661,11 @@ class ObdFragment : Fragment() {
 
     /** Remonta a grade (2 colunas; Fita em largura total) só quando os relógios ou as unidades mudam. */
     private fun configurarMostradores() {
-        val assinatura = configPainel.mostradores to conversor
+        val cambio = app.sessaoObd.cambioAtivo.value
+        val assinatura = Triple(configPainel.mostradores, conversor, cambio)
         if (assinatura == assinaturaMostradores) return
         assinaturaMostradores = assinatura
-        gauges = MontadorMostradores.montar(binding.grupoMostradores, configPainel.mostradores, conversor)
+        gauges = MontadorMostradores.montar(binding.grupoMostradores, configPainel.mostradores, conversor, cambio)
         val dados = viewModel.dados.value
         val consumoKmL = viewModel.computador.value.consumo?.kmPorLitro
         configPainel.mostradores.forEachIndexed { i, m ->

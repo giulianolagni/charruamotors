@@ -75,6 +75,7 @@
 
     <!-- Diagnóstico de Erros -->
     <string name="falhas_titulo">Diagnóstico de Erros</string>
+    <string name="falhas_nota_modo21">Modo 21 (KWP): os modos 07 (pendentes) e 0A (permanentes) dependem de OBD2 padrão e podem não responder neste carro.</string>
     <string name="falhas_descricao">Lê os códigos da injeção (modos 03, 07 e 0A) e o quadro congelado (modo 02). Apagar (modo 04) desliga a luz da injeção.</string>
 
     <!-- Aba Histórico -->

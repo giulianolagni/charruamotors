@@ -282,6 +282,11 @@ class SessaoObd(
     /** Impressão digital da ECU desta conexão (`0151`, `0904`, TCM); null = ainda não sondada. */
     val impressaoEcu: StateFlow<ImpressaoEcu?> = _impressaoEcu.asStateFlow()
 
+    private val _cambioAtivo = MutableStateFlow<PerfilCambio?>(null)
+
+    /** Câmbio do perfil exato em uso (o automático ou o do cadastro); null = genérico/sem sessão (v2.2.3, rótulo da marcha). */
+    val cambioAtivo: StateFlow<PerfilCambio?> = _cambioAtivo.asStateFlow()
+
     private val travaPerfil = Any()
     @Volatile private var veiculoAtual: VeiculoSessao? = null
 
@@ -433,6 +438,7 @@ class SessaoObd(
             val veiculo = if (veiculoId > 0) runCatching { buscarVeiculo(veiculoId) }.getOrNull() else null
             marcaAtual = veiculo?.marca
             veiculoAtual = veiculo
+            _cambioAtivo.value = veiculo?.cambio
             combustivelAtual = veiculo?.combustivel
             // A750F (alavanca no 7E1) e GM têm estimador próprio; os demais automáticos usam as razões do perfil.
             estimadorPerfil = veiculo?.cambio?.takeIf { it.estimaMarcha && it.mapaAlavanca == null }?.let(::EstimadorMarchaPerfil)
@@ -572,6 +578,7 @@ class SessaoObd(
         val anterior = perfilAplicado?.preset ?: veiculo?.resolucao?.preset
         perfilAplicado = novo
         val preset = novo.preset
+        _cambioAtivo.value = preset.perfilCambio.takeIf { !preset.generico }
         val limites = veiculo?.limites
         val faixas = if (preset.generico && limites != null) FaixasVeiculo.comLimitesDoCadastro(preset, limites) else preset.faixas
         estimadorPerfil = preset.perfilCambio.takeIf { !preset.generico && it.estimaMarcha && it.mapaAlavanca == null }?.let(::EstimadorMarchaPerfil)
@@ -598,6 +605,7 @@ class SessaoObd(
         perfilAplicado = null
         _perfilAutomatico.value = null
         val veiculo = veiculoAtual
+        _cambioAtivo.value = veiculo?.cambio
         estimadorPerfil = veiculo?.cambio?.takeIf { it.estimaMarcha && it.mapaAlavanca == null }?.let(::EstimadorMarchaPerfil)
         combustivelAtual = veiculo?.combustivel
         gravador?.registrarPerfil(OrigemPerfil.MANUAL, null, veiculo?.faixas)
@@ -680,6 +688,7 @@ class SessaoObd(
         _impressaoEcu.value = null
         perfilAplicado = null
         veiculoAtual = null
+        _cambioAtivo.value = null
         identificacaoConcluida = false
         perfilIgnorado = false
         mapPicoKpa = null

@@ -338,6 +338,30 @@ class Elm327CascataTest {
     }
 
     @Test
+    fun `limpeza no modo 21 com 7F 14 11 tenta 04 e depois 14 FF 00`() = runTest {
+        val com04 = EcuSimulada(sw4().apply {
+            put("7E0:14", "7F1411\r\r")
+            put("7E0:04", "44\r\r")
+        })
+        val a = cliente(com04)
+        a.conectar(dispositivo, "Toyota")
+        com04.enviados.clear()
+        assertTrue(a.limparCodigosFalha().isSuccess)
+        assertEquals(listOf("ATST32", "14", "04"), com04.enviados)
+
+        val ate14ff00 = EcuSimulada(sw4().apply {
+            put("7E0:14", "7F1411\r\r")
+            put("7E0:04", "7F0411\r\r")
+            put("7E0:14FF00", "54FF00\r\r")
+        })
+        val b = cliente(ate14ff00)
+        b.conectar(dispositivo, "Toyota")
+        ate14ff00.enviados.clear()
+        assertTrue(b.limparCodigosFalha().isSuccess)
+        assertEquals(listOf("ATST32", "14", "04", "14FF00"), ate14ff00.enviados)
+    }
+
+    @Test
     fun `limpeza recusada pela ECU explica o NRC`() = runTest {
         val obd = cliente(EcuSimulada(sw4().apply {
             put("7E0:14", "7F1422\r\r")

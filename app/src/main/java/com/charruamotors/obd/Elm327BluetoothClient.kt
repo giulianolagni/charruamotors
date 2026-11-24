@@ -624,9 +624,13 @@ class Elm327BluetoothClient(
     override suspend fun limparCodigosFalha(): Result<Unit> = operacao {
         exigirConectado()
         val modo = modoServico
-        val comandos = modo?.dtc?.limpar ?: listOf("04")
+        val comandos = (modo?.dtc?.limpar ?: listOf("04")).toMutableList()
         var ultimo: Pair<RespostaObd<Unit>, String>? = null
-        for (comando in comandos) {
+        var servico = comandos.last().take(2)
+        var i = 0
+        while (i < comandos.size) {
+            val comando = comandos[i++]
+            servico = comando.take(2)
             val bruto = enviar(comando, TIMEOUT_DTC_MS, cabecalhoDiagnostico)
             val r = ObdParser.parseLimpezaDtcs(bruto, comando)
             if (r is RespostaObd.Ok) {
@@ -634,9 +638,17 @@ class Elm327BluetoothClient(
                 return@operacao
             }
             ultimo = r to bruto
+            if (modo != null) {
+                // v2.2.3: `7F 14 11` (serviceNotSupported) → tenta o `04` OBD2 (espera `44`) antes do `14 FF 00` (espera `54`).
+                if (servico == "14" && ObdParser.respostaNegativa(bruto, "14", comando) == "11" && "04" !in comandos) {
+                    comandos.add(i, "04")
+                }
+                comandos.getOrNull(i)?.let { proximo ->
+                    registro.evento("Limpeza $comando recusada na ${modo.nome} (${bruto.trim().replace(Regex("\\s+"), " ")}); tentando $proximo")
+                }
+            }
         }
         val (r, bruto) = ultimo!!
-        val servico = comandos.last().take(2)
         ObdParser.respostaNegativa(bruto, servico)?.let { nrc ->
             throw ObdException(
                 "A ECU recusou a limpeza dos códigos (7F $servico $nrc, ${ObdParser.descricaoNrc(nrc)}). " +

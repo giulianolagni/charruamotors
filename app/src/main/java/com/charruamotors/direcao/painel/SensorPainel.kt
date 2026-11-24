@@ -2,6 +2,8 @@ package com.charruamotors.direcao.painel
 
 import com.charruamotors.domain.calculo.AlertaProtecao
 import com.charruamotors.domain.calculo.TipoAlertaProtecao
+import com.charruamotors.domain.perfis.PerfilCambio
+import com.charruamotors.domain.perfis.TipoCambio
 import com.charruamotors.obd.ValoresSensores
 import com.charruamotors.obd.pid.DefinicaoPid
 import com.charruamotors.obd.pid.Pids
@@ -226,6 +228,13 @@ enum class SensorPainel(
     ),
     ;
 
+    /**
+     * Título no mostrador conforme o [cambio] ativo (v2.2.3): só a marcha muda. Automático de 5 ou 6
+     * marchas → "Marcha (1ª–5ª)" / "Marcha (1ª–6ª)"; CVT, manual ou sem perfil exato → "Marcha".
+     */
+    fun tituloPara(cambio: PerfilCambio?): String =
+        if (this == MARCHA_ATUAL) tituloMarcha(cambio) else titulo
+
     /** Seção em que o sensor aparece nos chips de escolha. */
     val grupo: GrupoSensor
         get() = when (this) {
@@ -305,6 +314,13 @@ enum class SensorPainel(
     }
 
     companion object {
+        /** Rótulo dinâmico do mostrador de marcha pelo máximo de marchas do [cambio] (`relacoes`). */
+        fun tituloMarcha(cambio: PerfilCambio?): String {
+            val max = cambio?.takeIf { it.tipo == TipoCambio.AUTOMATICO }?.relacoes?.size ?: 0
+            return if (max in 5..6) "Marcha (1ª–${max}ª)" else "Marcha"
+        }
+
+
         /** Teto do km/L exibido (descida/banguela dispara o valor). */
         const val MAX_KM_L = 99.9
 

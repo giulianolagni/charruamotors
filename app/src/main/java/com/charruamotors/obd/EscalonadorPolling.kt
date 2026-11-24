@@ -107,6 +107,14 @@ class EscalonadorPolling(
         return LinkedHashMap(instantaneo)
     }
 
+    /**
+     * Esquece o último valor de [comando] (v2.2.6): ele some do instantâneo até ser lido de novo.
+     * Usado no `ATRV` ao retomar o polling depois de uma sessão manual.
+     */
+    fun invalidar(comando: String) {
+        instantaneo.remove(comando)
+    }
+
     /** Ciclos para varrer toda a fila lenta uma vez. */
     val ciclosPorVolta: Int
         get() {

@@ -10,7 +10,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** v1.7: limites editáveis (água 98 °C, ATF 105 °C, alternador 13,2 V acima de 600 rpm) e o disparador do som. */
+/** v1.7: limites editáveis (água 98 °C, ATF 105 °C, alternador 13,2 V a partir de 400 rpm (v2.2.6)) e o disparador do som. */
 class AlertasProtecaoTest {
 
     private val limites = LimitesProtecao()
@@ -29,7 +29,7 @@ class AlertasProtecaoTest {
         assertEquals(13.2, v.tensaoMinAlternadorV, 0.0)
         assertEquals(LimitesProtecao(98.0, 105.0, 13.2), LimitesProtecao.deVeiculo(v))
         assertEquals(LimitesProtecao(), LimitesProtecao.deVeiculo(null))
-        assertEquals(600.0, limites.rpmMinimoTensao, 0.0)
+        assertEquals(400.0, limites.rpmMinimoTensao, 0.0)
     }
 
     @Test
@@ -62,9 +62,12 @@ class AlertasProtecaoTest {
     // ---------------------------------------------------------------- alternador
 
     @Test
-    fun `tensao baixa so alerta com o motor acima de 600 rpm`() {
+    fun `tensao baixa so alerta com o motor a partir de 400 rpm`() {
         assertEquals(listOf(TipoAlertaProtecao.TENSAO), tipos(dados("ATRV" to 12.9, "010C" to 850.0)))
-        assertTrue(tipos(dados("ATRV" to 12.9, "010C" to 600.0)).isEmpty()) // exatamente 600: ainda não vale
+        // v2.2.6: RPM ≥ 400 (inclusivo); abaixo disso é o motor de partida girando.
+        assertEquals(listOf(TipoAlertaProtecao.TENSAO), tipos(dados("ATRV" to 12.9, "010C" to 400.0)))
+        assertTrue(tipos(dados("ATRV" to 12.9, "010C" to 399.0)).isEmpty())
+        assertTrue(tipos(dados("ATRV" to 12.9, "010C" to 250.0)).isEmpty()) // partida
         assertTrue(tipos(dados("ATRV" to 12.9, "010C" to 0.0)).isEmpty()) // motor desligado: bateria em repouso
         assertTrue(tipos(dados("ATRV" to 12.9)).isEmpty()) // sem RPM
         assertTrue(tipos(dados("ATRV" to 13.2, "010C" to 1500.0)).isEmpty()) // no limite: ok

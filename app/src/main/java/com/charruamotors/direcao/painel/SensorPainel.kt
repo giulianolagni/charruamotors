@@ -1,6 +1,7 @@
 package com.charruamotors.direcao.painel
 
 import com.charruamotors.domain.calculo.AlertaProtecao
+import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.calculo.TipoAlertaProtecao
 import com.charruamotors.domain.perfis.PerfilCambio
 import com.charruamotors.domain.perfis.TipoCambio
@@ -146,8 +147,9 @@ enum class SensorPainel(
     MARCHA_ATUAL(
         "TOYOTA_MARCHA", "Marcha (1ª–6ª)", "MARCHA", "", 0,
         mapOf("" to EscalaGauge(0f, 6f, null, 6, 1)),
-        // 1..5 do 2130 (SW4) ou 1..6 estimada pela razão rpm/velocidade (CambioA750f / CambioGm6T); 254 = R, 255 = parado.
-        rotulos = mapOf(0 to "N", 1 to "1ª", 2 to "2ª", 3 to "3ª", 4 to "4ª", 5 to "5ª", 6 to "6ª", 254 to "R", 255 to "Parado"),
+        // 1..5 do 2130 (SW4) ou 1..6 estimada pela razão rpm/velocidade (CambioA750f / CambioGm6T); 11..15 = 1ª L..5ª L
+        // (reduzida 4L, v2.2.6); 254 = R, 255 = parado.
+        rotulos = CambioA750f.ROTULOS_MARCHA,
     ),
     TRACAO_4X4(
         "TOYOTA_4WD", "Tração 4x4", "4X4", "", 0,

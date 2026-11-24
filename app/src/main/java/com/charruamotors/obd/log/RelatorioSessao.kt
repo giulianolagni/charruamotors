@@ -46,8 +46,15 @@ class ResumoSensor {
     var maximo: Double = Double.NaN
         private set
     private var soma = 0.0
+    private val _estados = LinkedHashSet<Int>()
 
     val media: Double get() = if (amostras == 0) Double.NaN else soma / amostras
+
+    /**
+     * Valores inteiros distintos lidos, na ordem em que apareceram (v2.2.6): o resumo dos sensores
+     * discretos (alavanca, marcha). Para de crescer em [MAX_ESTADOS] (sensores contínuos não enchem a memória).
+     */
+    val estados: List<Int> get() = _estados.toList()
 
     fun registrar(valor: Double) {
         if (!valor.isFinite()) return
@@ -55,6 +62,12 @@ class ResumoSensor {
         soma += valor
         if (minimo.isNaN() || valor < minimo) minimo = valor
         if (maximo.isNaN() || valor > maximo) maximo = valor
+        val inteiro = Math.round(valor)
+        if (_estados.size < MAX_ESTADOS && kotlin.math.abs(valor - inteiro) < 0.01) _estados.add(inteiro.toInt())
+    }
+
+    companion object {
+        const val MAX_ESTADOS = 32
     }
 }
 
@@ -124,6 +137,17 @@ class EstatisticasViagem(
     val tensao = Extremos()
     val temperaturaAtf = Extremos()
 
+    /** Pressão barométrica lida (`2133` Toyota ou `0133` padrão), em kPa (v2.2.6, boost real). */
+    val barometro = Extremos()
+
+    /** Barômetro mais recente quando o MAP bateu o pico (null = nenhum lido até ali). */
+    var barometroNoPicoMap: Double? = null
+        private set
+    private var ultimoBarometro: Double? = null
+
+    /** Barômetro para o boost do resumo: o do pico do MAP, senão o último lido; null = usar 101 kPa. */
+    val barometroBoost: Double? get() = barometroNoPicoMap ?: ultimoBarometro
+
     /** Teor de etanol (`0152`) e relação A/F real calculada (v2.1, Modo Flex). */
     val etanol = Extremos()
     val relacaoAf = Extremos()
@@ -153,7 +177,13 @@ class EstatisticasViagem(
         }
         rpm.registrar(dados[Pids.RPM])
         velocidade.registrar(dados[Pids.VELOCIDADE])
-        map.registrar(dados[Pids.PRESSAO_COLETOR])
+        COMANDOS_BAROMETRO.firstNotNullOfOrNull { c -> dados[c]?.takeIf { it.isFinite() && it in FAIXA_BAROMETRO_KPA } }?.let {
+            ultimoBarometro = it
+            barometro.registrar(it)
+        }
+        val mapLido = dados[Pids.PRESSAO_COLETOR]?.takeIf { it.isFinite() }
+        if (mapLido != null && (map.maximo == null || mapLido > map.maximo!!)) barometroNoPicoMap = ultimoBarometro
+        map.registrar(mapLido)
         temperaturaMotor.registrar(dados[Pids.TEMPERATURA_MOTOR])
         rail.registrar(dados[Pids.PRESSAO_RAIL])
         tensao.registrar(dados[Pids.TENSAO_BATERIA])
@@ -162,6 +192,14 @@ class EstatisticasViagem(
         relacaoAf.registrar(dados[Pids.RELACAO_AF_REAL])
         val f = faixas ?: return
         acompanhamentoFaixas.forEach { a -> f.leituras(a.faixa, dados).forEach { (_, v) -> a.registrar(v) } }
+    }
+
+    companion object {
+        /** Barômetro Toyota (`7E0 · 2133`) antes do OBD2 padrão (`0133`). */
+        val COMANDOS_BAROMETRO = listOf("TOYOTA_BARO", "0133")
+
+        /** Leituras fora disto (0, 255) são lixo e não entram no boost. */
+        val FAIXA_BAROMETRO_KPA = 50.0..115.0
     }
 }
 
@@ -240,7 +278,8 @@ object RelatorioSessaoTxt {
     const val TITULO_EVENTOS = "EVENTOS DA SESSÃO (log bruto desligado)"
     const val TITULO_SENSORES = "SENSORES DA SESSÃO (mínimo / máximo / média)"
     private const val LINHA = "=================================================================="
-    private const val PRESSAO_ATMOSFERICA_KPA = 101.3
+    /** Fallback do boost quando a sessão não leu barômetro nenhum. */
+    const val PRESSAO_ATMOSFERICA_KPA = 101.0
 
     private val localeBr: Locale = Locale.forLanguageTag("pt-BR")
     private val formatoNome = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
@@ -335,7 +374,7 @@ object RelatorioSessaoTxt {
             campo("Amostras de telemetria", numero(e.amostras.toDouble(), 0))
             campo("RPM máximo", e.rpm.maximo?.let { "${numero(it, 0)} rpm" } ?: "—")
             campo("Velocidade máxima", e.velocidade.maximo?.let { "${numero(it, 0)} km/h" } ?: "—")
-            campo("Pico de MAP/Turbo", e.map.maximo?.let(::descreverMap) ?: "—")
+            campo("Pico de MAP/Turbo", e.map.maximo?.let { descreverMap(it, e.barometroBoost) } ?: "—")
             campo("Temperatura máx. do motor", e.temperaturaMotor.maximo?.let { "${numero(it, 0)} °C" } ?: "—")
             campo("Pressão máx. Common Rail", e.rail.maximo?.let { "${numero(it, 0)} kPa (${numero(it / 100, 0)} bar)" } ?: "—")
             campo("Temp. máx. do câmbio (ATF)", e.temperaturaAtf.maximo?.let { "${numero(it, 0)} °C" } ?: "—")
@@ -384,14 +423,23 @@ object RelatorioSessaoTxt {
         }
     }
 
-    /** Resumo de marchas: amostras (e % do total com marcha) por posição; só quando a sessão tem marcha. */
+    /**
+     * Resumo de marchas: amostras (e % do total com marcha) por posição; só quando a sessão tem marcha.
+     * v2.2.6: as marchas da reduzida (`1ª L`..`5ª L`) vêm separadas, depois das da 4H.
+     */
     private fun escreverMarchas(e: EstatisticasViagem, saida: Appendable) {
         if (e.marchas.isEmpty()) return
         val total = e.marchas.values.sum()
         val rotulos = DefinicaoPid.MARCHA_ESTIMADA_A750F.rotulos
-        saida.append('\n').append("MARCHAS\n")
-        e.marchas.forEach { (valor, n) ->
+        fun linha(valor: Int, n: Int) {
             saida.append("  ${(rotulos[valor] ?: valor.toString()).padEnd(8)}: ${numero(n.toDouble(), 0)} amostras (${numero(n * 100.0 / total, 1)} %)\n")
+        }
+        val (reduzida, normal) = e.marchas.entries.partition { CambioA750f.ehReduzida(it.key) }
+        saida.append('\n').append("MARCHAS\n")
+        normal.forEach { (valor, n) -> linha(valor, n) }
+        if (reduzida.isNotEmpty()) {
+            saida.append("  Reduzida (4L):\n")
+            reduzida.forEach { (valor, n) -> linha(valor, n) }
         }
     }
 
@@ -414,9 +462,10 @@ object RelatorioSessaoTxt {
             val unidade = def?.unidade?.takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty()
             val nome = def?.nome ?: comando
             if (def != null && def.rotulos.isNotEmpty()) {
-                // Estado/categoria (alavanca, marcha): média não faz sentido; mostra os extremos pelo rótulo.
-                fun rotulo(v: Double) = def.rotulos[v.toInt()] ?: numero(v, 0)
-                saida.append("  • $nome [$comando]: estados de ${rotulo(s.minimo)} a ${rotulo(s.maximo)} (${numero(s.amostras.toDouble(), 0)} leituras)\n")
+                // Estado/categoria (alavanca, marcha): média e mín/máx não fazem sentido (o código de D não
+                // fica "entre" P e R); v2.2.6 lista os estados distintos observados, na ordem em que apareceram.
+                val estados = s.estados.joinToString(", ") { def.rotulos[it] ?: it.toString() }.ifEmpty { "—" }
+                saida.append("  • $nome [$comando]: estados observados: $estados (${numero(s.amostras.toDouble(), 0)} leituras)\n")
                 continue
             }
             saida.append(
@@ -437,11 +486,20 @@ object RelatorioSessaoTxt {
         }
     }
 
-    /** MAP absoluto e, se acima da atmosfera, a pressão positiva aproximada do turbo. */
-    private fun descreverMap(kpa: Double): String {
-        val turbo = (kpa - PRESSAO_ATMOSFERICA_KPA) / 100
-        return if (turbo > 0.05) "${numero(kpa, 0)} kPa (≈ +${numero(turbo, 2)} bar de turbo)" else "${numero(kpa, 0)} kPa"
+    /**
+     * MAP absoluto e, se acima da atmosfera, a pressão positiva do turbo (boost, bar). v2.2.6: desconta
+     * o [barometro] real lido (`2133`/`0133`, importante na serra); sem ele, [PRESSAO_ATMOSFERICA_KPA].
+     */
+    fun descreverMap(kpa: Double, barometro: Double? = null): String {
+        val turbo = boostBar(kpa, barometro)
+        if (turbo <= 0.05) return "${numero(kpa, 0)} kPa"
+        val referencia = barometro?.let { ", barômetro ${numero(it, 0)} kPa" }.orEmpty()
+        return "${numero(kpa, 0)} kPa (≈ +${numero(turbo, 2)} bar de turbo$referencia)"
     }
+
+    /** Boost (bar) = (MAP − barômetro) / 100; sem barômetro lido, 101 kPa. */
+    fun boostBar(mapKpa: Double, barometro: Double? = null): Double =
+        (mapKpa - (barometro ?: PRESSAO_ATMOSFERICA_KPA)) / 100
 
     fun dataHora(ms: Long, zona: ZoneId): String = formatoDataHora.format(Instant.ofEpochMilli(ms).atZone(zona))
 

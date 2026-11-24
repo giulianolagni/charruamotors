@@ -17,7 +17,7 @@
     { "parametro": "RPM_MAXIMO", "min": null, "max": 4200 },
     { "parametro": "TEMP_AGUA", "min": 80, "max": 98 },
     { "parametro": "TENSAO", "min": 13.4, "max": 14.6 },
-    { "parametro": "RAIL", "min": 280, "max": 1800 },
+    { "parametro": "RAIL", "min": 280, "max": 2000 },
     { "parametro": "RAIL_LENTA", "min": 280, "max": 600 },
     { "parametro": "MAP_TURBO", "min": 60, "max": 215 },
     { "parametro": "BICOS", "min": -3, "max": 3 },

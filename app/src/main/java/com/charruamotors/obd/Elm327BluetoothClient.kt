@@ -138,6 +138,9 @@ class Elm327BluetoothClient(
     private val mutexCiclo = Mutex()
 
     private val _sessaoManual = MutableStateFlow(false)
+
+    /** Sessões manuais já encerradas (v2.2.6): o polling invalida o `ATRV` em cache quando o número muda. */
+    private val sessoesManuaisEncerradas = java.util.concurrent.atomic.AtomicInteger(0)
     override val sessaoManualAtiva: StateFlow<Boolean> = _sessaoManual.asStateFlow()
 
     /** Cabeçalho do adaptador quando a sessão manual começou (restaurado no fim). */
@@ -326,11 +329,20 @@ class Elm327BluetoothClient(
     ): Flow<DadosObd> = flow {
         val sessao = transporte ?: return@flow
         val escalonador = EscalonadorPolling(lentosPorVez, ciclosPorLento, Pids.candidatosFilaRapida(consumoPorMaf), CHAVES_CAMBIO)
+        var geracaoManualVista = sessoesManuaisEncerradas.get()
         var ciclosSemEcu = 0
         while (_estado.value == EstadoConexaoObd.Conectado && transporte === sessao) {
             if (_sessaoManual.value) {
                 _sessaoManual.first { !it }
                 continue
+            }
+            val geracao = sessoesManuaisEncerradas.get()
+            if (geracao != geracaoManualVista) {
+                // v2.2.6: a tensão em cache é de antes da sessão manual (ex.: Teste de Bateria com o
+                // motor desligado); o ALTERNADOR BAIXO só é avaliado de novo com um ATRV fresco.
+                // Pelo contador (e não pelo ramo acima): a sessão pode abrir e fechar durante o delay.
+                geracaoManualVista = geracao
+                escalonador.invalidar(Pids.TENSAO_BATERIA)
             }
             val inicioNs = System.nanoTime()
             // Relido a cada ciclo: um perfil de montadora pode ser ativado com o polling já rodando.
@@ -369,16 +381,18 @@ class Elm327BluetoothClient(
                     "o perfil exige CAN de 11 bits (o veículo usa o protocolo ${protocolo ?: "desconhecido"})",
                 )
             }
-            val ativos = buildList {
-                for ((requisicao, definicoes) in perfil.requisicoes) {
-                    val bruto = try {
-                        enviar(requisicao.comando, timeoutComandoMs, requisicao.cabecalho)
-                    } catch (e: ObdTimeoutException) {
-                        continue // módulo ausente (ex.: carro sem câmbio automático)
+            val ativos = semAlavancaRedundante(
+                buildList {
+                    for ((requisicao, definicoes) in perfil.requisicoes) {
+                        val bruto = try {
+                            enviar(requisicao.comando, timeoutComandoMs, requisicao.cabecalho)
+                        } catch (e: ObdTimeoutException) {
+                            continue // módulo ausente (ex.: carro sem câmbio automático)
+                        }
+                        addAll(definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok })
                     }
-                    addAll(definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok })
-                }
-            }
+                },
+            )
             if (ativos.isEmpty()) {
                 registro.evento("Perfil ${perfil.nome}: nenhuma requisição respondeu")
                 return@withContext ResultadoPerfil.Indisponivel(perfil.nome, "a ECU não respondeu aos PIDs do perfil")
@@ -405,13 +419,15 @@ class Elm327BluetoothClient(
         }
         return try {
             exigirConectado()
-            val ativos = buildList {
-                for ((requisicao, definicoes) in compativeis) {
-                    val bruto = sondar(requisicao.comando, cabecalhoServico) ?: continue
-                    addAll(definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok })
-                }
-                addAll(sondarCambio(modo, perfil))
-            }
+            val ativos = semAlavancaRedundante(
+                buildList {
+                    for ((requisicao, definicoes) in compativeis) {
+                        val bruto = sondar(requisicao.comando, cabecalhoServico) ?: continue
+                        addAll(definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok })
+                    }
+                    addAll(sondarCambio(modo, perfil))
+                },
+            )
             if (ativos.isEmpty()) {
                 registro.evento("Perfil ${perfil.nome}: nenhuma requisição respondeu no ${modo.nome}")
                 return ResultadoPerfil.Indisponivel(perfil.nome, "a ECU não respondeu aos PIDs do perfil no ${modo.nome}")
@@ -490,6 +506,19 @@ class Elm327BluetoothClient(
                 throw ObdException("Conexão com o scanner perdida", e)
             }
         }
+    }
+
+    /**
+     * v2.2.6: com a alavanca do câmbio (`7E1 · 21D9`, [CHAVE_ALAVANCA_CAMBIO]) respondendo, o espelho
+     * no motor (`7E0 · 21D9`, [CHAVE_ALAVANCA_ECM]) sai do polling: na SW4 2013 ele devolve sempre P e
+     * só gastaria um comando por volta da fila lenta.
+     */
+    private fun semAlavancaRedundante(ativos: List<DefinicaoPid>): List<DefinicaoPid> {
+        val filtrados = filtrarAlavancaRedundante(ativos)
+        if (filtrados.size != ativos.size) {
+            registro.evento("Alavanca lida no câmbio 7E1: $CHAVE_ALAVANCA_ECM (7E0 · 21D9) fora do polling")
+        }
+        return filtrados
     }
 
     private fun incluirEstendidos(ativos: List<DefinicaoPid>) {
@@ -693,6 +722,7 @@ class Elm327BluetoothClient(
             } catch (e: ObdException) {
                 registro.evento("Falha ao restaurar o adaptador depois da sessão manual: ${e.message}")
             } finally {
+                sessoesManuaisEncerradas.incrementAndGet()
                 _sessaoManual.value = false
             }
         }
@@ -1870,6 +1900,14 @@ class Elm327BluetoothClient(
          * ciclo; a marcha é estimada pelo app (`CambioA750f`).
          */
         private val IDS_CAMBIO_POLLING = setOf("D9")
+
+        /** Alavanca lida no câmbio (`7E1 · 21D9`) e o espelho redundante no motor (`7E0 · 21D9`). */
+        const val CHAVE_ALAVANCA_CAMBIO = "TOYOTA_ALAVANCA"
+        const val CHAVE_ALAVANCA_ECM = "TOYOTA_ALAVANCA_ECM"
+
+        /** Tira [CHAVE_ALAVANCA_ECM] de [ativos] quando [CHAVE_ALAVANCA_CAMBIO] também respondeu (v2.2.6). */
+        internal fun filtrarAlavancaRedundante(ativos: List<DefinicaoPid>): List<DefinicaoPid> =
+            if (ativos.any { it.comando == CHAVE_ALAVANCA_CAMBIO }) ativos.filter { it.comando != CHAVE_ALAVANCA_ECM } else ativos
 
         /** Sensores do câmbio lidos em cadência leve (ver [EscalonadorPolling]). */
         private val CHAVES_CAMBIO = setOf("TOYOTA_ALAVANCA", "TOYOTA_ATF_CAMBIO", "TOYOTA_MARCHA")

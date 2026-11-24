@@ -59,11 +59,14 @@ object ObdParser {
     fun parseCargaMotor(bruto: String, comando: String? = "0104"): RespostaObd<Double> =
         bytesDoPid(bruto, "04", 1, comando).mapear { it[0] * 100.0 / 255.0 }
 
-    /** `ATRV`: tensão da bateria em volts, ex.: `12.6V`. */
+    /**
+     * `ATRV`: tensão da bateria em volts, ex.: `12.6V`. Corrige o bug do ELM327 v2.1 (clones) na
+     * virada de 9,9 V para 10,0 V, que imprime a dezena como `:` (`":.0V"` = 10,0 V): ver [corrigirDezenaAtrv].
+     */
     fun parseTensao(bruto: String, comando: String? = "ATRV"): RespostaObd<Double> {
         val linhas = linhasLimpas(bruto, comando)
         for (linha in linhas) {
-            val numero = regexTensao.matchEntire(compactar(linha))?.groupValues?.get(1) ?: continue
+            val numero = regexTensao.matchEntire(corrigirDezenaAtrv(compactar(linha)))?.groupValues?.get(1) ?: continue
             val volts = numero.replace(',', '.').toDoubleOrNull() ?: continue
             if (volts <= 0.0 || volts > 40.0) return RespostaObd.Invalido(bruto)
             return RespostaObd.Ok(volts)
@@ -87,7 +90,8 @@ object ObdParser {
         if (definicao.ehComandoAt) {
             val linhas = linhasLimpas(bruto, comando)
             for (linha in linhas) {
-                val numero = regexNumeroAt.matchEntire(compactar(linha))?.groupValues?.get(1) ?: continue
+                val texto = compactar(linha).let { if (definicao.comando == "ATRV") corrigirDezenaAtrv(it) else it }
+                val numero = regexNumeroAt.matchEntire(texto)?.groupValues?.get(1) ?: continue
                 val x = numero.replace(',', '.').toDoubleOrNull() ?: continue
                 return validarFaixa(definicao.converter(x = x), definicao, bruto)
             }
@@ -598,6 +602,17 @@ object ObdParser {
     }
 
     private fun compactar(texto: String) = texto.filter { !it.isWhitespace() }
+
+    /**
+     * Bug do ELM327 v2.1 (clones) no `ATRV`: o dígito da unidade estoura de `9` para o caractere
+     * ASCII seguinte (`:` = 10, `;` = 11...) em vez de virar `10`, então `":.0V"` é 10,0 V e
+     * `";.2V"` seria 11,2 V. Só troca o primeiro caractere quando ele está em `:`..`?` e vem
+     * seguido do ponto decimal; o resto da resposta segue igual.
+     */
+    internal fun corrigirDezenaAtrv(texto: String): String {
+        if (texto.length < 2 || texto[0] !in ':'..'?' || (texto[1] != '.' && texto[1] != ',')) return texto
+        return (texto[0] - '0').toString() + texto.substring(1)
+    }
 
     /** Converte "1AF8" em [0x1A, 0xF8]; ignora um nibble sobrando e para no primeiro caractere não hexadecimal. */
     private fun hexParaBytes(hex: String): List<Int> {

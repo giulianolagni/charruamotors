@@ -78,7 +78,16 @@ data class PerfilCambio(
     val observacao: String,
     val faixas: List<FaixaEsperada>,
     val relacoes: List<RelacaoMarcha>,
+    /**
+     * v2.2.6: fator da caixa de transferência na reduzida (`4L`), ex.: `2.57` na A750F da SW4.
+     * Null = câmbio sem reduzida (o estimador nunca entra em `4L`).
+     */
+    val fatorReduzida: Double? = null,
 ) {
+    init {
+        require(fatorReduzida == null || (fatorReduzida.isFinite() && fatorReduzida > 1.0)) { "$id: fatorReduzida inválido ($fatorReduzida)" }
+    }
+
     /** Tem módulo de câmbio para sondar (`7E1`/`7E2`)? */
     val temTcm: Boolean get() = cabecalhos.isNotEmpty()
 
@@ -93,7 +102,12 @@ data class PerfilCambio(
         if (!estimaMarcha) return null
         if (rpm == null || velocidadeKmh == null || !rpm.isFinite() || !velocidadeKmh.isFinite()) return null
         if (velocidadeKmh < VELOCIDADE_MINIMA_KMH || rpm <= 0.0) return null
-        val razao = rpm / velocidadeKmh
+        return marchaDaRazao(rpm / velocidadeKmh)
+    }
+
+    /** Marcha da tabela para uma razão `rpm / velocidade` já calculada (ex.: dividida pelo [fatorReduzida]). */
+    fun marchaDaRazao(razao: Double): Int? {
+        if (!estimaMarcha || !razao.isFinite() || razao <= 0.0) return null
         return (relacoes.firstOrNull { razao >= it.razaoMinima } ?: relacoes.last()).marcha
     }
 
@@ -323,6 +337,7 @@ class CatalogoPerfis(
                 observacao = o.optString("observacao"),
                 faixas = faixas(o.getJSONArray("faixas"), id),
                 relacoes = relacoes,
+                fatorReduzida = if (o.isNull("fatorReduzida")) null else o.getDouble("fatorReduzida"),
             ).also { c ->
                 require(c.tipo != TipoCambio.MANUAL || !c.temTcm) { "$id: câmbio manual não tem TCM" }
             }

@@ -8,11 +8,14 @@ import com.charruamotors.obd.pid.Pids
 import java.text.NumberFormat
 import java.util.Locale
 
-/** Quando uma faixa vale: o RPM de marcha lenta só faz sentido parado, a tensão só com o motor girando. */
+/**
+ * Quando uma faixa vale: o RPM de marcha lenta só faz sentido parado e com o motor aquecido, a
+ * tensão, o rail, o MAP e o MAF só com o motor girando (v2.2.6: `RPM ≥ 400`).
+ */
 enum class CondicaoFaixa(val descricao: String) {
     SEMPRE("sempre"),
     MOTOR_LIGADO("motor ligado"),
-    MARCHA_LENTA("marcha lenta (parado, sem acelerar)"),
+    MARCHA_LENTA("marcha lenta (parado, sem acelerar, motor aquecido)"),
 }
 
 /**
@@ -132,22 +135,36 @@ data class FaixasVeiculo(val perfil: String, val faixas: List<FaixaEsperada>) {
     fun linhasFicha(): List<String> = faixas.map { "${it.parametro.titulo}: ${it.texto}" }
 
     companion object {
-        /** RPM a partir do qual o motor é considerado ligado (abaixo: partida/desligado). */
-        const val RPM_MOTOR_LIGADO = 500.0
+        /**
+         * RPM a partir do qual o motor é considerado ligado (abaixo: desligado ou girando no motor de
+         * partida). v2.2.6: inclusivo (`≥`) e igual ao do alerta de alternador ([LimitesProtecao.RPM_MINIMO_TENSAO]).
+         */
+        const val RPM_MOTOR_LIGADO = LimitesProtecao.RPM_MINIMO_TENSAO
+
+        /**
+         * Temperatura da água a partir da qual o motor conta como aquecido (v2.2.6): a marcha lenta
+         * fria fica acelerada de propósito (e o rail mais alto), então as faixas de lenta só valem acima disso.
+         */
+        const val TEMP_MOTOR_AQUECIDO_C = 65.0
         private val FAIXA_RPM_LENTA = 400.0..1_100.0
         private const val VELOCIDADE_PARADO_KMH = 3.0
         private const val PEDAL_SOLTO_PCT = 5.0
         private val COMANDOS_PEDAL = listOf("0149", "TOYOTA_PEDAL_D")
 
+        /** Motor girando por conta própria (`RPM ≥ 400`); sem leitura de RPM, não. */
+        fun motorLigado(rpm: Double?): Boolean = rpm != null && rpm.isFinite() && rpm >= RPM_MOTOR_LIGADO
+
         fun condicaoAtendida(condicao: CondicaoFaixa, dados: ValoresSensores): Boolean {
             val rpm = dados[Pids.RPM]
             return when (condicao) {
                 CondicaoFaixa.SEMPRE -> true
-                CondicaoFaixa.MOTOR_LIGADO -> rpm != null && rpm > RPM_MOTOR_LIGADO
+                CondicaoFaixa.MOTOR_LIGADO -> motorLigado(rpm)
                 CondicaoFaixa.MARCHA_LENTA -> {
                     val velocidade = dados[Pids.VELOCIDADE]
                     val pedal = COMANDOS_PEDAL.firstNotNullOfOrNull { dados[it] }
+                    val agua = dados[Pids.TEMPERATURA_MOTOR]
                     rpm != null && rpm in FAIXA_RPM_LENTA &&
+                        agua != null && agua.isFinite() && agua >= TEMP_MOTOR_AQUECIDO_C &&
                         (velocidade == null || velocidade < VELOCIDADE_PARADO_KMH) &&
                         (pedal == null || pedal < PEDAL_SOLTO_PCT)
                 }

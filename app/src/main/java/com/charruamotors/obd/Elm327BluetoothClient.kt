@@ -84,8 +84,9 @@ import java.io.IOException
  *   1 PID lento a cada 3 ciclos.
  * - Perfis de montadora (`pids_estendidos.json`) com cabeçalho CAN físico, ativados só em CAN de
  *   11 bits e se a ECU responder; no modo 21/22, só os do mesmo módulo e serviço da camada ativa.
- * - Linha K (v2.3.4): ao fim da sessão manual com [OCIOSIDADE_LINHA_K_MS] sem comando OBD (ou erro no
- *   primeiro comando retomado), `ATPC` + `0100` reabrem o protocolo, sem cabeçalho de CAN.
+ * - Linha K (v2.3.5): ao fim da sessão manual com [OCIOSIDADE_LINHA_K_MS] sem comando OBD (ou erro no
+ *   primeiro comando retomado), `ATPC` + `ATSP0` + `ATST64` + `0100` refazem o handshake físico, sem
+ *   cabeçalho de CAN; o `ATST` curto só volta depois do `41 00`.
  * - Falhas: `03`/`07`/`0A`/`04` no padrão; no modo 21 `13` (cai para `18 00 FF 00`) e `14`
  *   (cai para `14 FF 00`); no modo 22 `19 02 FF` e `14 FF FF FF`.
  * - Sujeira de protocolo: `STOPPED` repete o comando uma vez; `LV RESET` (queda de tensão na
@@ -263,6 +264,9 @@ class Elm327BluetoothClient(
 
     /** Linha K pós-sessão manual sem re-init: um erro no primeiro comando OBD dispara [reiniciarLinhaK]. */
     @Volatile private var conferirLinhaK = false
+
+    /** Re-init da linha K ainda sem `41 00`: o adaptador fica no `ATST` de busca (sem o curto). */
+    @Volatile private var buscaLinhaKPendente = false
 
     /** Valor do `ATST` configurado no adaptador; null = o padrão (`32`, 200 ms). */
     @Volatile private var timeoutAdaptadorAtivo: String? = null
@@ -964,7 +968,9 @@ class Elm327BluetoothClient(
             // v2.3.4: só com ATRV (ou na queda de tensão da partida) a ECU encerra a sessão da linha K.
             val ultima = ultimaRespostaObdMs
             if (ultima == null || relogioMs() - ultima >= OCIOSIDADE_LINHA_K_MS) {
-                conferirLinhaK = !reiniciarLinhaK(canal, registrar = true)
+                // Uma tentativa por retomada: se falhar, o polling encerra a sessão pela ECU muda.
+                conferirLinhaK = false
+                reiniciarLinhaK(canal, registrar = true)
             } else {
                 conferirLinhaK = true
             }
@@ -977,17 +983,37 @@ class Elm327BluetoothClient(
     }
 
     /**
-     * Reabre a sessão da linha K: `ATPC` fecha o protocolo e o `0100`, com prazo de busca, refaz a
-     * inicialização. Devolve true se a ECU respondeu. Chamado com o [mutexComandos] já tomado.
+     * Reabre a sessão da linha K. Nos clones v2.1 o `ATPC` responde `OK` sem forçar o Fast/Slow Init:
+     * depois do `ATSP0`, o `0100` (com `ATST64` e prazo de busca) refaz o handshake físico
+     * (`SEARCHING...`). O `ATST` anterior só volta depois de um `41 00` válido. Devolve true se a
+     * ECU respondeu. Chamado com o [mutexComandos] já tomado.
      */
     private suspend fun reiniciarLinhaK(canal: ObdTransport, registrar: Boolean): Boolean {
-        registro.evento("Linha K: reinicializando o protocolo (ATPC + $COMANDO_BUSCA)")
+        registro.evento("Linha K: reinicializando o protocolo (ATPC + ATSP0 + $COMANDO_BUSCA)")
+        buscaLinhaKPendente = true
         return try {
             trocar(canal, "ATPC", timeoutComandoMs, registrar)
-            ajustarTimeoutAdaptador(canal, folgado = true, registrar)
-            ObdParser.erroElm(trocar(canal, COMANDO_BUSCA, TIMEOUT_BUSCA_PROTOCOLO_MS, registrar)) == null
+            trocar(canal, "ATSP0", timeoutComandoMs, registrar)
+            definirTimeoutAdaptador(canal, TIMEOUT_ADAPTADOR_BUSCA, registrar)
+            val resposta = trocar(canal, COMANDO_BUSCA, TIMEOUT_BUSCA_PROTOCOLO_MS, registrar)
+            val respondeu = ObdParser.parsePidsSuportados(resposta, 0x00) is RespostaObd.Ok
+            if (respondeu) {
+                buscaLinhaKPendente = false
+                val anterior = if (usaTimeoutCurto) timeoutCurto else TIMEOUT_ADAPTADOR_PADRAO
+                definirTimeoutAdaptador(canal, anterior, registrar)
+            } else {
+                registro.evento("Linha K: a ECU não respondeu ao re-init; mantendo o ATST $TIMEOUT_ADAPTADOR_BUSCA")
+            }
+            respondeu
         } catch (_: ObdTimeoutException) {
             false
+        }
+    }
+
+    /** `ATST` [valor] explícito, acompanhando o que o adaptador aceitou. */
+    private suspend fun definirTimeoutAdaptador(canal: ObdTransport, valor: String, registrar: Boolean) {
+        if ("OK" in trocar(canal, "ATST$valor", timeoutComandoMs, registrar).uppercase()) {
+            timeoutAdaptadorAtivo = valor.takeUnless { it == TIMEOUT_ADAPTADOR_PADRAO }
         }
     }
 
@@ -2056,8 +2082,7 @@ class Elm327BluetoothClient(
             if (multiFrame) blindarPosMultiFrame(canal, registrar)
             if (conferirLinhaK && !comando.startsWith("AT")) {
                 conferirLinhaK = false
-                if (ObdParser.erroElm(resposta) != null) {
-                    reiniciarLinhaK(canal, registrar = true)
+                if (ObdParser.erroElm(resposta) != null && reiniciarLinhaK(canal, registrar = true)) {
                     ajustarTimeoutAdaptador(canal, folgado = timeoutMs > timeoutComandoMs, registrar)
                     resposta = trocar(canal, comando, timeoutMs, registrar)
                 }
@@ -2098,7 +2123,7 @@ class Elm327BluetoothClient(
      * muda; `?` desliga o timeout curto na sessão (fallback silencioso).
      */
     private suspend fun ajustarTimeoutAdaptador(canal: ObdTransport, folgado: Boolean, registrar: Boolean) {
-        if (!usaTimeoutCurto) return
+        if (!usaTimeoutCurto || buscaLinhaKPendente) return
         val alvo = if (folgado) TIMEOUT_ADAPTADOR_PADRAO else timeoutCurto
         if ((timeoutAdaptadorAtivo ?: TIMEOUT_ADAPTADOR_PADRAO) == alvo) return
         val resposta = trocar(canal, "ATST$alvo", timeoutComandoMs, registrar)
@@ -2263,6 +2288,7 @@ class Elm327BluetoothClient(
         fimUltimoComandoNs = 0L
         ultimaRespostaObdMs = null
         conferirLinhaK = false
+        buscaLinhaKPendente = false
         cabecalhoEntradaManual = null
         configuracaoAlteradaManual = false
         _sessaoManual.value = false // libera o polling suspenso, que então encerra
@@ -2397,6 +2423,9 @@ class Elm327BluetoothClient(
 
         /** `ATST19`: 25 × 4,096 ms ≈ 100 ms, a espera curta do modo 01 (e do modo 22). */
         const val TIMEOUT_ADAPTADOR_CAN = "19"
+
+        /** `ATST64`: 100 × 4,096 ms ≈ 410 ms, a espera do re-init da linha K. */
+        const val TIMEOUT_ADAPTADOR_BUSCA = "64"
 
         /** Respostas multi-frame do modo 09 que pedem o reset de protocolo/filtro no CAN. */
         private val COMANDOS_MULTI_FRAME = setOf("0902", "0904", "0906")

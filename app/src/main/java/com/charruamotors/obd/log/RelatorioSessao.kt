@@ -324,7 +324,7 @@ object RelatorioSessaoTxt {
             val i = r.impressao
             val semResposta = "sem resposta (NO DATA)"
             campo("Combustível (0151)", if (i == null) "não sondado" else i.descricaoCombustivel ?: semResposta)
-            campo("CALID (0904)", if (i == null) "não sondado" else i.calid ?: semResposta)
+            campo("CALID (0904)", if (i == null || i.calidNaoSondado) "não sondado" else i.calid ?: semResposta)
             campo(
                 "TCM detectado",
                 when {

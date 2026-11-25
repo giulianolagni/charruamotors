@@ -63,8 +63,10 @@ data class ResultadoDiagnostico(
     val freezeFrame: FreezeFrame?,
     /** Descrição do DTC que disparou o Freeze Frame. */
     val infoFreezeFrame: InfoDtc? = null,
+    /** v2.2.9: falhas do TCM `7E1` (Cruze); null = TCM não lido/sem resposta. Só aparece na lista com códigos. */
+    val cambio: List<DtcExibicao>? = null,
 ) {
-    val total: Int get() = confirmados.size + pendentes.orEmpty().size + permanentes.orEmpty().size
+    val total: Int get() = confirmados.size + pendentes.orEmpty().size + permanentes.orEmpty().size + cambio.orEmpty().size
 
     /** Linhas da lista de falhas: cabeçalho por categoria, seguido dos códigos ou de uma linha "vazio". */
     fun itens(): List<ItemDiagnostico> = buildList {
@@ -73,6 +75,15 @@ data class ResultadoDiagnostico(
                 TipoDtc.CONFIRMADO -> confirmados
                 TipoDtc.PENDENTE -> pendentes
                 TipoDtc.PERMANENTE -> permanentes
+                TipoDtc.CAMBIO -> {
+                    // Separado dos códigos do motor e só quando o TCM tem falhas.
+                    val doCambio = cambio.orEmpty()
+                    if (doCambio.isNotEmpty()) {
+                        add(ItemDiagnostico.Cabecalho(tipo, doCambio.size))
+                        doCambio.forEach { add(ItemDiagnostico.Codigo(it)) }
+                    }
+                    continue
+                }
             }
             add(ItemDiagnostico.Cabecalho(tipo, lista?.size))
             when {

@@ -1,0 +1,22 @@
+{
+  "id": "generico_flex_aspirado",
+  "status": "base",
+  "nome": "Genérico Flex Aspirado",
+  "codigo": "Flex aspirado",
+  "combustivel": "FLEX",
+  "turbo": false,
+  "protocolo": "ATSP0",
+  "descricaoProtocolo": "Automático (OBD2 modo 01)",
+  "cabecalho": "7E0",
+  "servicoExtra": null,
+  "pidsOpcionais": [],
+  "limites": { "aguaMaxC": 105, "tensaoMinV": 13.2 },
+  "observacao": "Fallback por motorização: só faixas conservadoras do OBD2 padrão.",
+  "faixas": [
+    { "parametro": "TEMP_AGUA", "min": 80, "max": 105 },
+    { "parametro": "TENSAO", "min": 13.2, "max": 14.8 },
+    { "parametro": "MAP_TURBO", "min": 20, "max": 105 },
+    { "parametro": "STFT", "min": -10, "max": 10 },
+    { "parametro": "LTFT", "min": -10, "max": 10 }
+  ]
+}

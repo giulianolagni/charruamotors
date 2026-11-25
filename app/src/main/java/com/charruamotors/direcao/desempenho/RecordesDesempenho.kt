@@ -1,9 +1,8 @@
 package com.charruamotors.direcao.desempenho
 
 import android.content.Context
-import kotlinx.coroutines.flow.MutableStateFlow
+import com.charruamotors.carros.GerenciadorPerfisCarro
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 
 /** Melhores tempos (segundos) de um veículo; null = ainda não medido. */
 data class RecordeDesempenho(val melhor060: Double? = null, val melhor0100: Double? = null) {
@@ -20,37 +19,30 @@ data class RecordeDesempenho(val melhor060: Double? = null, val melhor0100: Doub
     private fun menor(a: Double?, b: Double?) = if (a == null) b else if (b == null) a else minOf(a, b)
 }
 
-/** Recordes por veículo (chave = nome curto do veículo ou [CHAVE_PADRAO]), em SharedPreferences. */
-class RecordesDesempenho(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences("desempenho", Context.MODE_PRIVATE)
-    private val _recordes = MutableStateFlow(carregar())
-    val recordes: StateFlow<Map<String, RecordeDesempenho>> = _recordes.asStateFlow()
+/**
+ * Recordes 0–60 / 0–100 por veículo. v2.3.0: ficam no perfil isolado de cada carro
+ * ([GerenciadorPerfisCarro], chave = `veiculoId`); até a v2.2.9 eram por nome curto no arquivo
+ * `desempenho` ([lerLegado], migrado uma vez).
+ */
+class RecordesDesempenho(private val perfis: GerenciadorPerfisCarro) {
 
-    fun recordeDe(chave: String): RecordeDesempenho = _recordes.value[chave] ?: RecordeDesempenho()
+    /** Muda a cada gravação de perfil (as telas recalculam o texto do recorde). */
+    val recordes: StateFlow<Long> get() = perfis.alteracoes
 
-    @Synchronized
-    fun registrar(chave: String, t060: Double?, t0100: Double?) {
-        val atual = recordeDe(chave)
-        val novo = atual.com(t060, t0100)
-        if (novo == atual) return
-        prefs.edit().apply {
-            novo.melhor060?.let { putFloat("$chave|060", it.toFloat()) }
-            novo.melhor0100?.let { putFloat("$chave|0100", it.toFloat()) }
-        }.apply()
-        _recordes.value = _recordes.value + (chave to novo)
-    }
+    fun recordeDe(veiculoId: Long): RecordeDesempenho = if (veiculoId > 0) perfis.ler(veiculoId).recorde else RecordeDesempenho()
 
-    private fun carregar(): Map<String, RecordeDesempenho> {
-        val chaves = prefs.all.keys.mapNotNull { it.substringBeforeLast('|', "").ifEmpty { null } }.toSet()
-        return chaves.associateWith {
-            RecordeDesempenho(
-                melhor060 = prefs.takeIf { p -> p.contains("$it|060") }?.getFloat("$it|060", 0f)?.toDouble(),
-                melhor0100 = prefs.takeIf { p -> p.contains("$it|0100") }?.getFloat("$it|0100", 0f)?.toDouble(),
-            )
-        }
-    }
+    fun registrar(veiculoId: Long, t060: Double?, t0100: Double?) = perfis.registrarRecorde(veiculoId, t060, t0100)
 
     companion object {
-        const val CHAVE_PADRAO = "padrao"
+        private const val ARQUIVO_LEGADO = "desempenho"
+
+        /** Recordes da v2.0–v2.2.9 (`<nome curto>|060`, `<nome curto>|0100`), só para a migração. */
+        fun lerLegado(context: Context): Map<String, RecordeDesempenho> {
+            val prefs = context.applicationContext.getSharedPreferences(ARQUIVO_LEGADO, Context.MODE_PRIVATE)
+            val todos = prefs.all
+            val chaves = todos.keys.mapNotNull { it.substringBeforeLast('|', "").ifEmpty { null } }.toSet()
+            fun tempo(chave: String): Double? = (todos[chave] as? Number)?.toDouble()?.takeIf { it.isFinite() && it > 0 }
+            return chaves.associateWith { RecordeDesempenho(tempo("$it|060"), tempo("$it|0100")) }
+        }
     }
 }

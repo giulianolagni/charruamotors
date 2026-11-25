@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.charruamotors.CharruaMotorsApp
+import com.charruamotors.ui.carros.PerfisCarroUi
 import com.charruamotors.data.repository.AbastecimentoRepository
 import com.charruamotors.data.repository.DiagnosticoRepository
 import com.charruamotors.data.repository.ManutencaoRepository
@@ -27,11 +28,15 @@ import java.time.LocalDate
 
 class DashboardViewModel(
     veiculoRepository: VeiculoRepository,
-    /** Id do favorito salvo (veículo padrão da caixa-preta; 0 = nenhum). */
+    /** Id do carro ativo (v2.3.0: o perfil em uso; também o padrão da caixa-preta). 0 = nenhum. */
     favoritoSalvo: Flow<Long>,
     private val manutencaoRepository: ManutencaoRepository,
     private val abastecimentoRepository: AbastecimentoRepository,
     private val diagnosticoRepository: DiagnosticoRepository,
+    /** v2.3.0: tag do perfil isolado de cada carro (`Modo 21`, `OBD2 Genérico`...). */
+    private val tagDoPerfil: (Veiculo) -> String = { "" },
+    /** Emite quando algum perfil muda (a tag é recalculada). */
+    alteracoesPerfis: Flow<Long> = flowOf(0L),
 ) : ViewModel() {
 
     /**
@@ -52,10 +57,10 @@ class DashboardViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initialValue = null)
 
     /** Cards de Meus Veículos com a estrela no favorito efetivo (o salvo ou, sem ele, o primeiro). */
-    val itens: StateFlow<List<ItemVeiculo>?> = combine(resumos, favoritoSalvo) { lista, favorito ->
+    val itens: StateFlow<List<ItemVeiculo>?> = combine(resumos, favoritoSalvo, alteracoesPerfis) { lista, favorito, _ ->
         lista?.let { r ->
             val ids = r.map { it.veiculo.id }
-            r.map { ItemVeiculo(it, VeiculoFavorito.ehFavorito(it.veiculo.id, ids, favorito)) }
+            r.map { ItemVeiculo(it, VeiculoFavorito.ehFavorito(it.veiculo.id, ids, favorito), tagDoPerfil(it.veiculo)) }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initialValue = null)
 
@@ -79,10 +84,12 @@ class DashboardViewModel(
                 val app = this[APPLICATION_KEY] as CharruaMotorsApp
                 DashboardViewModel(
                     app.veiculoRepository,
-                    app.preferenciasAutoConexao.config.map { it.veiculoId },
+                    app.perfisCarro.veiculoAtivo,
                     app.manutencaoRepository,
                     app.abastecimentoRepository,
                     app.diagnosticoRepository,
+                    tagDoPerfil = { v -> PerfisCarroUi.tag(app, v) },
+                    alteracoesPerfis = app.perfisCarro.alteracoes,
                 )
             }
         }

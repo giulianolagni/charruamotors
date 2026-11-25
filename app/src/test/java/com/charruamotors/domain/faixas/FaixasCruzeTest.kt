@@ -17,10 +17,11 @@ class FaixasCruzeTest {
     @Test
     fun `preset do Cruze 2018 traz as faixas do LE2`() {
         assertEquals(600.0 to 850.0, faixa(ParametroFaixa.RPM_LENTA))
-        assertEquals(null to 6_000.0, faixa(ParametroFaixa.RPM_MAXIMO))
+        // v2.2.9: redline do LE2 em 6.500 rpm e boost de até ~1,6 bar (MAP 260 kPa) no 1.4T.
+        assertEquals(null to 6_500.0, faixa(ParametroFaixa.RPM_MAXIMO))
         assertEquals(85.0 to 108.0, faixa(ParametroFaixa.TEMP_AGUA))
         assertEquals(60.0 to 105.0, faixa(ParametroFaixa.TEMP_ATF))
-        assertEquals(25.0 to 215.0, faixa(ParametroFaixa.MAP_TURBO))
+        assertEquals(25.0 to 260.0, faixa(ParametroFaixa.MAP_TURBO))
         assertEquals(30.0 to 200.0, faixa(ParametroFaixa.RAIL))
         assertEquals(12.6 to 14.8, faixa(ParametroFaixa.TENSAO))
         assertEquals(-10.0 to 10.0, faixa(ParametroFaixa.STFT))
@@ -33,7 +34,7 @@ class FaixasCruzeTest {
     fun `textos da ficha do Cruze`() {
         assertEquals("600 – 850 rpm", cruze.faixas[ParametroFaixa.RPM_LENTA]!!.texto)
         assertEquals("12,6 – 14,8 V", cruze.faixas[ParametroFaixa.TENSAO]!!.texto)
-        assertTrue(cruze.faixas.linhasFicha().contains("Pressão Turbo (MAP): 25 – 215 kPa"))
+        assertTrue(cruze.faixas.linhasFicha().contains("Pressão Turbo (MAP): 25 – 260 kPa"))
     }
 
     @Test

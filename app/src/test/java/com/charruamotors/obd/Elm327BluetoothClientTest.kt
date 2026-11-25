@@ -77,8 +77,8 @@ class Elm327BluetoothClientTest {
         assertEquals(EstadoConexaoObd.Conectado, obd.estado.value)
         assertEquals(
             listOf(
-                "ATZ", "ATE0", "ATL0", "ATS0", "ATH0", "ATSP0", "ATAT2", "0100", "ATDP", "ATRV", "0120", "0140", "01001",
-                "ATST0C", "01001", // timeout curto validado com o próprio bitmask
+                "ATZ", "ATE0", "ATL0", "ATS0", "ATH0", "ATSP0", "ATAT2", "0100", "ATDP", "ATRV", "ATDPN", "0120", "0140", "01001",
+                "ATST19", "01001", // timeout curto validado com o próprio bitmask
             ),
             t.enviados,
         )
@@ -174,7 +174,7 @@ class Elm327BluetoothClientTest {
         t.enviados.clear()
 
         obd.lerDadosEmTempoReal(comandos = null).first()
-        val esperados = obd.pidsSuportados.value.map { if (it.startsWith("AT")) it else it + "1" }.toSet()
+        val esperados = obd.pidsSuportados.value.map { if (it.startsWith("AT") || it == "0142") it else it + "1" }.toSet()
         assertEquals(esperados, t.enviados.toSet())
     }
 

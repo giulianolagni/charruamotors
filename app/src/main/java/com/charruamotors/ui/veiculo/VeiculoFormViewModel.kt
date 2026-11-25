@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.charruamotors.CharruaMotorsApp
+import com.charruamotors.carros.GerenciadorPerfisCarro
+import com.charruamotors.carros.PerfilCarro
 import com.charruamotors.data.repository.AbastecimentoRepository
 import com.charruamotors.data.repository.ManutencaoRepository
 import com.charruamotors.data.repository.VeiculoRepository
@@ -41,6 +43,8 @@ class VeiculoFormViewModel(
     private val manutencaoRepository: ManutencaoRepository,
     private val abastecimentoRepository: AbastecimentoRepository,
     savedStateHandle: SavedStateHandle,
+    /** v2.3.0: perfis isolados (criação do perfil do carro novo, duplicação e exclusão). */
+    private val perfisCarro: GerenciadorPerfisCarro? = null,
 ) : ViewModel() {
 
     /** Id recebido pelo Intent (extras viram argumentos do SavedStateHandle). Null = cadastro novo. */
@@ -48,6 +52,15 @@ class VeiculoFormViewModel(
         savedStateHandle.get<Long>(VeiculoFormActivity.EXTRA_VEICULO_ID)?.takeIf { it > 0 }
 
     val modoEdicao: Boolean = veiculoId != null
+
+    /** v2.3.0: "Duplicar" em Meus Carros — cadastro novo preenchido a partir deste veículo. */
+    private val duplicarDe: Long? =
+        savedStateHandle.get<Long>(VeiculoFormActivity.EXTRA_DUPLICAR_DE)?.takeIf { it > 0 && veiculoId == null }
+
+    val modoDuplicar: Boolean = duplicarDe != null
+
+    /** Veículo de origem da duplicação (para preencher os campos, sem a placa). */
+    suspend fun carregarOrigem(): Veiculo? = duplicarDe?.let { repository.buscarPorId(it) }
 
     private var veiculoAtual: Veiculo? = null
 
@@ -97,12 +110,28 @@ class VeiculoFormViewModel(
                     tensaoMinAlternadorV = ValidadorVeiculo.numero(formulario.limiteTensao) ?: Veiculo.LIMITE_TENSAO_PADRAO_V,
                     calibracaoConsumo = ValidadorVeiculo.numero(formulario.calibracaoConsumo) ?: Veiculo.CALIBRACAO_PADRAO,
                 )
-                repository.salvar(veiculo)
+                val id = repository.salvar(veiculo)
+                if (!modoEdicao) criarPerfil(veiculo.copy(id = id))
                 _eventos.send(EventoFormVeiculo.Salvo(novo = !modoEdicao))
             } finally {
                 _salvando.value = false
             }
         }
+    }
+
+    /**
+     * Perfil isolado do carro recém-cadastrado: cópia do de origem (duplicar) ou o inicial — com perfil
+     * exato no catálogo, o automático; sem ele, OBD2 Genérico.
+     */
+    private fun criarPerfil(veiculo: Veiculo) {
+        val perfis = perfisCarro ?: return
+        val origem = duplicarDe
+        if (origem != null) {
+            perfis.duplicar(origem, veiculo.id)
+            return
+        }
+        val inicial = PerfilCarro.paraCarroNovo(veiculo.id, PerfilCarro(veiculo.id).resolver(veiculo))
+        perfis.criarSeAusente(veiculo.id) { inicial }
     }
 
     private suspend fun kmMinimoDoHistorico(id: Long): Int =
@@ -113,6 +142,8 @@ class VeiculoFormViewModel(
         viewModelScope.launch {
             val veiculo = carregar() ?: return@launch
             repository.excluir(veiculo)
+            // v2.3.0: o perfil isolado (Painel/HUD, Cluster, recordes) vai junto.
+            perfisCarro?.excluir(veiculo.id)
             _eventos.send(EventoFormVeiculo.Excluido)
         }
     }
@@ -130,6 +161,7 @@ class VeiculoFormViewModel(
                     app.manutencaoRepository,
                     app.abastecimentoRepository,
                     createSavedStateHandle(),
+                    app.perfisCarro,
                 )
             }
         }

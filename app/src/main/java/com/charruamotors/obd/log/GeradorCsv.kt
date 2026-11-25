@@ -20,7 +20,7 @@ object GeradorCsv {
 
     const val SEPARADOR = ','
     const val FIM_DE_LINHA = "\r\n"
-    const val BOM = '﻿'
+    const val BOM = '\uFEFF'
 
     private val formatoDataHora: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
     private val formatoNomeArquivo: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")

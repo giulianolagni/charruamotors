@@ -1,8 +1,11 @@
 package com.charruamotors.obd
 
+import com.charruamotors.domain.calculo.AlavancaGmTcm
+import com.charruamotors.domain.calculo.FiltroVelocidadeEspuria
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import com.charruamotors.domain.model.EstadoConexaoObd
+import com.charruamotors.domain.perfis.ImpressaoEcu
 import com.charruamotors.obd.log.EntradaRegistro
 import com.charruamotors.obd.log.RegistroComunicacao
 import com.charruamotors.obd.pid.CatalogoCascata
@@ -61,9 +64,10 @@ import java.io.IOException
  *   prompt) = desligado na sessão. Uma requisição de montadora que volte incompleta com o sufixo
  *   (resposta multi-frame cortada no 1º quadro) é conferida sem ele uma vez e, se for o caso,
  *   segue sem sufixo só ela.
- * - **Timing agressivo**: `ATAT2` logo depois do `ATSP0` e, com a ECU achada, `ATST0C` (espera de
- *   ~49 ms em vez dos 200 ms padrão quando nada responde), validado relendo o primeiro PID que
- *   respondeu — se a ECU emudecer com ele, volta ao `ATST32`. Comandos de prazo longo (DTCs, VIN,
+ * - **Timing agressivo**: `ATAT2` logo depois do `ATSP0` e, com a ECU achada, uma espera curta no
+ *   lugar dos 200 ms padrão: `ATST0C` (~49 ms) só no modo 21 (SW4) e `ATST19` (~100 ms) no resto —
+ *   ECUs GM no CAN devolvem `NO DATA` prematuro com o `0C`. Validada relendo o primeiro PID que
+ *   respondeu — se a ECU emudecer com ela, volta ao `ATST32`. Comandos de prazo longo (DTCs, VIN,
  *   limpeza) trocam para o `ATST32` antes e o polling volta ao `ATST0C` depois (como o `ATSH`, só
  *   quando muda). Clone que responde `?` a qualquer um deles segue no padrão, em silêncio.
  * - **Sem pausa fixa entre comandos**: o prompt `>` já confirma que o adaptador terminou. Só
@@ -71,6 +75,9 @@ import java.io.IOException
  *   respiro, para clones v2.1 de buffer pequeno.
  *
  * Demais garantias:
+ * - **CAN pelo `ATDPN`** (v2.3.1): `6`–`9`/`A6`–`A9` é ISO 15765-4 mesmo com o `ATDP` devolvendo
+ *   `AUTO, `; e depois de uma leitura multi-frame (`0902`/`0904`/`0906`) o protocolo é fixado
+ *   (`ATSP6`...) e voltam o `ATSH` funcional e o `ATCRA` padrão (clones v2.1 travam o filtro).
  * - Um [Mutex] serializa os comandos (o ELM327 atende um comando por vez), permitindo
  *   que o polling de PIDs e a leitura de DTCs coexistam sem misturar respostas.
  * - Estabilidade do v2.1: `ATSH` só quando o cabeçalho realmente muda (o ciclo de polling é
@@ -79,6 +86,9 @@ import java.io.IOException
  *   1 PID lento a cada 3 ciclos.
  * - Perfis de montadora (`pids_estendidos.json`) com cabeçalho CAN físico, ativados só em CAN de
  *   11 bits e se a ECU responder; no modo 21/22, só os do mesmo módulo e serviço da camada ativa.
+ * - Linha K (v2.3.5): ao fim da sessão manual com [OCIOSIDADE_LINHA_K_MS] sem comando OBD (ou erro no
+ *   primeiro comando retomado), `ATPC` + `ATSP0` + `ATST64` + `0100` refazem o handshake físico, sem
+ *   cabeçalho de CAN; o `ATST` curto só volta depois do `41 00`.
  * - Falhas: `03`/`07`/`0A`/`04` no padrão; no modo 21 `13` (cai para `18 00 FF 00`) e `14`
  *   (cai para `14 FF 00`); no modo 22 `19 02 FF` e `14 FF FF FF`.
  * - Sujeira de protocolo: `STOPPED` repete o comando uma vez; `LV RESET` (queda de tensão na
@@ -88,6 +98,10 @@ import java.io.IOException
  *   [estado] a `Erro` e encerram o fluxo de leituras, sem exceções chegando à UI.
  * - [desconectar] pode ser chamado a qualquer momento, inclusive com um comando em andamento ou
  *   durante a conexão: fecha o socket na hora e a leitura interrompida termina sem virar `Erro`.
+ * - Concorrência (v2.2.1): `conectar` reserva o estado com compare-and-set (nunca dois sockets),
+ *   respostas de um canal que já não é o da sessão são descartadas em [trocar] (nada da sessão
+ *   velha vaza para a reconexão) e `RuntimeException` da pilha Bluetooth vira link perdido. Um
+ *   ciclo de polling que falhe por qualquer motivo encerra a sessão em `Erro`, nunca a deixa zumbi.
  *
  * As permissões `BLUETOOTH_CONNECT`/`BLUETOOTH_SCAN` (Android 12+) devem ser pedidas pela UI
  * antes de conectar; se faltarem, a `SecurityException` é convertida em estado `Erro`.
@@ -100,6 +114,7 @@ import java.io.IOException
  * @param catalogoCascata camadas 2 e 3 da cascata (`cascata_conexao.json`); vazio = só OBD2 padrão.
  * @param intervaloEntreComandosMs respiro entre o fim de uma resposta e o próximo comando (0 = nenhum).
  * @param intervaloSeguroMs respiro adotado pelo resto da sessão depois de um timeout/`STOPPED`.
+ * @param relogioMs relógio monotônico da ociosidade da linha K (injetável nos testes).
  */
 @SuppressLint("MissingPermission") // SecurityException é tratada e convertida em EstadoConexaoObd.Erro
 class Elm327BluetoothClient(
@@ -113,6 +128,7 @@ class Elm327BluetoothClient(
     private val catalogoCascata: CatalogoCascata = CatalogoCascata.VAZIO,
     private val intervaloEntreComandosMs: Long = INTERVALO_ENTRE_COMANDOS_MS,
     private val intervaloSeguroMs: Long = INTERVALO_SEGURO_MS,
+    private val relogioMs: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : ObdClient {
 
     private val _estado = MutableStateFlow<EstadoConexaoObd>(EstadoConexaoObd.Desconectado)
@@ -133,7 +149,24 @@ class Elm327BluetoothClient(
     private val mutexCiclo = Mutex()
 
     private val _sessaoManual = MutableStateFlow(false)
+
+    /** Sessões manuais já encerradas (v2.2.6): o polling invalida o `ATRV` em cache quando o número muda. */
+    private val sessoesManuaisEncerradas = java.util.concurrent.atomic.AtomicInteger(0)
     override val sessaoManualAtiva: StateFlow<Boolean> = _sessaoManual.asStateFlow()
+
+    /**
+     * v2.3.0: identificação do adaptador nesta conexão (`ELM327 v2.1`), mantida depois de uma falha
+     * com a ECU (o card mostra "adaptador respondeu, ECU sem resposta"); zera no [desconectar] e no
+     * início de cada [conectar].
+     */
+    @Volatile private var adaptadorDaConexao: String? = null
+
+    /** Servico que a camada 3 deve tentar primeiro (`21`); null = a ordem da marca. Ver [definirServicoPreferido]. */
+    @Volatile private var servicoPreferido: String? = null
+
+    override fun definirServicoPreferido(servico: String?) {
+        servicoPreferido = servico?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }
+    }
 
     /** Cabeçalho do adaptador quando a sessão manual começou (restaurado no fim). */
     @Volatile private var cabecalhoEntradaManual: String? = null
@@ -203,12 +236,65 @@ class Elm327BluetoothClient(
     @Volatile var usaTimingAdaptativoAgressivo: Boolean = false
         private set
 
-    /** Sessão com o `ATST0C` validado: comandos à ECU de prazo normal saem com ele. */
+    /** Sessão com a espera curta validada: comandos à ECU de prazo normal saem com [timeoutCurto]. */
     @Volatile var usaTimeoutCurto: Boolean = false
         private set
 
+    /** Valor do `ATST` curto desta sessão: `19` (modos 01/22) ou `0C` (modo 21). */
+    @Volatile private var timeoutCurto: String = TIMEOUT_ADAPTADOR_CAN
+
+    /** CAN confirmado pelo `ATDPN` no OBD2 padrão (v2.3.1); null fora dele ou fora do CAN. */
+    @Volatile private var protocoloCanAtivo: ProtocoloAtivo? = null
+
+    /** `ATSH` do cabeçalho funcional do protocolo em uso. */
+    private val cabecalhoFuncional: String
+        get() = protocoloCanAtivo?.cabecalhoFuncional ?: cabecalhoLinhaK ?: RequisicaoEstendida.CABECALHO_FUNCIONAL
+
+    /** Cabeçalho padrão do ELM327 na linha K (ISO 9141-2 / KWP2000), pelo protocolo da sessão; null fora dela. */
+    private val cabecalhoLinhaK: String?
+        get() {
+            val d = _infoConexao.value.protocolo?.uppercase() ?: return null
+            return when {
+                "9141" in d -> CABECALHO_ISO9141
+                "14230" in d || "KWP" in d -> CABECALHO_KWP
+                else -> null
+            }
+        }
+
+    /** [relogioMs] da última resposta sem erro a um comando OBD (não AT); null = nenhuma nesta sessão. */
+    @Volatile private var ultimaRespostaObdMs: Long? = null
+
+    /** Linha K pós-sessão manual sem re-init: um erro no primeiro comando OBD dispara [reiniciarLinhaK]. */
+    @Volatile private var conferirLinhaK = false
+
+    /** Re-init da linha K ainda sem `41 00`: o adaptador fica no `ATST` de busca (sem o curto). */
+    @Volatile private var buscaLinhaKPendente = false
+
     /** Valor do `ATST` configurado no adaptador; null = o padrão (`32`, 200 ms). */
     @Volatile private var timeoutAdaptadorAtivo: String? = null
+
+    /**
+     * v2.2.9: Multi-PID em lote (`010C0D0B`) validado no handshake — só no OBD2 padrão sobre CAN
+     * (ISO 15765-4), nunca nos modos 21/22. Os PIDs rápidos do ciclo saem num único comando; ver
+     * [lerChaves] e [registrarFalhaLote].
+     */
+    @Volatile var usaLoteMultiPid: Boolean = false
+        private set
+
+    /** Falhas seguidas de cada comando de lote no polling (ver [registrarFalhaLote]). */
+    private val falhasLote = mutableMapOf<String, Int>()
+
+    /** Última resposta bruta de cada DID de posição do TCM GM (ver [registrarPosicaoTcm]). */
+    private val brutosTcm = mutableMapOf<String, String>()
+
+    /** v2.3.8: descarte do `010D = FF` espúrio no OBD2 padrão (ver [descartarVelocidadeEspuria]). */
+    private val filtroVelocidade = FiltroVelocidadeEspuria()
+
+    /**
+     * No OBD2 padrão, o câmbio `7E1` também sai com `ATCRA 7E9` explícito (v2.2.9: perfil GM/Cruze e a
+     * leitura de falhas do TCM). Nos modos 21/22 o filtro do câmbio já é sempre explícito.
+     */
+    @Volatile private var filtroCambioPadrao = false
 
     /** Respiro atual entre comandos: [intervaloEntreComandosMs], ou [intervaloSeguroMs] depois de um erro. */
     @Volatile private var respiroMs: Long = intervaloEntreComandosMs
@@ -234,11 +320,17 @@ class Elm327BluetoothClient(
     }
 
     override suspend fun conectar(dispositivo: DispositivoObd, marcaVeiculo: String?): Result<Unit> = withContext(dispatcher) {
-        val atual = _estado.value
-        if (atual == EstadoConexaoObd.Conectando || atual == EstadoConexaoObd.Conectado) {
-            return@withContext Result.failure(ObdException("Já existe uma conexão ativa ou em andamento"))
+        // Compare-and-set: dois conectar() simultâneos (tela + Bluetooth do carro) nunca abrem dois sockets.
+        while (true) {
+            val atual = _estado.value
+            if (atual == EstadoConexaoObd.Conectando || atual == EstadoConexaoObd.Conectado) {
+                return@withContext Result.failure(ObdException("Já existe uma conexão ativa ou em andamento"))
+            }
+            if (_estado.compareAndSet(atual, EstadoConexaoObd.Conectando)) break
         }
-        _estado.value = EstadoConexaoObd.Conectando
+        // Nada da sessão anterior (ou de um comando dela que terminou depois do desconectar) vaza para esta.
+        adaptadorDaConexao = null
+        reiniciarEstadoSessao()
         registro.limpar()
         registro.evento("Conectando a ${dispositivo.nome} (${dispositivo.endereco})")
         var canal: ObdTransport? = null
@@ -249,8 +341,15 @@ class Elm327BluetoothClient(
             registro.evento("Socket Bluetooth aberto")
 
             inicializarAdaptador(marcaVeiculo)
-            if (transporte !== canal) return@withContext Result.failure(ObdException("Conexão cancelada"))
-            _estado.value = EstadoConexaoObd.Conectado
+            // desconectar() pode chegar entre o fim da inicialização e aqui: o estado nunca fica
+            // "Conectado" sem canal (a próxima reconexão seria recusada para sempre).
+            val confirmado = transporte === canal &&
+                _estado.compareAndSet(EstadoConexaoObd.Conectando, EstadoConexaoObd.Conectado)
+            if (!confirmado || transporte !== canal) {
+                if (transporte == null) _estado.compareAndSet(EstadoConexaoObd.Conectado, EstadoConexaoObd.Desconectado)
+                canal.fechar()
+                return@withContext Result.failure(ObdException("Conexão cancelada"))
+            }
             Result.success(Unit)
         } catch (e: CancellationException) {
             if (canal == null || transporte === canal) {
@@ -285,8 +384,10 @@ class Elm327BluetoothClient(
             }
             val ciclo = try {
                 cicloForaDaSessaoManual { lerCiclo(comandos) } ?: continue
-            } catch (e: ObdException) {
-                perderConexao(sessao, e.message ?: "Conexão com o scanner perdida")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                perderConexao(sessao, mensagemFalhaCiclo(e))
                 break
             }
             ciclosSemEcu = if (ciclo.semRespostaDaEcu) ciclosSemEcu + 1 else 0
@@ -306,20 +407,36 @@ class Elm327BluetoothClient(
         ciclosPorLento: Int,
     ): Flow<DadosObd> = flow {
         val sessao = transporte ?: return@flow
-        val escalonador = EscalonadorPolling(lentosPorVez, ciclosPorLento, Pids.candidatosFilaRapida(consumoPorMaf), CHAVES_CAMBIO)
+        val rapidos = Pids.candidatosFilaRapida(consumoPorMaf)
+        val escalonador = EscalonadorPolling(lentosPorVez, ciclosPorLento, rapidos, CHAVES_CAMBIO)
+        var geracaoManualVista = sessoesManuaisEncerradas.get()
         var ciclosSemEcu = 0
         while (_estado.value == EstadoConexaoObd.Conectado && transporte === sessao) {
             if (_sessaoManual.value) {
                 _sessaoManual.first { !it }
                 continue
             }
+            val geracao = sessoesManuaisEncerradas.get()
+            if (geracao != geracaoManualVista) {
+                // v2.2.6: a tensão em cache é de antes da sessão manual (ex.: Teste de Bateria com o
+                // motor desligado); o ALTERNADOR BAIXO só é avaliado de novo com um ATRV fresco.
+                // Pelo contador (e não pelo ramo acima): a sessão pode abrir e fechar durante o delay.
+                geracaoManualVista = geracao
+                escalonador.invalidar(Pids.TENSAO_BATERIA)
+            }
             val inicioNs = System.nanoTime()
             // Relido a cada ciclo: um perfil de montadora pode ser ativado com o polling já rodando.
             escalonador.atualizarSuportados(_pidsSuportados.value, ::grupoDe)
+            // Com o lote ativo, o pedal vai junto no mesmo comando (arco PED do HUD fluido); sem ele, volta à fila lenta.
+            escalonador.trocarCandidatosRapidos(if (usaLoteMultiPid) rapidos + Pids.PEDAL_ACELERADOR else rapidos)
             val ciclo = try {
                 cicloForaDaSessaoManual { lerChaves(escalonador.proximoCiclo()) } ?: continue
-            } catch (e: ObdException) {
-                perderConexao(sessao, e.message ?: "Conexão com o scanner perdida")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Qualquer falha encerra a sessão de forma limpa (socket fechado, estado Erro): um
+                // polling morto com o estado ainda "Conectado" deixaria a sessão zumbi, sem reconexão.
+                perderConexao(sessao, mensagemFalhaCiclo(e))
                 break
             }
             ciclosSemEcu = if (ciclo.semRespostaDaEcu) ciclosSemEcu + 1 else 0
@@ -346,15 +463,25 @@ class Elm327BluetoothClient(
                     "o perfil exige CAN de 11 bits (o veículo usa o protocolo ${protocolo ?: "desconhecido"})",
                 )
             }
-            val ativos = buildList {
-                for ((requisicao, definicoes) in perfil.requisicoes) {
-                    val bruto = try {
-                        enviar(requisicao.comando, timeoutComandoMs, requisicao.cabecalho)
-                    } catch (e: ObdTimeoutException) {
-                        continue // módulo ausente (ex.: carro sem câmbio automático)
-                    }
-                    addAll(definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok })
-                }
+            // v2.2.9: no Cruze (perfil GM) o TCM 7E1 é sondado com ATSH 7E1 + ATCRA 7E9 e o cabeçalho volta ao funcional.
+            filtroCambioPadrao = perfil.atende(MARCA_GM)
+            val ativos = try {
+                semAlavancaRedundante(
+                    buildList {
+                        for ((requisicao, definicoes) in perfil.requisicoes) {
+                            val bruto = try {
+                                enviar(requisicao.comando, timeoutComandoMs, requisicao.cabecalho)
+                            } catch (e: ObdTimeoutException) {
+                                continue // módulo ausente (ex.: carro sem câmbio automático)
+                            }
+                            registrarPosicaoTcm(requisicao, bruto)
+                            // A faixa do JSON já descarta leituras implausíveis (ATF GM: −20 a 150 °C).
+                            addAll(definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok })
+                        }
+                    },
+                )
+            } finally {
+                if (filtroCambioPadrao) withContext(NonCancellable) { restaurarCabecalho(null) }
             }
             if (ativos.isEmpty()) {
                 registro.evento("Perfil ${perfil.nome}: nenhuma requisição respondeu")
@@ -382,13 +509,15 @@ class Elm327BluetoothClient(
         }
         return try {
             exigirConectado()
-            val ativos = buildList {
-                for ((requisicao, definicoes) in compativeis) {
-                    val bruto = sondar(requisicao.comando, cabecalhoServico) ?: continue
-                    addAll(definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok })
-                }
-                addAll(sondarCambio(modo, perfil))
-            }
+            val ativos = semAlavancaRedundante(
+                buildList {
+                    for ((requisicao, definicoes) in compativeis) {
+                        val bruto = sondar(requisicao.comando, cabecalhoServico) ?: continue
+                        addAll(definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok })
+                    }
+                    addAll(sondarCambio(modo, perfil))
+                },
+            )
             if (ativos.isEmpty()) {
                 registro.evento("Perfil ${perfil.nome}: nenhuma requisição respondeu no ${modo.nome}")
                 return ResultadoPerfil.Indisponivel(perfil.nome, "a ECU não respondeu aos PIDs do perfil no ${modo.nome}")
@@ -469,6 +598,19 @@ class Elm327BluetoothClient(
         }
     }
 
+    /**
+     * v2.2.6: com a alavanca do câmbio (`7E1 · 21D9`, [CHAVE_ALAVANCA_CAMBIO]) respondendo, o espelho
+     * no motor (`7E0 · 21D9`, [CHAVE_ALAVANCA_ECM]) sai do polling: na SW4 2013 ele devolve sempre P e
+     * só gastaria um comando por volta da fila lenta.
+     */
+    private fun semAlavancaRedundante(ativos: List<DefinicaoPid>): List<DefinicaoPid> {
+        val filtrados = filtrarAlavancaRedundante(ativos)
+        if (filtrados.size != ativos.size) {
+            registro.evento("Alavanca lida no câmbio 7E1: $CHAVE_ALAVANCA_ECM (7E0 · 21D9) fora do polling")
+        }
+        return filtrados
+    }
+
     private fun incluirEstendidos(ativos: List<DefinicaoPid>) {
         definicoesEstendidas = definicoesEstendidas + ativos.associateBy { it.comando }
         _pidsSuportados.value = _pidsSuportados.value + ativos.map { it.comando }
@@ -478,6 +620,49 @@ class Elm327BluetoothClient(
     override suspend fun lerCodigosFalha(): Result<List<DtcLido>> {
         val modo = modoServico ?: return lerDtcs("03", "ler os códigos de falha", ObdParser::parseDtcs)
         return lerDtcsDoModo(modo)
+    }
+
+    /**
+     * v2.2.9: falhas do câmbio no TCM `7E1` (OBD2 padrão em CAN de 11 bits): `ATSH 7E1` + `ATCRA 7E9`,
+     * `03` e, se o TCM não responder a ele, o UDS `19 02 FF`. O cabeçalho funcional (`ATSH 7DF`) e o
+     * `ATCRA` padrão voltam sempre. Nos modos 21/22 (SW4) e fora do CAN 11 bits devolve null sem enviar
+     * nada; TCM mudo também é null (não é erro).
+     */
+    override suspend fun lerCodigosFalhaCambio(): Result<List<DtcLido>?> = withContext(dispatcher) {
+        if (modoServico != null || !protocoloCan11Bits(_infoConexao.value.protocolo)) return@withContext Result.success(null)
+        operacao {
+            exigirConectado()
+            val filtroAntes = filtroCambioPadrao
+            filtroCambioPadrao = true
+            try {
+                lerDtcsTcm()
+            } finally {
+                withContext(NonCancellable) {
+                    restaurarCabecalho(null)
+                    filtroCambioPadrao = filtroAntes
+                }
+            }
+        }
+    }
+
+    private suspend fun lerDtcsTcm(): List<DtcLido>? {
+        val bruto03 = sondar("03", CABECALHO_CAMBIO, TIMEOUT_DTC_MS)
+        val r03 = bruto03?.let { ObdParser.parseDtcs(it, "03") }
+        if (r03 is RespostaObd.Ok) return r03.valor.map { DtcLido(it, DescricaoDtc.descricaoDe(it)) }
+        val brutoUds = sondar(COMANDO_DTC_UDS, CABECALHO_CAMBIO, TIMEOUT_DTC_MS)
+        val rUds = brutoUds?.let { ObdParser.parseDtcsUds(it, COMANDO_DTC_UDS) }
+        if (rUds is RespostaObd.Ok) return rUds.valor.map { DtcLido(it, DescricaoDtc.descricaoDe(it)) }
+        registro.evento(
+            "TCM 7E1 sem falhas legíveis (03: ${bruto03?.let { ObdParser.erroElm(it) ?: RegistroComunicacao.visivel(it) } ?: "sem prompt"}; " +
+                "19 02 FF: ${brutoUds?.let { ObdParser.erroElm(it) ?: RegistroComunicacao.visivel(it) } ?: "sem prompt"})",
+        )
+        return null
+    }
+
+    /** CAN de 11 bits pela descrição do `ATDP` (o TCM `7E1` só existe nele). */
+    private fun protocoloCan11Bits(descricao: String?): Boolean {
+        val d = descricao?.uppercase() ?: return false
+        return ("CAN" in d || "15765" in d) && "29" !in d
     }
 
     override suspend fun lerCodigosPendentes(): Result<List<DtcLido>> {
@@ -528,13 +713,91 @@ class Elm327BluetoothClient(
         }
     }
 
+    /**
+     * Impressão digital da ECU (v2.2.2): `0151` (combustível) e `0904` (CALID; fora no ELM327 v2.1) com o cabeçalho de
+     * diagnóstico e, se pedido e só em CAN, o TCM (`0100` em `ATSH 7E1`, depois `7E2`). Nada aqui derruba a
+     * sessão: `NO DATA`, `7F` e timeout só deixam o campo nulo (só a queda do adaptador propaga, pelo
+     * caminho normal do estado). O cabeçalho/filtro anteriores voltam sempre ao fim da visita ao TCM.
+     * No modo 21/22 (sem OBD2 padrão) não há o que sondar.
+     */
+    override suspend fun sondarEcu(sondarTcm: Boolean): ImpressaoEcu = withContext(dispatcher) {
+        if (_estado.value != EstadoConexaoObd.Conectado || modoServico != null) return@withContext ImpressaoEcu.VAZIA
+        var combustivel: Int? = null
+        var calid: String? = null
+        var tcm: Boolean? = null
+        var tcmCabecalho: String? = null
+        // v2.3.2: no clone v2.1 o `0904` multi-frame trava o firmware ~10 s e derruba o Bluetooth.
+        val calidPulado = adaptadorDaConexao?.contains(VERSAO_SEM_CALID_AUTOMATICO, ignoreCase = true) == true
+        try {
+            combustivel = (ObdParser.parseCombustivelEcu(sondar("0151", cabecalhoDiagnostico).orEmpty()) as? RespostaObd.Ok)?.valor
+            if (!calidPulado) {
+                calid = (ObdParser.parseCalid(sondar("0904", cabecalhoDiagnostico, TIMEOUT_DTC_MS).orEmpty()) as? RespostaObd.Ok)?.valor
+            }
+            // Só no CAN (`ATDPN` 6–9): na linha K um `ATSH 7E1`/`7DF` corromperia o cabeçalho KWP2000.
+            if (sondarTcm && protocoloCanAtivo != null) {
+                tcm = false
+                val anterior = cabecalhoAtivo.takeIf { it != CABECALHO_INDEFINIDO }
+                try {
+                    for (cabecalho in CABECALHOS_TCM) {
+                        val bruto = sondar("0100", cabecalho).orEmpty()
+                        if (ObdParser.parsePidsSuportados(bruto, 0x00, "0100") is RespostaObd.Ok) {
+                            tcm = true
+                            tcmCabecalho = cabecalho
+                            break
+                        }
+                    }
+                } finally {
+                    withContext(NonCancellable) { restaurarCabecalho(anterior) }
+                }
+            }
+        } catch (e: ObdException) {
+            registro.evento("Sondagem da ECU interrompida: ${e.message}")
+        }
+        registro.evento(
+            "Impressão da ECU: combustível 0151=${combustivel?.let { "%02X".format(it) } ?: "sem resposta"}, " +
+                "CALID 0904=${calid ?: if (calidPulado) "não sondado (ELM327 v2.1)" else "sem resposta"}" +
+                (tcm?.let { ", TCM=${if (it) "detectado em $tcmCabecalho" else "não detectado (7E1/7E2)"}" }.orEmpty()),
+        )
+        ImpressaoEcu(combustivel, calid, tcm, tcmCabecalho, calidPulado)
+    }
+
+    /**
+     * Devolve o adaptador ao cabeçalho [alvo] (null = funcional `7DF`) e ao filtro de recepção que
+     * ele pede (`ATCRA` padrão), depois de uma visita a outro módulo. Se o `ATSH` não confirmar, o
+     * cabeçalho fica indefinido e o próximo comando à ECU o reenvia.
+     */
+    private suspend fun restaurarCabecalho(alvo: String?) {
+        mutexComandos.withLock {
+            val canal = transporte ?: return
+            try {
+                if (cabecalhoAtivo != alvo) {
+                    val resposta = try {
+                        trocar(canal, "ATSH" + (alvo ?: cabecalhoFuncional), timeoutComandoMs, true)
+                    } catch (_: ObdTimeoutException) {
+                        ""
+                    }
+                    cabecalhoAtivo = if ("OK" in resposta.uppercase()) alvo else CABECALHO_INDEFINIDO
+                }
+                if (cabecalhoAtivo == alvo) ajustarFiltroRecepcao(canal, alvo, true)
+            } catch (e: IOException) {
+                if (transporte !== canal) throw ObdException("Scanner desconectado", e)
+                perderConexao(canal, "Conexão Bluetooth com o scanner perdida")
+                throw ObdException("Conexão com o scanner perdida", e)
+            }
+        }
+    }
+
     /** Padrão: `04`. Modo 21/22: os comandos de limpeza do catálogo, em ordem, até a ECU confirmar (`54`). */
     override suspend fun limparCodigosFalha(): Result<Unit> = operacao {
         exigirConectado()
         val modo = modoServico
-        val comandos = modo?.dtc?.limpar ?: listOf("04")
+        val comandos = (modo?.dtc?.limpar ?: listOf("04")).toMutableList()
         var ultimo: Pair<RespostaObd<Unit>, String>? = null
-        for (comando in comandos) {
+        var servico = comandos.last().take(2)
+        var i = 0
+        while (i < comandos.size) {
+            val comando = comandos[i++]
+            servico = comando.take(2)
             val bruto = enviar(comando, TIMEOUT_DTC_MS, cabecalhoDiagnostico)
             val r = ObdParser.parseLimpezaDtcs(bruto, comando)
             if (r is RespostaObd.Ok) {
@@ -542,9 +805,17 @@ class Elm327BluetoothClient(
                 return@operacao
             }
             ultimo = r to bruto
+            if (modo != null) {
+                // v2.2.3: `7F 14 11` (serviceNotSupported) → tenta o `04` OBD2 (espera `44`) antes do `14 FF 00` (espera `54`).
+                if (servico == "14" && ObdParser.respostaNegativa(bruto, "14", comando) == "11" && "04" !in comandos) {
+                    comandos.add(i, "04")
+                }
+                comandos.getOrNull(i)?.let { proximo ->
+                    registro.evento("Limpeza $comando recusada na ${modo.nome} (${bruto.trim().replace(Regex("\\s+"), " ")}); tentando $proximo")
+                }
+            }
         }
         val (r, bruto) = ultimo!!
-        val servico = comandos.last().take(2)
         ObdParser.respostaNegativa(bruto, servico)?.let { nrc ->
             throw ObdException(
                 "A ECU recusou a limpeza dos códigos (7F $servico $nrc, ${ObdParser.descricaoNrc(nrc)}). " +
@@ -589,6 +860,7 @@ class Elm327BluetoothClient(
             } catch (e: ObdException) {
                 registro.evento("Falha ao restaurar o adaptador depois da sessão manual: ${e.message}")
             } finally {
+                sessoesManuaisEncerradas.incrementAndGet()
                 _sessaoManual.value = false
             }
         }
@@ -613,6 +885,7 @@ class Elm327BluetoothClient(
                     val resposta = try {
                         trocar(canal, normalizado, timeoutMs, registrar)
                     } catch (e: ObdTimeoutException) {
+                        if (compacto in COMANDOS_MULTI_FRAME) runCatching { blindarPosMultiFrame(canal, registrar) }
                         return@withLock Result.success(RespostaBruta(normalizado, "", latencia(), semPrompt = true))
                     } catch (e: IOException) {
                         if (transporte !== canal) throw ObdException("Scanner desconectado", e)
@@ -621,6 +894,15 @@ class Elm327BluetoothClient(
                     }
                     val duracao = latencia()
                     acompanharComandoManual(compacto, resposta)
+                    if (compacto in COMANDOS_MULTI_FRAME) {
+                        try {
+                            blindarPosMultiFrame(canal, registrar)
+                        } catch (e: IOException) {
+                            if (transporte !== canal) throw ObdException("Scanner desconectado", e)
+                            perderConexao(canal, "Conexão Bluetooth com o scanner perdida")
+                            throw ObdException("Conexão com o scanner perdida", e)
+                        }
+                    }
                     Result.success(RespostaBruta(normalizado, resposta, duracao))
                 }
             } catch (e: ObdException) {
@@ -683,7 +965,7 @@ class Elm327BluetoothClient(
         if (reconfigurar || cabecalhoAtivo != alvo) {
             cabecalhoAtivo = CABECALHO_INDEFINIDO
             val resposta = try {
-                trocar(canal, "ATSH" + (alvo ?: RequisicaoEstendida.CABECALHO_FUNCIONAL), timeoutComandoMs, true)
+                trocar(canal, "ATSH" + (alvo ?: cabecalhoFuncional), timeoutComandoMs, true)
             } catch (_: ObdTimeoutException) {
                 ""
             }
@@ -691,6 +973,17 @@ class Elm327BluetoothClient(
         }
         if (filtroRecepcaoAtivo != filtroRecepcaoPara(alvo)) ajustarFiltroRecepcao(canal, alvo, registrar = true)
         configuracaoAlteradaManual = false
+        if (cabecalhoLinhaK != null) {
+            // v2.3.4: só com ATRV (ou na queda de tensão da partida) a ECU encerra a sessão da linha K.
+            val ultima = ultimaRespostaObdMs
+            if (ultima == null || relogioMs() - ultima >= OCIOSIDADE_LINHA_K_MS) {
+                // Uma tentativa por retomada: se falhar, o polling encerra a sessão pela ECU muda.
+                conferirLinhaK = false
+                reiniciarLinhaK(canal, registrar = true)
+            } else {
+                conferirLinhaK = true
+            }
+        }
         registro.evento(
             "Sessão manual encerrada: polling retomado" +
                 (if (reconfigurar) ", configuração reaplicada" else "") +
@@ -698,9 +991,51 @@ class Elm327BluetoothClient(
         )
     }
 
-    /** Filtro do [cabecalho]: o do catálogo, mais `7E9` explícito para o câmbio `7E1` no modo 21 (o A750F responde nele). */
+    /**
+     * Reabre a sessão da linha K. Nos clones v2.1 o `ATPC` responde `OK` sem forçar o Fast/Slow Init:
+     * depois do `ATSP0`, o `0100` (com `ATST64` e prazo de busca) refaz o handshake físico
+     * (`SEARCHING...`). O `ATST` anterior só volta depois de um `41 00` válido. Devolve true se a
+     * ECU respondeu. Chamado com o [mutexComandos] já tomado.
+     */
+    private suspend fun reiniciarLinhaK(canal: ObdTransport, registrar: Boolean): Boolean {
+        registro.evento("Linha K: reinicializando o protocolo (ATPC + ATSP0 + $COMANDO_BUSCA)")
+        buscaLinhaKPendente = true
+        return try {
+            trocar(canal, "ATPC", timeoutComandoMs, registrar)
+            trocar(canal, "ATSP0", timeoutComandoMs, registrar)
+            definirTimeoutAdaptador(canal, TIMEOUT_ADAPTADOR_BUSCA, registrar)
+            val resposta = trocar(canal, COMANDO_BUSCA, TIMEOUT_BUSCA_PROTOCOLO_MS, registrar)
+            val respondeu = ObdParser.parsePidsSuportados(resposta, 0x00) is RespostaObd.Ok
+            if (respondeu) {
+                buscaLinhaKPendente = false
+                val anterior = if (usaTimeoutCurto) timeoutCurto else TIMEOUT_ADAPTADOR_PADRAO
+                definirTimeoutAdaptador(canal, anterior, registrar)
+            } else {
+                registro.evento("Linha K: a ECU não respondeu ao re-init; mantendo o ATST $TIMEOUT_ADAPTADOR_BUSCA")
+            }
+            respondeu
+        } catch (_: ObdTimeoutException) {
+            false
+        }
+    }
+
+    /** `ATST` [valor] explícito, acompanhando o que o adaptador aceitou. */
+    private suspend fun definirTimeoutAdaptador(canal: ObdTransport, valor: String, registrar: Boolean) {
+        if ("OK" in trocar(canal, "ATST$valor", timeoutComandoMs, registrar).uppercase()) {
+            timeoutAdaptadorAtivo = valor.takeUnless { it == TIMEOUT_ADAPTADOR_PADRAO }
+        }
+    }
+
+    /**
+     * Filtro do [cabecalho]: o do catálogo, mais `7E9` explícito para o câmbio `7E1` no modo 21 (o A750F
+     * responde nele) e, no OBD2 padrão, com o [filtroCambioPadrao] (TCM GM do Cruze, falhas do TCM).
+     */
     private fun filtroRecepcaoPara(cabecalho: String?): String? =
-        if (cabecalho == CABECALHO_CAMBIO && modoServico != null) FILTRO_CAMBIO else RequisicaoEstendida.filtroRecepcao(cabecalho)
+        if (cabecalho == CABECALHO_CAMBIO && (modoServico != null || filtroCambioPadrao)) {
+            FILTRO_CAMBIO
+        } else {
+            RequisicaoEstendida.filtroRecepcao(cabecalho)
+        }
 
     /**
      * Ajusta o `ATCRA` ao [cabecalho] recém-fixado (só se mudar): `ATCRA 7B8` para o ABS/VSC,
@@ -776,6 +1111,7 @@ class Elm327BluetoothClient(
         // socket é justamente o que destrava um comando em andamento.
         withContext(dispatcher + NonCancellable) {
             if (transporte != null) registro.evento("Desconectado pelo usuário")
+            adaptadorDaConexao = null
             fecharRecursos()
             _estado.value = EstadoConexaoObd.Desconectado
         }
@@ -800,6 +1136,9 @@ class Elm327BluetoothClient(
     /** Identificação, configuração e a cascata (camadas 1 → 2 → 3) até a ECU responder. */
     private suspend fun inicializarAdaptador(marcaVeiculo: String?) {
         val adaptador = identificarAdaptador()
+        // v2.3.0: o card já mostra "Adaptador ELM327 conectado (v2.1)" enquanto a ECU ainda não respondeu.
+        adaptadorDaConexao = adaptador
+        _infoConexao.value = InfoConexao(adaptador = adaptador)
 
         // Camada 1: OBD2 padrão com o protocolo automático.
         enviar("ATSP0")
@@ -809,7 +1148,7 @@ class Elm327BluetoothClient(
         val automatica = buscarProtocolo()
         // Sempre, qualquer que seja o 0100: é o que mais ajuda a diagnosticar no carro.
         var protocolo = consultarProtocoloETensao()
-        _infoConexao.value = InfoConexao(protocolo = protocolo)
+        _infoConexao.value = InfoConexao(protocolo = protocolo, adaptador = adaptador)
         val tentativas = mutableListOf(automatica)
         var busca = automatica
 
@@ -910,13 +1249,22 @@ class Elm327BluetoothClient(
     }
 
     /** Modo 01 respondeu: faixas seguintes do bitmask, sufixo de resposta única e PIDs do catálogo. */
-    private suspend fun iniciarObd2Padrao(primeiraFaixa: Set<Int>, protocolo: String?, forcado: String?) {
+    private suspend fun iniciarObd2Padrao(primeiraFaixa: Set<Int>, descricaoAtdp: String?, forcado: String?) {
+        // v2.3.1: o ATDPN confirma o CAN mesmo quando o ATDP de um clone v2.1 devolve só "AUTO, ".
+        val ativo = consultarProtocoloAtivo()
+        protocoloCanAtivo = ativo?.takeIf { it.ehCan }
+        val protocolo = if (ativo != null) ativo.descrever(descricaoAtdp) else descricaoAtdp
+        if (ativo != null && protocolo != descricaoAtdp) {
+            registro.evento("ATDPN ${ativo.numero}: protocolo reconhecido como $protocolo (ATDP: \"${descricaoAtdp.orEmpty()}\")")
+        }
+        _infoConexao.value = InfoConexao(protocolo = protocolo, adaptador = adaptadorDaConexao)
         val suportados = detectarFaixasSeguintes(primeiraFaixa)
         usaSufixoRespostaUnica = testarSufixoRespostaUnica()
-        ativarTimeoutCurto {
+        ativarTimeoutCurto(TIMEOUT_ADAPTADOR_CAN) {
             val comando = COMANDO_BUSCA + if (usaSufixoRespostaUnica) SUFIXO_RESPOSTA_UNICA else ""
             ObdParser.parsePidsSuportados(enviar(comando), 0x00, comando) is RespostaObd.Ok
         }
+        testarLoteMultiPid(suportados, protocolo)
         // Só o que o app sabe interpretar: PIDs do catálogo presentes no bitmask + comandos AT do adaptador.
         val doCatalogo = catalogo.pids.filter { it.ehComandoAt || it.pid in suportados }
         _pidsSuportados.value = doCatalogo.mapTo(linkedSetOf()) { it.comando }
@@ -924,6 +1272,7 @@ class Elm327BluetoothClient(
             protocolo = protocolo,
             protocoloForcado = forcado,
             sensoresResponderam = doCatalogo.count { it.ehModo01 },
+            adaptador = adaptadorDaConexao,
         )
         registro.evento(
             "Conectado em ${InfoConexao.NOME_OBD2_PADRAO}${forcado?.let { " via $it" }.orEmpty()}: " +
@@ -989,9 +1338,16 @@ class Elm327BluetoothClient(
         marca: String?,
         fisico: ProtocoloFisico?,
     ) {
-        val modos = catalogoCascata.modosPara(marca)
+        val modos = catalogoCascata.modosPara(marca, servicoPreferido)
         if (modos.isEmpty()) {
             throw ObdException("$motivo. O catálogo da cascata (${CatalogoCascata.ARQUIVO_PADRAO}) não tem modos alternativos (21/22)")
+        }
+        // ATDP de clone devolvendo só "AUTO, ": o ATDPN dá o nome e evita o ATSH de CAN na linha K.
+        @Suppress("NAME_SHADOWING")
+        val protocolo = if (protocolo?.trim()?.removeSuffix(",") == "AUTO") {
+            consultarProtocoloAtivo()?.descrever(protocolo) ?: protocolo
+        } else {
+            protocolo
         }
         val can11 = fisico?.ehCan11Bits ?: protocoloPareceCan11(protocolo)
         registro.evento(
@@ -1003,7 +1359,7 @@ class Elm327BluetoothClient(
             if (cabecalho != null) fixarCabecalho(cabecalho, adaptador)
             val (ativos, responderam) = sondarModo(modo, cabecalho)
             if (ativos.isNotEmpty()) {
-                otimizarModoServico(ativos.first(), cabecalho)
+                otimizarModoServico(modo, ativos.first(), cabecalho)
                 ativarModoServico(modo, cabecalho, ativos, responderam, protocolo, forcado)
                 return
             }
@@ -1105,6 +1461,7 @@ class Elm327BluetoothClient(
             sensoresResponderam = ativos.size,
             comandosServico = responderam,
             espelhos = ativos,
+            adaptador = adaptadorDaConexao,
         )
         registro.evento(
             "Conectado em ${modo.nome} (${protocolo ?: "protocolo não informado"}" +
@@ -1115,15 +1472,16 @@ class Elm327BluetoothClient(
 
     /**
      * Modo 21/22: sufixo de resposta única testado no [primeiro] PID que respondeu (`210C1`) e o
-     * `ATST0C` validado com a mesma leitura (já com o sufixo, se aceito).
+     * espera curta (`ATST0C` no modo 21, `ATST19` no 22) validada com a mesma leitura (já com o sufixo).
      */
-    private suspend fun otimizarModoServico(primeiro: DefinicaoPid, cabecalho: String?) {
+    private suspend fun otimizarModoServico(modo: ModoServico, primeiro: DefinicaoPid, cabecalho: String?) {
         val requisicao = primeiro.estendida!!
         val comSufixo = requisicao.comando + SUFIXO_RESPOSTA_UNICA
         usaSufixoRespostaUnica = sondar(comSufixo, cabecalho)
             ?.let { ObdParser.parsePid(it, primeiro, comSufixo) is RespostaObd.Ok } == true
         if (!usaSufixoRespostaUnica) registro.evento("$comSufixo sem resposta válida: sufixo de resposta única desligado")
-        ativarTimeoutCurto {
+        val espera = if (modo.tipo == ModoComunicacaoEcu.MODO_21) TIMEOUT_ADAPTADOR_CURTO else TIMEOUT_ADAPTADOR_CAN
+        ativarTimeoutCurto(espera) {
             val comando = if (usaSufixoRespostaUnica) comSufixo else requisicao.comando
             sondar(comando, cabecalho)?.let { ObdParser.parsePid(it, primeiro, comando) is RespostaObd.Ok } == true
         }
@@ -1133,8 +1491,97 @@ class Elm327BluetoothClient(
     private fun descreverOtimizacoes(): String {
         fun simNao(b: Boolean) = if (b) "sim" else "não"
         return "sufixo de resposta única: ${simNao(usaSufixoRespostaUnica)}; " +
-            "ATAT2: ${simNao(usaTimingAdaptativoAgressivo)}; ATST 0C: ${simNao(usaTimeoutCurto)}"
+            "ATAT2: ${simNao(usaTimingAdaptativoAgressivo)}; ATST $timeoutCurto: ${simNao(usaTimeoutCurto)}" +
+            if (modoServico == null) "; Multi-PID em lote: ${simNao(usaLoteMultiPid)}" else ""
     }
+
+    // ---------------------------------------------------------------- Multi-PID em lote (v2.2.9)
+
+    /**
+     * Handshake do lote: só no OBD2 padrão sobre CAN (ISO 15765-4) e com ao menos 2 dos PIDs de
+     * [PIDS_TESTE_LOTE] no bitmask. Um único pedido conservador (`010C0D0B`, resposta de 2 quadros) liga
+     * o lote se vierem **todos** os PIDs pedidos; `?`, `ERROR`, `BUFFER FULL`, `NO DATA`, `7F`, resposta
+     * truncada ou sem prompt deixam o polling em 1 PID por vez, com o motivo no registro.
+     */
+    private suspend fun testarLoteMultiPid(suportados: Set<Int>, protocolo: String?) {
+        usaLoteMultiPid = false
+        falhasLote.clear()
+        if (modoServico != null) return
+        if (!protocoloCan(protocolo)) {
+            registro.evento("Multi-PID em lote desligado: o protocolo (${protocolo ?: "não informado"}) não é CAN ISO 15765-4")
+            return
+        }
+        val doTeste = PIDS_TESTE_LOTE.mapNotNull { catalogo[it] }.filter { it.ehModo01 && it.pid in suportados }
+        // No v2.1 o teste é o 1º lote de quadro único (`010C0D`).
+        val candidatos = if (adaptadorV21()) montarLotes(doTeste).firstOrNull().orEmpty() else doTeste
+        if (candidatos.size < 2) {
+            registro.evento("Multi-PID em lote desligado: a ECU não suporta PIDs rápidos suficientes (${candidatos.size})")
+            return
+        }
+        val comando = ObdParser.comandoLote(candidatos)
+        val bruto = sondar(comando, null)
+        val resultados = bruto?.let { ObdParser.parseLote(it, candidatos, comando) }
+        usaLoteMultiPid = resultados != null && resultados.values.all { it is RespostaObd.Ok }
+        registro.evento(
+            if (usaLoteMultiPid) {
+                "Multi-PID em lote ativo: $comando respondeu com todos os PIDs; os PIDs rápidos do painel saem num só comando"
+            } else {
+                "Multi-PID em lote desligado: $comando → ${motivoFalhaLote(bruto, resultados)}; polling segue 1 PID por vez"
+            },
+        )
+    }
+
+    /** "NO DATA", "?", "BUFFER FULL", "7F 01 12", "resposta truncada" ou "sem prompt (timeout)", para o registro. */
+    private fun motivoFalhaLote(bruto: String?, resultados: Map<DefinicaoPid, RespostaObd<Double>>?): String {
+        if (bruto == null) return "sem prompt (timeout)"
+        ObdParser.erroElm(bruto)?.let { return it }
+        ObdParser.respostaNegativa(bruto, "01")?.let { return "7F 01 $it (${ObdParser.descricaoNrc(it)})" }
+        val faltaram = resultados.orEmpty().filterValues { it !is RespostaObd.Ok }.keys.joinToString { it.comando }
+        return "resposta truncada ou incompleta (sem $faltaram: \"${RegistroComunicacao.visivel(bruto)}\")"
+    }
+
+    /** O protocolo do `ATDP` é CAN (ISO 15765-4, 11 ou 29 bits)? Desconhecido = não (o lote fica desligado). */
+    private fun protocoloCan(descricao: String?): Boolean {
+        val d = descricao?.uppercase() ?: return false
+        return "CAN" in d || "15765" in d
+    }
+
+    /**
+     * Uma falha do lote no polling: na [MAX_FALHAS_LOTE_SEGUIDAS]ª seguida do mesmo comando o lote é
+     * desligado na sessão. Um TIMEOUT ([semPrompt]) desliga na primeira (v2.3.2): no clone v2.1 é o
+     * buffer estourado, e cada nova tentativa custa o prazo inteiro.
+     */
+    private fun registrarFalhaLote(comando: String, motivo: String, semPrompt: Boolean) {
+        val falhas = (falhasLote[comando] ?: 0) + 1
+        falhasLote[comando] = falhas
+        if (!usaLoteMultiPid || (!semPrompt && falhas < MAX_FALHAS_LOTE_SEGUIDAS)) return
+        usaLoteMultiPid = false
+        val quando = if (semPrompt) "no TIMEOUT" else "após $falhas falhas seguidas"
+        registro.evento("Multi-PID em lote desligado $quando ($comando → $motivo); polling volta a 1 PID por vez")
+    }
+
+    /**
+     * Divide os PIDs do modo 01 do ciclo em lotes de até [MAX_PIDS_LOTE] PIDs e
+     * [MAX_BYTES_RESPOSTA_LOTE] bytes (2 quadros CAN, o que o handshake validou). No ELM327 v2.1, só
+     * quadro único ([MAX_BYTES_QUADRO_UNICO]): o multi-frame chega corrompido (`1:0000AAAA...`). Cada
+     * PID entra no primeiro lote em que couber; lote de 1 PID não é lote: vai pela leitura normal.
+     */
+    private fun montarLotes(definicoes: List<DefinicaoPid>): List<List<DefinicaoPid>> {
+        val lotes = mutableListOf<MutableList<DefinicaoPid>>()
+        val maximo = if (adaptadorV21()) MAX_BYTES_QUADRO_UNICO else MAX_BYTES_RESPOSTA_LOTE
+        for (d in definicoes) {
+            val atual = lotes.firstOrNull { it.size < MAX_PIDS_LOTE && ObdParser.bytesRespostaLote(it + d) <= maximo }
+            if (atual != null) {
+                atual += d
+            } else {
+                lotes += mutableListOf(d)
+            }
+        }
+        return lotes.filter { it.size >= 2 }
+    }
+
+    private fun adaptadorV21(): Boolean =
+        adaptadorDaConexao?.contains(VERSAO_SEM_CALID_AUTOMATICO, ignoreCase = true) == true
 
     // ---------------------------------------------------------------- protocolo ELM327
 
@@ -1183,6 +1630,12 @@ class Elm327BluetoothClient(
         } catch (_: ObdTimeoutException) {
         }
         return protocolo
+    }
+
+    private suspend fun consultarProtocoloAtivo(): ProtocoloAtivo? = try {
+        ObdParser.parseProtocoloAtivo(enviar("ATDPN"))
+    } catch (_: ObdTimeoutException) {
+        null
     }
 
     private suspend fun consultarDescricaoProtocolo(): String? = try {
@@ -1235,11 +1688,12 @@ class Elm327BluetoothClient(
     }
 
     /**
-     * Liga o `ATST0C` (o primeiro comando à ECU já sai com ele, por [ajustarTimeoutAdaptador]) e
+     * Liga o `ATST` curto [valor] (o primeiro comando à ECU já sai com ele, por [ajustarTimeoutAdaptador]) e
      * confere com [validar] que a ECU continua respondendo no prazo curto; se não, volta ao
-     * `ATST32` padrão. `?` ao `ATST0C` desliga sem mais nada.
+     * `ATST32` padrão. `?` ao `ATST` curto desliga sem mais nada.
      */
-    private suspend fun ativarTimeoutCurto(validar: suspend () -> Boolean) {
+    private suspend fun ativarTimeoutCurto(valor: String, validar: suspend () -> Boolean) {
+        timeoutCurto = valor
         usaTimeoutCurto = true
         val respondeu = try {
             validar()
@@ -1248,7 +1702,7 @@ class Elm327BluetoothClient(
         }
         if (!usaTimeoutCurto || respondeu) return
         usaTimeoutCurto = false
-        registro.evento("Com ATST $TIMEOUT_ADAPTADOR_CURTO a ECU não respondeu no prazo; voltando ao ATST $TIMEOUT_ADAPTADOR_PADRAO")
+        registro.evento("Com ATST $timeoutCurto a ECU não respondeu no prazo; voltando ao ATST $TIMEOUT_ADAPTADOR_PADRAO")
         if (aceitaComandoAt("ATST$TIMEOUT_ADAPTADOR_PADRAO")) timeoutAdaptadorAtivo = null
     }
 
@@ -1261,7 +1715,12 @@ class Elm327BluetoothClient(
 
     /** Comando efetivamente enviado: PIDs do modo 01 ganham o sufixo `1` quando suportado. */
     private fun comandoDe(definicao: DefinicaoPid): String =
-        if (usaSufixoRespostaUnica && definicao.ehModo01) definicao.comando + SUFIXO_RESPOSTA_UNICA else definicao.comando
+        // v2.3.7: o `0142` vai sem sufixo, senão o ELM327 para na 1ª resposta (a do TCM, com 0 V).
+        if (usaSufixoRespostaUnica && definicao.ehModo01 && definicao.comando != Pids.TENSAO_ECU) {
+            definicao.comando + SUFIXO_RESPOSTA_UNICA
+        } else {
+            definicao.comando
+        }
 
     /** Requisição de montadora com o sufixo `1` (`210C1`), salvo as multi-frame (`21D9`, `21AD`) e as que voltaram incompletas com ele. */
     private fun comandoDe(requisicao: RequisicaoEstendida): String =
@@ -1343,8 +1802,52 @@ class Elm327BluetoothClient(
             if (algum) respostasEcu++ else ObdParser.erroElm(bruto)?.let { ultimoErro = it }
         }
 
-        fun ciclo() = Ciclo(consultados, lidos, pedidosEcu > 0 && respostasEcu == 0, ultimoErro)
+        /**
+         * Lê os PIDs do modo 01 de um [lote] num único comando (`010C0D0B`). Devolve null se todos
+         * vieram; senão, a [FalhaLote] (os que faltaram ficam para a leitura individual do ciclo).
+         */
+        suspend fun lerLote(lote: List<DefinicaoPid>): FalhaLote? {
+            consultados += lote.map { it.comando }
+            pedidosEcu++
+            val comando = ObdParser.comandoLote(lote)
+            val bruto = try {
+                enviar(comando, registrar = false)
+            } catch (e: ObdTimeoutException) {
+                ultimoErro = "TIMEOUT"
+                verificarTimeouts()
+                null
+            }
+            val resultados = bruto?.let { ObdParser.parseLote(it, lote, comando) }
+            resultados?.let { registrarDecodificados(comando, it) }
+            var algum = false
+            resultados?.forEach { (d, r) ->
+                if (r is RespostaObd.Ok) {
+                    lidos[d.comando] = r.valor
+                    algum = true
+                }
+            }
+            if (algum) respostasEcu++ else bruto?.let(ObdParser::erroElm)?.let { ultimoErro = it }
+            if (resultados != null && resultados.values.all { it is RespostaObd.Ok }) return null
+            return FalhaLote(motivoFalhaLote(bruto, resultados), semPrompt = bruto == null)
+        }
+
+        fun ciclo(): Ciclo {
+            descartarVelocidadeEspuria(lidos)
+            return Ciclo(consultados, lidos, pedidosEcu > 0 && respostasEcu == 0, ultimoErro)
+        }
     }
+
+    /** Tira de [lidos] o `010D` de 255 km/h fisicamente impossível. Os modos 21/22 ficam como estão. */
+    private fun descartarVelocidadeEspuria(lidos: MutableMap<String, Double>) {
+        if (modoServico != null) return
+        if (!filtroVelocidade.aceitar(lidos[Pids.VELOCIDADE], lidos[Pids.RPM], relogioMs())) {
+            lidos.remove(Pids.VELOCIDADE)
+            registro.evento("010D = FF (255 km/h) descartado: leitura espúria")
+        }
+    }
+
+    /** Por que um lote falhou; [semPrompt] = TIMEOUT. */
+    private class FalhaLote(val motivo: String, val semPrompt: Boolean)
 
     /**
      * Uma requisição de montadora, decodificada para cada PID do [grupo]. Com o sufixo `1`, uma
@@ -1361,6 +1864,7 @@ class Elm327BluetoothClient(
         val bruto = enviar(comando, timeoutComandoMs, cabecalho, registrar = false)
         val resultados = grupo.associateWith { ObdParser.parsePid(bruto, it, comando) }
         registrarDecodificados(comando, resultados)
+        registrarPosicaoTcm(requisicao, bruto)
         if (comando == requisicao.comando || requisicao in requisicoesConferidas) return bruto to resultados
         val erro = ObdParser.erroElm(bruto)
         val suspeita = (erro == null || erro == "?") &&
@@ -1376,6 +1880,24 @@ class Elm327BluetoothClient(
         requisicoesSemSufixo = requisicoesSemSufixo + requisicao
         registro.evento("$comando voltou incompleto com o sufixo de resposta única; ${requisicao.comando} segue sem ele")
         return puro to semSufixo
+    }
+
+    /**
+     * v2.3.7: resposta bruta dos DIDs de alavanca/marcha do TCM GM (`7E2`) no log, na sondagem e a cada
+     * mudança: é o dado para calibrar [AlavancaGmTcm] no carro. v2.3.8: dos candidatos de alavanca,
+     * só a resposta positiva (`62...`) vai para o log.
+     */
+    private fun registrarPosicaoTcm(requisicao: RequisicaoEstendida, bruto: String) {
+        if (requisicao.cabecalho != CABECALHO_TCM_GM || requisicao.identificador !in AlavancaGmTcm.IDS_REGISTRADOS) return
+        if (requisicao.identificador in AlavancaGmTcm.IDS_SONDA &&
+            !ObdParser.respostaPositiva(bruto, requisicao.comando)
+        ) {
+            return
+        }
+        val visivel = RegistroComunicacao.visivel(bruto)
+        if (brutosTcm.put(requisicao.comando, visivel) != visivel) {
+            registro.evento("TCM $CABECALHO_TCM_GM · ${requisicao.comando}: \"$visivel\"")
+        }
     }
 
     /** Lê uma vez os [comandos] suportados (`null` = todos), do jeito do polling legado. */
@@ -1400,17 +1922,59 @@ class Elm327BluetoothClient(
     private suspend fun lerChaves(chaves: List<String>, estendidas: Map<String, DefinicaoPid> = definicoesEstendidas): Ciclo {
         val coletor = Coletor()
         val lidas = mutableSetOf<RequisicaoEstendida>()
-        for (chave in ordenarPorCabecalho(chaves, estendidas)) {
+        val ordenadas = ordenarPorCabecalho(chaves, estendidas)
+        val lotePorChave = lotesDoCiclo(ordenadas, estendidas)
+        val lotesLidos = mutableSetOf<List<DefinicaoPid>>()
+        for (chave in ordenadas) {
             val definicao = estendidas[chave] ?: catalogo[chave] ?: continue
             val requisicao = definicao.estendida
-            if (requisicao == null) {
+            val lote = lotePorChave[chave]
+            if (lote != null) {
+                if (lotesLidos.add(lote)) lerLoteComFallback(coletor, lote)
+            } else if (requisicao == null) {
                 coletor.lerPadrao(chave, definicao)
             } else if (lidas.add(requisicao)) {
                 coletor.lerEstendido(requisicao, estendidas.values.filter { it.estendida == requisicao })
             }
         }
-        if (cambioAtivo) restaurarCabecalhoServico()
+        if (cambioAtivo) {
+            restaurarCabecalhoServico()
+        } else if (filtroCambioPadrao && modoServico == null && cabecalhoAtivo == CABECALHO_CAMBIO) {
+            // GM/Cruze: ao sair do bloco do TCM 7E1, volta ao funcional (ATSH 7DF) e ao ATCRA padrão.
+            restaurarCabecalho(null)
+        }
         return coletor.ciclo()
+    }
+
+    /**
+     * Lotes do ciclo (v2.2.9): com o [usaLoteMultiPid], os PIDs de [CHAVES_LOTE] do modo 01 (fila
+     * rápida: RPM, MAP, velocidade, MAF e pedal) agrupados por [montarLotes]. Vazio nos modos 21/22.
+     */
+    private fun lotesDoCiclo(chaves: List<String>, estendidas: Map<String, DefinicaoPid>): Map<String, List<DefinicaoPid>> {
+        if (!usaLoteMultiPid || modoServico != null) return emptyMap()
+        // Os do handshake primeiro, na mesma ordem: o 1º lote é o `010C0D0B` já validado.
+        val loteaveis = chaves.filter { it in CHAVES_LOTE && it !in estendidas }
+            .mapNotNull { catalogo[it]?.takeIf { d -> d.ehModo01 } }
+            .sortedBy { d -> PIDS_TESTE_LOTE.indexOf(d.comando).takeIf { it >= 0 } ?: PIDS_TESTE_LOTE.size }
+        return montarLotes(loteaveis).flatMap { lote -> lote.map { it.comando to lote } }.toMap()
+    }
+
+    /**
+     * Um lote no polling; se não vierem todos os PIDs, os que faltaram são lidos 1 a 1 no mesmo ciclo
+     * (o painel não perde a leitura) e a falha conta para o fallback ([registrarFalhaLote]). Se um
+     * lote anterior do mesmo ciclo já desligou o recurso, este vai direto 1 a 1.
+     */
+    private suspend fun lerLoteComFallback(coletor: Coletor, lote: List<DefinicaoPid>) {
+        if (usaLoteMultiPid) {
+            val comando = ObdParser.comandoLote(lote)
+            val falha = coletor.lerLote(lote)
+            if (falha == null) {
+                falhasLote.remove(comando)
+                return
+            }
+            registrarFalhaLote(comando, falha.motivo, falha.semPrompt)
+        }
+        for (d in lote) if (d.comando !in coletor.lidos) coletor.lerPadrao(d.comando, d)
     }
 
     /**
@@ -1540,7 +2104,7 @@ class Elm327BluetoothClient(
         try {
             if (!comando.startsWith("AT")) ajustarTimeoutAdaptador(canal, folgado = timeoutMs > timeoutComandoMs, registrar)
             if (!comando.startsWith("AT") && cabecalho != cabecalhoAtivo) {
-                val atsh = "ATSH" + (cabecalho ?: RequisicaoEstendida.CABECALHO_FUNCIONAL)
+                val atsh = "ATSH" + (cabecalho ?: cabecalhoFuncional)
                 val resposta = trocar(canal, atsh, timeoutComandoMs, registrar)
                 if ("OK" !in resposta.uppercase()) return@withLock resposta
                 cabecalhoAtivo = cabecalho
@@ -1548,7 +2112,13 @@ class Elm327BluetoothClient(
             } else if (!comando.startsWith("AT") && filtroRecepcaoAtivo == FILTRO_INDEFINIDO) {
                 ajustarFiltroRecepcao(canal, cabecalho, registrar) // a volta ao padrão falhou antes: insiste
             }
-            var resposta = trocar(canal, comando, timeoutMs, registrar)
+            val multiFrame = comando in COMANDOS_MULTI_FRAME
+            var resposta = try {
+                trocar(canal, comando, timeoutMs, registrar)
+            } catch (e: ObdTimeoutException) {
+                if (multiFrame) blindarPosMultiFrame(canal, registrar)
+                throw e
+            }
             if (ObdParser.interrompido(resposta)) {
                 registro.evento("$comando interrompido (STOPPED); repetindo")
                 resposta = trocar(canal, comando, timeoutMs, registrar)
@@ -1561,6 +2131,14 @@ class Elm327BluetoothClient(
                 val reconfiguracao = if (usaTimingAdaptativoAgressivo) CONFIGURACAO + TIMING_ADAPTATIVO_AGRESSIVO else CONFIGURACAO
                 for (c in reconfiguracao) runCatching { trocar(canal, c, timeoutComandoMs, true) }
             }
+            if (multiFrame) blindarPosMultiFrame(canal, registrar)
+            if (conferirLinhaK && !comando.startsWith("AT")) {
+                conferirLinhaK = false
+                if (ObdParser.erroElm(resposta) != null && reiniciarLinhaK(canal, registrar = true)) {
+                    ajustarTimeoutAdaptador(canal, folgado = timeoutMs > timeoutComandoMs, registrar)
+                    resposta = trocar(canal, comando, timeoutMs, registrar)
+                }
+            }
             resposta
         } catch (e: IOException) {
             if (transporte !== canal) throw ObdException("Scanner desconectado", e)
@@ -1570,14 +2148,35 @@ class Elm327BluetoothClient(
     }
 
     /**
-     * Com o [usaTimeoutCurto], deixa o `ATST` do adaptador como o comando pede: `ATST0C` no
+     * v2.3.1: clones ELM327 v2.1 podem sair de uma recepção multi-frame ISO-TP (`0902`/`0904`/`0906`)
+     * com o filtro CAN travado. No OBD2 padrão sobre CAN, fixa o protocolo do `ATDPN` e devolve o
+     * `ATSH` funcional e o `ATCRA` padrão. Chamado com o [mutexComandos] já tomado.
+     */
+    private suspend fun blindarPosMultiFrame(canal: ObdTransport, registrar: Boolean) {
+        val can = protocoloCanAtivo ?: return
+        if (modoServico != null) return
+        suspend fun at(comando: String): Boolean = try {
+            "OK" in trocar(canal, comando, timeoutComandoMs, registrar).uppercase()
+        } catch (_: ObdTimeoutException) {
+            false
+        }
+        at(can.comandoFixar)
+        cabecalhoAtivo = if (at("ATSH" + can.cabecalhoFuncional)) null else CABECALHO_INDEFINIDO
+        val filtroAntes = filtroRecepcaoAtivo
+        removerFiltroRecepcao(canal, registrar)
+        // Clone sem ATCRA/ATAR e sem filtro aplicado: não há o que insistir a cada comando.
+        if (filtroAntes == null && filtroRecepcaoAtivo == FILTRO_INDEFINIDO) filtroRecepcaoAtivo = null
+    }
+
+    /**
+     * Com o [usaTimeoutCurto], deixa o `ATST` do adaptador como o comando pede: o [timeoutCurto] no
      * polling e nas sondagens, o padrão `ATST32` nos de prazo longo ([folgado]: DTCs, VIN,
      * limpeza), que podem ter `7F xx 78` (responsePending) antes da resposta. Só envia quando
      * muda; `?` desliga o timeout curto na sessão (fallback silencioso).
      */
     private suspend fun ajustarTimeoutAdaptador(canal: ObdTransport, folgado: Boolean, registrar: Boolean) {
-        if (!usaTimeoutCurto) return
-        val alvo = if (folgado) TIMEOUT_ADAPTADOR_PADRAO else TIMEOUT_ADAPTADOR_CURTO
+        if (!usaTimeoutCurto || buscaLinhaKPendente) return
+        val alvo = if (folgado) TIMEOUT_ADAPTADOR_PADRAO else timeoutCurto
         if ((timeoutAdaptadorAtivo ?: TIMEOUT_ADAPTADOR_PADRAO) == alvo) return
         val resposta = trocar(canal, "ATST$alvo", timeoutComandoMs, registrar)
         if ("OK" in resposta.uppercase()) {
@@ -1596,6 +2195,8 @@ class Elm327BluetoothClient(
         val resposta = try {
             canal.enviarComando(comando, timeoutMs)
         } catch (e: ObdTimeoutException) {
+            // Sessão encerrada enquanto o comando esperava: o timeout não conta para a sessão nova.
+            if (transporte !== canal) throw IOException("Sessão encerrada durante o $comando", e)
             timeoutsSeguidos++
             registro.comando(comando, null, duracao(), "TIMEOUT: ${e.message}")
             ativarRespiroSeguro("timeout no $comando")
@@ -1603,11 +2204,22 @@ class Elm327BluetoothClient(
         } catch (e: IOException) {
             registro.comando(comando, null, duracao(), "LINK PERDIDO: ${e.message}")
             throw e
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: RuntimeException) {
+            // Pilhas Bluetooth de alguns aparelhos lançam NPE/IllegalStateException no socket depois de
+            // uma queda de sinal: é link perdido, tratado como IOException (sessão encerrada, não crash).
+            registro.comando(comando, null, duracao(), "FALHA DO BLUETOOTH: ${e.javaClass.simpleName}: ${e.message}")
+            throw IOException("Falha inesperada do Bluetooth no $comando", e)
         } finally {
             fimUltimoComandoNs = System.nanoTime()
         }
+        // Resposta de um canal que já não é o da sessão (desconectar/reconexão no meio do comando):
+        // descartada, para nenhuma configuração da sessão velha (ATSH, ATST, filtro) cair na nova.
+        if (transporte !== canal) throw IOException("Sessão encerrada durante o $comando")
         timeoutsSeguidos = 0
         val erro = ObdParser.erroElm(resposta)
+        if (erro == null && !comando.startsWith("AT", ignoreCase = true)) ultimaRespostaObdMs = relogioMs()
         if (registrar || erro != null) registro.comando(comando, resposta, duracao()) else registro.comandoSomenteLog(comando, resposta, duracao())
         if (erro == "STOPPED" || erro == "BUFFER FULL") ativarRespiroSeguro("$erro no $comando")
         return resposta
@@ -1652,6 +2264,12 @@ class Elm327BluetoothClient(
         }
     }
 
+    /** Motivo da queda quando um ciclo de polling falha: a mensagem da [ObdException] ou o tipo da falha inesperada. */
+    private fun mensagemFalhaCiclo(e: Exception): String = when (e) {
+        is ObdException -> e.message ?: "Conexão com o scanner perdida"
+        else -> "Falha inesperada no polling (${e.javaClass.simpleName}${e.message?.let { ": $it" }.orEmpty()})"
+    }
+
     private fun mensagemEcuMuda(erro: String?): String =
         "A ECU parou de responder${erro?.let { " ($it)" }.orEmpty()}. A ignição foi desligada?"
 
@@ -1688,8 +2306,17 @@ class Elm327BluetoothClient(
         val canal = transporte
         transporte = null
         canal?.fechar()
+        reiniciarEstadoSessao()
+    }
+
+    /**
+     * Volta todo o estado conhecido do adaptador e da sessão aos padrões. Chamado ao fechar e de
+     * novo no início de cada [conectar]: um comando da sessão anterior que terminou depois do
+     * fechamento não deixa cabeçalho, filtro ou timeout velhos para a próxima.
+     */
+    private fun reiniciarEstadoSessao() {
         _pidsSuportados.value = emptySet()
-        _infoConexao.value = InfoConexao()
+        _infoConexao.value = InfoConexao(adaptador = adaptadorDaConexao)
         definicoesEstendidas = emptyMap()
         cabecalhoAtivo = null
         filtroRecepcaoAtivo = null
@@ -1697,15 +2324,25 @@ class Elm327BluetoothClient(
         modoServico = null
         cabecalhoServico = null
         cambioAtivo = false
+        usaLoteMultiPid = false
+        falhasLote.clear()
+        brutosTcm.clear()
+        filtroVelocidade.reiniciar()
+        filtroCambioPadrao = false
         usaSufixoRespostaUnica = false
         requisicoesSemSufixo = emptySet()
         requisicoesConferidas = emptySet()
         usaTimingAdaptativoAgressivo = false
         usaTimeoutCurto = false
+        timeoutCurto = TIMEOUT_ADAPTADOR_CAN
+        protocoloCanAtivo = null
         timeoutAdaptadorAtivo = null
         respiroMs = intervaloEntreComandosMs
         timeoutsSeguidos = 0
         fimUltimoComandoNs = 0L
+        ultimaRespostaObdMs = null
+        conferirLinhaK = false
+        buscaLinhaKPendente = false
         cabecalhoEntradaManual = null
         configuracaoAlteradaManual = false
         _sessaoManual.value = false // libera o polling suspenso, que então encerra
@@ -1722,7 +2359,19 @@ class Elm327BluetoothClient(
 
         /** Câmbio automático (A750F): cabeçalho `7E1`, resposta em `7E9`. */
         private const val CABECALHO_CAMBIO = "7E1"
+
+        /** TCM (câmbio automático) no padrão ISO 15765-4: `7E1` e, se mudo, `7E2`. */
+        private val CABECALHOS_TCM = listOf("7E1", "7E2")
         private const val FILTRO_CAMBIO = "7E9"
+
+        /** TCM GM do Cruze (6T30/6T35) que informa a alavanca e a marcha. */
+        private const val CABECALHO_TCM_GM = "7E2"
+
+        /** Perfil de montadora que lê o TCM `7E1` com filtro explícito no OBD2 padrão (Cruze). */
+        private const val MARCA_GM = "gm"
+
+        /** Fallback UDS das falhas do TCM: *reportDTCByStatusMask* com todas as máscaras. */
+        private const val COMANDO_DTC_UDS = "1902FF"
 
         /** Filtro de recepção desconhecido (a volta ao padrão falhou): difere de qualquer alvo, então o próximo comando insiste. */
         private const val FILTRO_INDEFINIDO = "?"
@@ -1737,14 +2386,54 @@ class Elm327BluetoothClient(
          */
         private val IDS_CAMBIO_POLLING = setOf("D9")
 
-        /** Sensores do câmbio lidos em cadência leve (ver [EscalonadorPolling]). */
-        private val CHAVES_CAMBIO = setOf("TOYOTA_ALAVANCA", "TOYOTA_ATF_CAMBIO", "TOYOTA_MARCHA")
+        /** Alavanca lida no câmbio (`7E1 · 21D9`) e o espelho redundante no motor (`7E0 · 21D9`). */
+        const val CHAVE_ALAVANCA_CAMBIO = "TOYOTA_ALAVANCA"
+        const val CHAVE_ALAVANCA_ECM = "TOYOTA_ALAVANCA_ECM"
+
+        /** Tira [CHAVE_ALAVANCA_ECM] de [ativos] quando [CHAVE_ALAVANCA_CAMBIO] também respondeu (v2.2.6). */
+        internal fun filtrarAlavancaRedundante(ativos: List<DefinicaoPid>): List<DefinicaoPid> =
+            if (ativos.any { it.comando == CHAVE_ALAVANCA_CAMBIO }) ativos.filter { it.comando != CHAVE_ALAVANCA_ECM } else ativos
+
+        /**
+         * Sensores do câmbio lidos em cadência leve (ver [EscalonadorPolling]): A750F no modo 21 e, desde a
+         * v2.2.9, o ATF do TCM GM (`22 1940` no `7E1`/`7E2`) no OBD2 padrão do Cruze.
+         */
+        private val CHAVES_CAMBIO = setOf("TOYOTA_ALAVANCA", "TOYOTA_ATF_CAMBIO", "TOYOTA_MARCHA", "GM_ATF", "GM_ATF_7E2") +
+            AlavancaGmTcm.CHAVES_TCM
+
+        /** Handshake do lote: RPM + velocidade + MAP (`010C0D0B`, 8 bytes de resposta = 2 quadros CAN). */
+        private val PIDS_TESTE_LOTE = listOf(Pids.RPM, Pids.VELOCIDADE, Pids.PRESSAO_COLETOR)
+
+        /** PIDs do modo 01 lidos em lote quando ele está ativo: os da fila rápida e o pedal (arco PED do HUD). */
+        val CHAVES_LOTE: Set<String> = (Pids.candidatosFilaRapida(consumoPorMaf = true) + Pids.PEDAL_ACELERADOR).toSet()
+
+        /** ISO 15765-4: até 6 PIDs por pedido do modo 01. */
+        const val MAX_PIDS_LOTE = 3
+
+        /** Resposta de até 2 quadros CAN (6 + 7 bytes), como a do pedido de teste do handshake. */
+        const val MAX_BYTES_RESPOSTA_LOTE = 13
+
+        /** Bytes úteis de um quadro único ISO-TP: o limite do lote no ELM327 v2.1. */
+        const val MAX_BYTES_QUADRO_UNICO = 7
+
+        /** Falhas seguidas do lote no polling até voltar a 1 PID por vez. */
+        const val MAX_FALHAS_LOTE_SEGUIDAS = 2
+
+        /** Adaptador em que o `0904` não é sondado na conexão (só no Checkup manual). */
+        const val VERSAO_SEM_CALID_AUTOMATICO = "v2.1"
 
         /** Marcador de "qualquer cabeçalho" (comandos AT) em [ordenarPorCabecalho]. */
         private const val NEUTRO = "*"
 
         /** Cabeçalho desconhecido (restauração falhou): difere de qualquer pedido, então o próximo reenvia o `ATSH`. */
         private const val CABECALHO_INDEFINIDO = "?"
+
+        /** Cabeçalhos padrão do ELM327 na linha K: ISO 9141-2 e ISO 14230-4. */
+        private const val CABECALHO_ISO9141 = "686AF1"
+        private const val CABECALHO_KWP = "C133F1"
+
+        /** Sem comando OBD por este tempo, a sessão da linha K é dada como encerrada pela ECU. */
+        const val OCIOSIDADE_LINHA_K_MS = 4_000L
 
         /** Comandos manuais que reiniciam o adaptador (voltam aos padrões: eco, cabeçalho, timeout). */
         private val COMANDOS_REINICIO = setOf("ATZ", "ATWS", "ATD")
@@ -1790,8 +2479,17 @@ class Elm327BluetoothClient(
         /** Timing adaptativo agressivo do ELM327 (o padrão é `ATAT1`). */
         const val TIMING_ADAPTATIVO_AGRESSIVO = "ATAT2"
 
-        /** `ATST0C`: 12 × 4,096 ms ≈ 49 ms de espera pela ECU. */
+        /** `ATST0C`: 12 × 4,096 ms ≈ 49 ms de espera pela ECU. Só no modo 21 (SW4). */
         const val TIMEOUT_ADAPTADOR_CURTO = "0C"
+
+        /** `ATST19`: 25 × 4,096 ms ≈ 100 ms, a espera curta do modo 01 (e do modo 22). */
+        const val TIMEOUT_ADAPTADOR_CAN = "19"
+
+        /** `ATST64`: 100 × 4,096 ms ≈ 410 ms, a espera do re-init da linha K. */
+        const val TIMEOUT_ADAPTADOR_BUSCA = "64"
+
+        /** Respostas multi-frame do modo 09 que pedem o reset de protocolo/filtro no CAN. */
+        private val COMANDOS_MULTI_FRAME = setOf("0902", "0904", "0906")
 
         /** `ATST32`: o padrão do ELM327, 50 × 4,096 ms ≈ 200 ms. */
         const val TIMEOUT_ADAPTADOR_PADRAO = "32"

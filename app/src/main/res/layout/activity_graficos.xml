@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Oficina: Gráficos em Tempo Real (v2.3.1). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:colorBackground"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorPrimary">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            style="@style/Widget.CharruaMotors.Toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:theme="@style/ThemeOverlay.Material3.Dark.ActionBar"
+            app:navigationContentDescription="@string/voltar"
+            app:navigationIcon="?attr/homeAsUpIndicator"
+            app:subtitleTextColor="@color/branco"
+            app:title="@string/graficos_titulo" />
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <!-- Sempre escuro (fundo automotivo), independente do tema do app. -->
+    <LinearLayout
+        android:id="@+id/conteudo"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#0B0F14"
+        android:orientation="vertical"
+        android:theme="@style/ThemeOverlay.Material3.Dark">
+
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/grupo_janela"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/espaco_pequeno"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_30s"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/graficos_30s" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_60s"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/graficos_60s" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_120s"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/graficos_120s" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        <com.charruamotors.ui.oficina.sensores.GraficoOsciloscopioView
+            android:id="@+id/grafico"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/graficos_titulo" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/espaco_pequeno">
+
+            <TextView
+                android:id="@+id/texto_cursor"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
+                android:textColor="#B0BEC5" />
+
+            <TextView
+                android:id="@+id/legenda1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceLabelLarge"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/legenda2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceLabelLarge"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/legenda3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceLabelLarge"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/legenda4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceLabelLarge"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/espaco_pequeno">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_pausar"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/graficos_pausar" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_zerar"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/graficos_zerar" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_sensores"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/graficos_sensores" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

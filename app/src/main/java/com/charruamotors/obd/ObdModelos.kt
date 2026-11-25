@@ -97,6 +97,9 @@ enum class ModoComunicacaoEcu(val servico: String) {
     MODO_22("22"),
     ;
 
+    /** Na tela de Erros, avisa que os modos 07/0A dependem de OBD2 padrão (só o KWP, Modo 21). */
+    val avisaModos07e0A: Boolean get() = this == MODO_21
+
     companion object {
         /** Serviço do catálogo (`"21"`, `"22"`) → modo; null se o app não souber falar esse serviço. */
         fun doServico(servico: String): ModoComunicacaoEcu? = entries.firstOrNull { it.servico == servico.uppercase() }
@@ -118,9 +121,57 @@ data class InfoConexao(
     val comandosServico: List<String> = emptyList(),
     /** Espelhos ativos nos modos 21/22, já com o comando canônico do sensor (`010C`...) e o rótulo real (`7E0 · 210C`). */
     val espelhos: List<DefinicaoPid> = emptyList(),
+    /**
+     * v2.3.0: o adaptador como ele se identificou no ATZ/ATI (`ELM327 v2.1`), publicado logo
+     * depois da identificação (ainda conectando à ECU); null = ainda não respondeu nesta conexão.
+     */
+    val adaptador: String? = null,
 ) {
     companion object {
         const val NOME_OBD2_PADRAO = "OBD2 Padrão"
+    }
+}
+
+/**
+ * Protocolo ativo informado pelo `ATDPN` (v2.3.1): `A6` = automático que achou o 6. Os números 6 a 9
+ * são o CAN ISO 15765-4, mesmo quando o `ATDP` de um clone v2.1 devolve só `AUTO, `.
+ */
+data class ProtocoloAtivo(val numero: Int, val automatico: Boolean) {
+    val ehCan: Boolean get() = numero in NOMES_CAN
+
+    /** `ATSP6`..`ATSP9`: fixa o protocolo no adaptador. */
+    val comandoFixar: String get() = "ATSP%X".format(numero)
+
+    /** Cabeçalho funcional para o `ATSH`: `7DF` no CAN de 11 bits; `DB33F1` no de 29 bits (7 e 9). */
+    val cabecalhoFuncional: String get() = if (numero == 7 || numero == 9) "DB33F1" else "7DF"
+
+    /**
+     * Descrição para o card e o relatório: a do `ATDP` quando ela já nomeia o protocolo (CAN ou
+     * linha K); senão o nome completo (`AUTO, ISO 15765-4 (CAN 11/500)`). Números sem nome
+     * mapeado ficam com a do `ATDP`.
+     */
+    fun descrever(atdp: String?): String? {
+        val nome = NOMES_CAN[numero] ?: NOMES_LINHA_K[numero] ?: return atdp
+        val d = atdp?.uppercase().orEmpty()
+        val marcas = if (ehCan) MARCAS_CAN else MARCAS_LINHA_K
+        if (marcas.any { it in d }) return atdp
+        return (if (automatico) "AUTO, " else "") + nome
+    }
+
+    private companion object {
+        val NOMES_CAN = mapOf(
+            6 to "ISO 15765-4 (CAN 11/500)",
+            7 to "ISO 15765-4 (CAN 29/500)",
+            8 to "ISO 15765-4 (CAN 11/250)",
+            9 to "ISO 15765-4 (CAN 29/250)",
+        )
+        val NOMES_LINHA_K = mapOf(
+            3 to "ISO 9141-2",
+            4 to "ISO 14230-4 (KWP 5-baud)",
+            5 to "ISO 14230-4 (KWP Fast Init)",
+        )
+        val MARCAS_CAN = listOf("CAN", "15765")
+        val MARCAS_LINHA_K = listOf("9141", "14230", "KWP")
     }
 }
 

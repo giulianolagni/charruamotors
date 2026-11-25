@@ -1,0 +1,24 @@
+{
+  "id": "vw_ea211_tsi",
+  "status": "base",
+  "nome": "VW EA211 TSI (1.0/1.4 GDI Turbo Flex)",
+  "codigo": "EA211 TSI",
+  "combustivel": "FLEX",
+  "turbo": true,
+  "protocolo": "ATSP6",
+  "descricaoProtocolo": "ISO 15765-4 CAN 11 bits / 500 kbps (UDS ISO 14229)",
+  "cabecalho": "7E0",
+  "servicoExtra": "22",
+  "pidsOpcionais": ["VW_TEMP_OLEO", "VW_TURBO_REAL", "VW_TURBO_ALVO"],
+  "limites": { "aguaMaxC": 105, "tensaoMinV": 12.6 },
+  "observacao": "Perfil base (sem validação em carro): faixas típicas de um GDI Turbo Flex.",
+  "faixas": [
+    { "parametro": "RPM_MAXIMO", "min": null, "max": 6000 },
+    { "parametro": "TEMP_AGUA", "min": 85, "max": 105 },
+    { "parametro": "TENSAO", "min": 12.6, "max": 14.8 },
+    { "parametro": "RAIL", "min": 30, "max": 200 },
+    { "parametro": "MAP_TURBO", "min": 25, "max": 220 },
+    { "parametro": "STFT", "min": -10, "max": 10 },
+    { "parametro": "LTFT", "min": -10, "max": 10 }
+  ]
+}

@@ -1,5 +1,9 @@
 package com.charruamotors.obd.log
 
+import com.charruamotors.domain.faixas.FaixasVeiculo
+import com.charruamotors.domain.perfis.ImpressaoEcu
+import com.charruamotors.domain.perfis.OrigemPerfil
+import com.charruamotors.domain.perfis.VinDecodificado
 import com.charruamotors.obd.InfoConexao
 import com.charruamotors.obd.ValoresSensores
 import com.charruamotors.obd.pid.DefinicaoPid
@@ -41,6 +45,12 @@ class GravadorLogsSessao(
     private val intervaloFlushMs: Long = INTERVALO_FLUSH_MS,
     private val amostrasPorFlush: Int = AMOSTRAS_POR_FLUSH,
     private val limitePendentes: Int = LIMITE_PENDENTES,
+    /**
+     * v2.2.5: log bruto detalhado (desligado por padrão). Ligado, o `.txt` leva cada troca com o
+     * instante de envio/resposta, o comando exato, a resposta inteira, os bytes em hexadecimal e o
+     * tempo. Desligado, só os eventos da sessão, o handshake e os comandos que falharam (para o diagnóstico).
+     */
+    private val logBruto: Boolean = false,
 ) {
     val nomeBase: String = RelatorioSessaoTxt.nomeBase(cabecalho.inicioMs, cabecalho.veiculoArquivo, zona, cabecalho.simulado)
 
@@ -67,7 +77,14 @@ class GravadorLogsSessao(
     private var tensaoInicial: Double? = null
     private var conexao: InfoConexao? = null
     private var dtcs: DtcsSessao? = null
+    private var vin: String? = null
+    private var vinDecodificado: VinDecodificado? = null
+    private var sugestaoPerfil: String? = null
+    private var impressao: ImpressaoEcu? = null
+    private var origemPerfil: OrigemPerfil = OrigemPerfil.MANUAL
+    private var perfilAutomatico: String? = null
     private var finalizado = false
+    private val alertas = mutableListOf<String>()
 
     /** Amostras já gravadas no CSV (as da fila ainda não contam). */
     val amostrasGravadas: Int get() = synchronized(trava) { amostrasCsv }
@@ -80,9 +97,13 @@ class GravadorLogsSessao(
     /** Uma troca/evento do registro de comunicação do cliente (todas, sem o limite do buffer). */
     fun registrarEntrada(entrada: EntradaRegistro): Unit = synchronized(trava) {
         if (finalizado) return@synchronized
+        // Sem o log bruto, só entram eventos, comandos que falharam (timeout, link perdido) e o handshake
+        // (antes de conectar), que é o que diagnostica uma conexão que não fechou.
+        if (!logBruto && conexao != null && entrada is EntradaRegistro.Comando && entrada.falha == null) return@synchronized
         val saida = bruto ?: return@synchronized
         try {
-            saida.append(RegistroComunicacao.formatarLinha(entrada, hora)).append('\n')
+            val linha = if (logBruto) RegistroComunicacao.formatarLinhaBruta(entrada, hora) else RegistroComunicacao.formatarLinha(entrada, hora)
+            saida.append(linha).append('\n')
             entradasBrutas++
         } catch (e: IOException) {
             bruto = null // disco cheio/sem acesso: o relatório avisa
@@ -90,13 +111,36 @@ class GravadorLogsSessao(
     }
 
     /** Evento da própria sessão (aguardando ECU, tentativas, encerramento...). */
-    fun evento(texto: String, instanteMs: Long): Unit = registrarEntrada(EntradaRegistro.Evento(instanteMs, "Sessão: $texto"))
+    fun evento(texto: String, instanteMs: Long) {
+        if (texto.startsWith(PREFIXO_ALERTA)) synchronized(trava) { if (!finalizado) alertas += texto.removePrefix(PREFIXO_ALERTA) }
+        registrarEntrada(EntradaRegistro.Evento(instanteMs, "Sessão: $texto"))
+    }
 
     // ------------------------------------------------------------------ conexão, DTCs e telemetria
 
     fun conexaoEstabelecida(info: InfoConexao): Unit = synchronized(trava) { conexao = info }
 
     fun registrarDtcs(dtcs: DtcsSessao): Unit = synchronized(trava) { this.dtcs = dtcs }
+
+    /** VIN lido (`0902`), o que o WMI/10º caractere revelam e a sugestão de perfil, para o cabeçalho do relatório. */
+    fun registrarVin(vin: String?, decodificado: VinDecodificado?, sugestao: String?): Unit = synchronized(trava) {
+        this.vin = vin
+        this.vinDecodificado = decodificado
+        this.sugestaoPerfil = sugestao
+    }
+
+    /** Impressão digital da ECU (`0151`, `0904`, TCM) para o cabeçalho do relatório. */
+    fun registrarImpressao(impressao: ImpressaoEcu): Unit = synchronized(trava) { this.impressao = impressao }
+
+    /**
+     * Perfil escolhido automaticamente ([origem] ≠ Manual) e as faixas dele, que passam a ser as do
+     * resumo da viagem; [origem] = Manual com [descricao] null desfaz (o usuário ignorou o aviso).
+     */
+    fun registrarPerfil(origem: OrigemPerfil, descricao: String?, faixas: FaixasVeiculo?): Unit = synchronized(trava) {
+        origemPerfil = origem
+        perfilAutomatico = descricao
+        estatisticas.trocarFaixas(faixas)
+    }
 
     /**
      * Abre o CSV com as [colunas] definitivas da sessão e grava a fila acumulada até aqui.
@@ -224,6 +268,15 @@ class GravadorLogsSessao(
             arquivoCsv = nomeCsv,
             amostrasCsv = amostrasCsv,
             avisoCsv = avisoCsv,
+            vin = vin,
+            vinDecodificado = vinDecodificado,
+            sugestaoPerfil = sugestaoPerfil,
+            impressao = impressao,
+            origemPerfil = origemPerfil,
+            perfilAutomatico = perfilAutomatico,
+            colunas = colunas,
+            alertas = alertas.toList(),
+            logBruto = logBruto,
         )
         var txt: ArquivoLogAberto? = null
         try {
@@ -233,7 +286,7 @@ class GravadorLogsSessao(
             RelatorioSessaoTxt.escreverResumo(resumo, w, zona)
             when {
                 !brutoOk || arquivoBruto == null -> w.append("(log bruto indisponível: não foi possível gravar o arquivo temporário)\n")
-                entradasBrutas == 0 -> w.append("(nenhuma troca registrada)\n")
+                entradasBrutas == 0 -> w.append(if (logBruto) "(nenhuma troca registrada)\n" else "(nenhum evento registrado)\n")
                 else -> arquivoBruto.bufferedReader(Charsets.UTF_8).use { it.copyTo(w) }
             }
             w.append('\n').append("— fim do relatório (${entradasBrutas} linhas de log) —\n")
@@ -248,6 +301,9 @@ class GravadorLogsSessao(
     }
 
     companion object {
+        /** Os alertas de proteção entram na sessão como evento `ALERTA ...` (ver `CharruaMotorsApp.centralAlertas`). */
+        const val PREFIXO_ALERTA = "ALERTA "
+
         /** Sincronização periódica do CSV (no máximo ~10 s de trajeto em risco numa queda brusca). */
         const val INTERVALO_FLUSH_MS = 10_000L
 

@@ -241,7 +241,6 @@ class TesteAtuadoresViewModel(
             fake?.simularMotor(ligado = true)
             cliente.encerrarSessaoManual()
         }
-        super.onCleared()
     }
 
     companion object {

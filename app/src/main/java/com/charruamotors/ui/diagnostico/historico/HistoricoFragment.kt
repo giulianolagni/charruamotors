@@ -13,6 +13,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.databinding.FragmentHistoricoBinding
+import com.charruamotors.obd.aprendizado.ResultadoExclusao
 import com.charruamotors.obd.log.DestinoLogs
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.diagnostico.abastecimentos.AbastecimentosFragment
@@ -22,6 +23,7 @@ import com.charruamotors.ui.oficina.replay.ReplayLogActivity
 import com.charruamotors.ui.util.ArquivoExportado
 import com.charruamotors.ui.util.ExportadorCsv
 import com.charruamotors.ui.util.definirTexto
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 
@@ -36,8 +38,8 @@ class HistoricoFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val viewModel: HistoricoViewModel by viewModels { HistoricoViewModel.Factory }
-    private val adapterLogs = ReplayLogActivity.ArquivoAdapter(aoAbrir = ::abrir, aoCompartilhar = ::compartilhar)
-    private val adapterViagens = ReplayLogActivity.ArquivoAdapter(aoAbrir = ::abrir, aoCompartilhar = ::compartilhar)
+    private val adapterLogs = ReplayLogActivity.ArquivoAdapter(aoAbrir = ::abrir, aoCompartilhar = ::acoesDoArquivo)
+    private val adapterViagens = ReplayLogActivity.ArquivoAdapter(aoAbrir = ::abrir, aoCompartilhar = ::acoesDoArquivo)
     private val adapterLeituras = LeituraObdAdapter()
 
     private val app: CharruaMotorsApp get() = requireActivity().application as CharruaMotorsApp
@@ -59,6 +61,8 @@ class HistoricoFragment : Fragment() {
             listaViagens.adapter = adapterViagens
             listaLeituras.adapter = adapterLeituras
             botaoAbrirVisualizador.setOnClickListener { startActivity(ReplayLogActivity.intent(requireContext())) }
+            botaoLimparLogs.setOnClickListener { limparLogs() }
+            botaoLimparViagens.setOnClickListener { limparLogs() }
             grupoHistorico.addOnButtonCheckedListener { _, id, marcado -> if (marcado) mostrarSecao(id) }
             val inicial = savedInstanceState?.getInt(ESTADO_SECAO) ?: R.id.botao_historico_abastecimentos
             grupoHistorico.check(inicial)
@@ -109,6 +113,53 @@ class HistoricoFragment : Fragment() {
     }
 
     private fun abrir(arquivo: ArquivoLogCsv) = startActivity(ReplayLogActivity.intent(requireContext(), arquivo))
+
+    /** Toque longo: compartilhar ou apagar o arquivo. */
+    private fun acoesDoArquivo(arquivo: ArquivoLogCsv) {
+        val opcoes = arrayOf(getString(R.string.historico_acao_compartilhar), getString(R.string.historico_acao_apagar))
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(arquivo.nome)
+            .setItems(opcoes) { _, qual -> if (qual == 0) compartilhar(arquivo) else confirmarApagar(arquivo) }
+            .show()
+    }
+
+    private fun confirmarApagar(arquivo: ArquivoLogCsv) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.historico_apagar_titulo)
+            .setMessage(getString(R.string.historico_apagar_mensagem, arquivo.nome))
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.historico_limpar_confirmar) { _, _ -> viewModel.apagar(arquivo, ::avisarExclusao) }
+            .show()
+    }
+
+    /** "Limpar logs": escolhe entre os do veículo atual e todos, com confirmação antes de apagar. */
+    private fun limparLogs() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val (doVeiculo, todos) = viewModel.contagensParaLimpar()
+            if (todos == 0) {
+                Snackbar.make(binding.root, R.string.historico_limpar_vazio, Snackbar.LENGTH_SHORT).show()
+                return@launch
+            }
+            var escolhido = 0
+            val opcoes = arrayOf(getString(R.string.historico_limpar_veiculo, doVeiculo), getString(R.string.historico_limpar_todos, todos))
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.historico_limpar_titulo)
+                .setSingleChoiceItems(opcoes, escolhido) { _, qual -> escolhido = qual }
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.historico_limpar_confirmar) { _, _ -> viewModel.limpar(todos = escolhido == 1, ::avisarExclusao) }
+                .show()
+        }
+    }
+
+    private fun avisarExclusao(r: ResultadoExclusao) {
+        val b = _binding ?: return
+        val texto = if (r.falhas.isEmpty()) {
+            getString(R.string.historico_apagado_ok, r.apagados.size)
+        } else {
+            getString(R.string.historico_apagado_falhas, r.apagados.size, r.falhas.size)
+        }
+        Snackbar.make(b.root, texto, Snackbar.LENGTH_LONG).show()
+    }
 
     private fun compartilhar(arquivo: ArquivoLogCsv) {
         val mime = if (arquivo.texto) DestinoLogs.MIME_TXT else DestinoLogs.MIME_CSV

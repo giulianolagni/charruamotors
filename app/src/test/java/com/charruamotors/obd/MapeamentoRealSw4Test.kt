@@ -1,5 +1,6 @@
 package com.charruamotors.obd
 
+import com.charruamotors.domain.calculo.AlavancaGmTcm
 import com.charruamotors.direcao.painel.SensorPainel
 import com.charruamotors.obd.pid.CatalogoTeste
 import com.charruamotors.obd.pid.RequisicaoEstendida
@@ -89,7 +90,7 @@ class MapeamentoRealSw4Test {
         // No Painel o 0xFF aparece como "Parado", não como valor inválido.
         assertEquals("Parado", SensorPainel.MARCHA_ATUAL.texto(255.0, conversor))
         assertEquals("3ª", SensorPainel.MARCHA_ATUAL.texto(3.0, conversor))
-        assertEquals(marcha.rotulos, SensorPainel.MARCHA_ATUAL.rotulos)
+        assertEquals(marcha.rotulos, SensorPainel.MARCHA_ATUAL.rotulos - AlavancaGmTcm.ROTULOS.keys)
     }
 
     // ---------------------------------------------------------------- 7E0 · 21AD: 4 bicos injetores

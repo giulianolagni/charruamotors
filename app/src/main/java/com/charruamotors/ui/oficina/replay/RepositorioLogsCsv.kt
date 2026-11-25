@@ -116,6 +116,17 @@ class RepositorioLogsCsv(context: Context) {
         }
     }
 
+    /** Apaga o arquivo (MediaStore ou pasta do app). false = não foi possível (sem permissão, já removido). */
+    fun apagar(arquivo: ArquivoLogCsv): Boolean = try {
+        if (arquivo.uri.scheme == "file") {
+            arquivo.uri.path?.let { File(it).delete() } ?: false
+        } else {
+            contexto.contentResolver.delete(arquivo.uri, null, null) > 0
+        }
+    } catch (_: Exception) {
+        false // SecurityException (arquivo de outra instalação) ou provedor indisponível
+    }
+
     /** URI que outro app pode ler (os `file://` das pastas do app passam pelo FileProvider). */
     fun uriCompartilhavel(arquivo: ArquivoLogCsv): Uri {
         val caminho = arquivo.uri.path

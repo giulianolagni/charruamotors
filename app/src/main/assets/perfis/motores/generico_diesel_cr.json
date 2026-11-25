@@ -1,0 +1,21 @@
+{
+  "id": "generico_diesel_cr",
+  "status": "base",
+  "nome": "Genérico Diesel Common Rail",
+  "codigo": "Diesel CR",
+  "combustivel": "DIESEL",
+  "turbo": true,
+  "protocolo": "ATSP0",
+  "descricaoProtocolo": "Automático (OBD2 modo 01)",
+  "cabecalho": "7E0",
+  "servicoExtra": null,
+  "pidsOpcionais": [],
+  "limites": { "aguaMaxC": 100, "tensaoMinV": 13.2 },
+  "observacao": "Fallback por motorização: só faixas conservadoras do OBD2 padrão (sem correções de combustível de ciclo Otto).",
+  "faixas": [
+    { "parametro": "TEMP_AGUA", "min": 75, "max": 100 },
+    { "parametro": "TENSAO", "min": 13.2, "max": 14.8 },
+    { "parametro": "RAIL", "min": 200, "max": 2500 },
+    { "parametro": "MAP_TURBO", "min": 60, "max": 280 }
+  ]
+}

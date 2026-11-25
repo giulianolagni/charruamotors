@@ -8,15 +8,17 @@ import com.charruamotors.databinding.ConteudoConfigHudBinding
 import com.charruamotors.direcao.painel.ConfigHud
 import com.charruamotors.direcao.painel.EstiloHud
 import com.charruamotors.direcao.painel.HistoricoSensores
+import com.charruamotors.direcao.painel.PresetHud
 import com.charruamotors.direcao.painel.SensorPainel
 import com.charruamotors.direcao.painel.TamanhoHud
+import com.charruamotors.direcao.painel.TamanhoHudEsportivo
 import com.charruamotors.ui.componentes.ArrasteReordenavel
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 
 /**
- * Liga os controles de [ConteudoConfigHudBinding] (tamanho, sensores fixados, a ordem deles por
- * arraste e o estilo) a uma [ConfigHud]: usado no diálogo de ativação do HUD e na tela Personalizar
+ * Liga os controles de [ConteudoConfigHudBinding] (visual Padrão/Esportivo, tamanho, sensores fixados,
+ * a ordem deles por arraste e o estilo) a uma [ConfigHud]: usado no diálogo de ativação do HUD e na tela Personalizar
  * Painel. Cada mudança chama [aoMudar] com a nova configuração (quem chama decide se salva na hora
  * ou ao confirmar).
  */
@@ -43,10 +45,24 @@ class EditorConfigHud(
             moverVisual = adapterOrdem::moverVisual,
             aoSoltar = { de, para -> atualizar(config.moverSensor(de, para)) },
         )
+        binding.grupoPresetHud.addOnButtonCheckedListener { _, id, marcado ->
+            if (!marcado) return@addOnButtonCheckedListener
+            val preset = if (id == R.id.botao_hud_preset_esportivo) PresetHud.ESPORTIVO else PresetHud.PADRAO
+            if (preset != config.preset) atualizar(config.copy(preset = preset))
+        }
         binding.grupoTamanhoHud.addOnButtonCheckedListener { _, id, marcado ->
             if (!marcado) return@addOnButtonCheckedListener
             val tamanho = if (id == R.id.botao_hud_minimizado) TamanhoHud.MINIMIZADO else TamanhoHud.EXPANDIDO
             if (tamanho != config.tamanho) atualizar(config.copy(tamanho = tamanho))
+        }
+        binding.grupoTamanhoEsportivoHud.addOnButtonCheckedListener { _, id, marcado ->
+            if (!marcado) return@addOnButtonCheckedListener
+            val tamanho = when (id) {
+                R.id.botao_hud_esportivo_p -> TamanhoHudEsportivo.PEQUENO
+                R.id.botao_hud_esportivo_g -> TamanhoHudEsportivo.GRANDE
+                else -> TamanhoHudEsportivo.MEDIO
+            }
+            if (tamanho != config.tamanhoEsportivo) atualizar(config.copy(tamanhoEsportivo = tamanho))
         }
         binding.grupoEstiloHud.addOnButtonCheckedListener { _, id, marcado ->
             if (!marcado) return@addOnButtonCheckedListener
@@ -98,6 +114,18 @@ class EditorConfigHud(
     /** Recarrega os controles (ex.: "Restaurar padrão"). */
     fun mostrar(nova: ConfigHud) {
         config = nova
+        val preset = if (nova.preset == PresetHud.ESPORTIVO) R.id.botao_hud_preset_esportivo else R.id.botao_hud_preset_padrao
+        if (binding.grupoPresetHud.checkedButtonId != preset) binding.grupoPresetHud.check(preset)
+        // O Esportivo só tem o tamanho P/M/G: sensores, estilo e Minimizado/Expandido só valem no Padrão.
+        binding.textoPresetHud.isVisible = nova.preset == PresetHud.ESPORTIVO
+        binding.opcoesEsportivoHud.isVisible = nova.preset == PresetHud.ESPORTIVO
+        val tamanhoEsp = when (nova.tamanhoEsportivo) {
+            TamanhoHudEsportivo.PEQUENO -> R.id.botao_hud_esportivo_p
+            TamanhoHudEsportivo.MEDIO -> R.id.botao_hud_esportivo_m
+            TamanhoHudEsportivo.GRANDE -> R.id.botao_hud_esportivo_g
+        }
+        if (binding.grupoTamanhoEsportivoHud.checkedButtonId != tamanhoEsp) binding.grupoTamanhoEsportivoHud.check(tamanhoEsp)
+        binding.opcoesPadraoHud.isVisible = nova.preset == PresetHud.PADRAO
         val tamanho = if (nova.tamanho == TamanhoHud.MINIMIZADO) R.id.botao_hud_minimizado else R.id.botao_hud_expandido
         if (binding.grupoTamanhoHud.checkedButtonId != tamanho) binding.grupoTamanhoHud.check(tamanho)
         val estilo = when (nova.estilo) {

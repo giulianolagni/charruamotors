@@ -30,6 +30,7 @@ Disciplina: Desenvolvimento Mobile II. Professor: Jaqson.
 - [Veículo favorito, navegação limpa e Painel livre (v1.5)](#veículo-favorito-navegação-limpa-e-painel-livre-v15)
 - [GitHub Releases, atualizador e sensores da SW4 (v1.5)](#github-releases-atualizador-e-sensores-da-sw4-v15)
 - [Modo Flex, faixas esperadas, Cruze 1.4T e Teste de Atuadores (v2.1)](#modo-flex-faixas-esperadas-cruze-14t-e-teste-de-atuadores-v21)
+- [Perfis isolados por veículo, status ELM × ECU e Backup (v2.3)](#perfis-isolados-por-veículo-status-elm--ecu-e-backup-v23)
 - [Regras de negócio e cálculos](#regras-de-negócio-e-cálculos)
 - [Arquitetura e stack](#arquitetura-e-stack)
 - [Como executar](#como-executar)
@@ -153,6 +154,11 @@ O modo é escolhido na própria aba OBD2. O padrão inicial fica em `CharruaMoto
 - O `ObdViewModel` mantém a conexão durante a rotação de tela.
 - O socket é fechado em `onCleared()`, quando a tela é encerrada de vez.
 - O estado da conexão é exposto como `StateFlow<EstadoConexaoObd>`: `Desconectado`, `Conectando`, `Conectado` ou `Erro(mensagem)`.
+- Robustez (v2.2.1): `conectar` reserva o estado com compare-and-set (nunca dois sockets), resposta de um
+  comando da sessão já encerrada é descartada (nada vaza para a reconexão), comando cancelado no meio deixa o
+  canal marcado para ressincronizar e exceções não documentadas da pilha Bluetooth viram link perdido (`Erro`),
+  nunca um polling morto com o estado ainda "Conectado". Streams e socket RFCOMM são sempre fechados, e a
+  reconexão ao mesmo adaptador respeita uma pausa curta para a pilha liberar o canal.
 
 ---
 
@@ -498,6 +504,43 @@ para demonstrar os NRCs em sala de aula; a chave *Simular motor ligado* mostra a
 
 ---
 
+## Perfis isolados por veículo, status ELM × ECU e Backup (v2.3)
+
+**Cada carro é um perfil independente** (`carros/`: `PerfilCarro`, `GerenciadorPerfisCarro`, `CodecPerfilCarro`). Tudo o
+que era global fica sob o `veiculoId`, no escopo `carro.<id>.` do arquivo `perfis_carro`: sensores, ordem e layout do
+**Painel** (blocos, mostradores, lista rápida), as bolinhas do **Cluster horizontal**, o preset e o tamanho do **HUD
+flutuante** (Padrão/Esportivo, P/M/G), o **perfil técnico** (perfil de faixas do catálogo, câmbio, camada preferida
+`AUTO`/`OBD2`/`MODO_21` e o Bluetooth do carro), favoritos de gráficos e os **recordes 0–60/0–100**. A calibração do
+consumo continua no próprio veículo (Room). A `PreferenciasPainel` do app sempre lê/grava o escopo do **carro ativo**:
+mudar o Painel ou o HUD no Cruze nunca chega à SW4. Na primeira abertura da v2.3.0, a **migração única**
+(`MigracaoPerfisCarro`) leva o Painel/HUD, o Cluster, o Bluetooth do carro e os recordes globais para o veículo padrão
+(o favorito; sem ele, a SW4; sem ela, o primeiro), sem apagar os arquivos antigos.
+
+**Troca rápida de carro.** O topo da tela principal mostra o carro e a tag do perfil (`Toyota SW4 2013` ·
+`Modo 21 · ABC-1D23`, `Cruze · CAN OBD2`, `OBD2 Genérico`); o toque abre o seletor e **Meus Carros**, onde cada card tem
+*Selecionar*, *Editar cadastro*, *Perfil técnico…*, *Duplicar* (copia Painel/HUD/Cluster/perfil técnico, sem recordes
+nem Bluetooth) e *Sessão de Mapeamento*. O Bluetooth do carro de cada perfil também escolhe o veículo da sessão
+automática.
+
+**Carro novo sem perfil no catálogo** (3º em diante): nasce limpo no **OBD2 Genérico** — a marca não vai para a cascata
+21/22 nem para os PIDs estendidos, sem câmbio nem estimador de marcha herdados da SW4/Cruze. Desde a v2.3.6 nenhum
+diálogo abre no cadastro nem na conexão: ela segue direto para a telemetria e o log da sessão. A **Sessão de
+Mapeamento (Log Bruto)** fica em *Meus Carros*, e o **Checkup** só abre pelo card da aba **Oficina**.
+
+**Status separado `ELM` × `ECU`** (`sistema/StatusElmEcu.kt`). O card de conexão mostra o **Adaptador ELM327**
+(Desconectado / Conectando / Conectado, com a versão do `ATZ`, ex. `v2.1`) e a **ECU do veículo** (Aguardando /
+Conectado com a camada ativa / Sem resposta). Conectado, um bloco compacto traz **Protocolo**, **VIN**, **CALID** e
+**TCM** (se detectado ou do perfil).
+
+**Unidades e Cópia de segurança.** Em Configurações: pressão `bar`/`psi`/`kPa` e consumo `km/L`/`L/100km` (Painel,
+computador de bordo, HUD, Meus Carros, abastecimentos; o relatório `.txt` mostra as duas). A **Cópia de segurança
+(Backup)** usa o Storage Access Framework: *Exportar* gera o `.json` versionado (formato 2) com todos os carros, os
+perfis isolados, históricos, configurações globais e recordes; *Importar* valida o esquema (arquivo inválido vira só
+uma mensagem) e pede confirmação entre **Mesclar** (só acrescenta os carros com placa nova, renumerando os IDs) e
+**Substituir tudo**. Backups do formato 1 continuam aceitos (o Painel global vai para o carro padrão do arquivo).
+
+---
+
 ## Regras de negócio e cálculos
 
 Validações e cálculos ficam na camada de domínio (`domain/`), sem dependência do Android, e são cobertos por testes unitários. A UI apenas exibe os resultados.
@@ -585,7 +628,12 @@ O emulador não tem Bluetooth, então lá use o modo simulado.
 ./gradlew assembleDebug          # gera o APK de debug
 ./gradlew test                   # roda os testes unitários
 ./gradlew connectedAndroidTest   # testes instrumentados (exige emulador/aparelho)
+./gradlew lintDebug              # Android Lint
+./gradlew bundleRelease          # App Bundle (.aab) da Play Store, com R8
 ```
+
+O build de release roda o **R8** (`isMinifyEnabled` + `isShrinkResources`, regras em `app/proguard-rules.pro`);
+o `mapping.txt` para desofuscar stack traces no Play Console fica em `app/build/outputs/mapping/release/`.
 
 No Windows (cmd ou PowerShell), use `gradlew.bat` no lugar de `./gradlew`.
 

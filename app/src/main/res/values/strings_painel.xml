@@ -15,6 +15,7 @@
 
     <!-- Personalizar Painel -->
     <string name="personalizar_titulo">Personalizar Painel</string>
+    <string name="personalizar_subtitulo_carro">Só deste carro: %1$s</string>
     <string name="personalizar_ordem">Blocos do Painel</string>
     <string name="personalizar_ordem_dica">Arraste pela alça (≡) para mudar a ordem. O olho cortado tira o bloco da tela.</string>
     <string name="personalizar_arrastar">Arrastar para reordenar</string>
@@ -43,6 +44,13 @@
     <!-- HUD: tela de ativação -->
     <string name="hud_config_titulo">Modo HUD sobre o Waze</string>
     <string name="hud_config_ativar">Ativar HUD</string>
+    <string name="hud_config_visual">Visual do HUD</string>
+    <string name="hud_config_preset_padrao">Padrão (Atual)</string>
+    <string name="hud_config_preset_esportivo">Esportivo (Conta-giros)</string>
+    <string name="hud_config_esportivo_dica">Conta-giros com marcha e velocidade GPS (KPH), turbo em bar e o pedal (PED) no arco azul. Dois toques no HUD alternam entre os visuais.</string>
+    <string name="hud_config_esportivo_p">P (pequeno)</string>
+    <string name="hud_config_esportivo_m">M (médio)</string>
+    <string name="hud_config_esportivo_g">G (grande)</string>
     <string name="hud_config_tamanho">Tamanho</string>
     <string name="hud_config_minimizado">Minimizado</string>
     <string name="hud_config_expandido">Expandido</string>
@@ -75,15 +83,28 @@
 
     <!-- Diagnóstico de Erros -->
     <string name="falhas_titulo">Diagnóstico de Erros</string>
+    <string name="falhas_nota_modo21">Modo 21 (KWP): os modos 07 (pendentes) e 0A (permanentes) dependem de OBD2 padrão e podem não responder neste carro.</string>
     <string name="falhas_descricao">Lê os códigos da injeção (modos 03, 07 e 0A) e o quadro congelado (modo 02). Apagar (modo 04) desliga a luz da injeção.</string>
 
     <!-- Aba Histórico -->
     <string name="historico_abastecimentos">Abastecimentos</string>
     <string name="historico_logs">Logs</string>
     <string name="historico_viagens">Viagens</string>
+    <string name="historico_limpar_logs">Limpar logs</string>
+    <string name="historico_limpar_titulo">Limpar logs</string>
+    <string name="historico_limpar_veiculo">Só deste veículo (%1$d arquivos)</string>
+    <string name="historico_limpar_todos">Todos os logs salvos (%1$d arquivos)</string>
+    <string name="historico_limpar_vazio">Não há logs para apagar.</string>
+    <string name="historico_limpar_confirmar">Apagar</string>
+    <string name="historico_acao_compartilhar">Compartilhar</string>
+    <string name="historico_acao_apagar">Apagar</string>
+    <string name="historico_apagar_titulo">Apagar este log?</string>
+    <string name="historico_apagar_mensagem">%1$s será apagado do aparelho e deixa de alimentar o aprendizado do Modo Simulado.</string>
+    <string name="historico_apagado_ok">%1$d arquivo(s) apagado(s)</string>
+    <string name="historico_apagado_falhas">%1$d apagado(s); %2$d não puderam ser apagados</string>
     <string name="historico_logs_titulo">Logs salvos</string>
     <string name="historico_logs_titulo_qtd">Logs salvos (%1$d)</string>
-    <string name="historico_logs_dica">CSV do Data Logger e da caixa-preta em Downloads/CharruaOBD. Toque para o replay no gráfico; toque longo para compartilhar.</string>
+    <string name="historico_logs_dica">CSV do Data Logger e da caixa-preta em Downloads/CharruaOBD. Toque para o replay no gráfico; toque longo para compartilhar ou apagar. O Modo Simulado não grava logs.</string>
     <string name="historico_logs_vazio">Nenhum log CSV salvo ainda. Grave pelo Painel (Gravar Log CSV) ou ative os logs automáticos da caixa-preta.</string>
     <string name="historico_abrir_visualizador">Visualizador</string>
     <string name="historico_viagens_titulo">Diário de viagens</string>

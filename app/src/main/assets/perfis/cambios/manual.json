@@ -1,0 +1,14 @@
+{
+  "id": "manual",
+  "status": "validado",
+  "nome": "Manual (sem TCM)",
+  "tipo": "manual",
+  "cabecalhos": [],
+  "servico": null,
+  "pidsAtf": [],
+  "mapaAlavanca": null,
+  "limiteAtfC": 105,
+  "observacao": "Sem módulo de câmbio: nenhum 7E1/7E2 é sondado e a marcha não é estimada.",
+  "faixas": [],
+  "relacoes": []
+}

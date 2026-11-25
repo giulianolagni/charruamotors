@@ -16,7 +16,7 @@ enum class TipoAlertaProtecao(val texto: String) {
 data class AlertaProtecao(val tipo: TipoAlertaProtecao, val valor: Double, val limite: Double)
 
 /**
- * Limites editáveis no cadastro do veículo. A tensão só vale com o motor girando acima de
+ * Limites editáveis no cadastro do veículo. A tensão só vale com o motor girando a partir de
  * [rpmMinimoTensao]: com o motor desligado ou em partida a bateria fica abaixo de 13 V normalmente.
  */
 data class LimitesProtecao(
@@ -26,7 +26,8 @@ data class LimitesProtecao(
     val rpmMinimoTensao: Double = RPM_MINIMO_TENSAO,
 ) {
     companion object {
-        const val RPM_MINIMO_TENSAO = 600.0
+        /** v2.2.6: `RPM ≥ 400` (antes `> 600`), o mesmo critério de motor ligado das faixas esperadas. */
+        const val RPM_MINIMO_TENSAO = 400.0
 
         fun deVeiculo(v: Veiculo?): LimitesProtecao =
             if (v == null) LimitesProtecao() else LimitesProtecao(v.tempMaxAguaC.toDouble(), v.tempMaxAtfC.toDouble(), v.tensaoMinAlternadorV)
@@ -51,7 +52,7 @@ object AlertasProtecao {
                 ?.let { add(AlertaProtecao(TipoAlertaProtecao.ATF, it, limites.atfMaxC)) }
             val rpm = dados[Pids.RPM]
             val tensao = dados[Pids.TENSAO_BATERIA]
-            if (rpm != null && rpm > limites.rpmMinimoTensao && tensao != null && tensao.isFinite() && tensao < limites.tensaoMinV) {
+            if (rpm != null && rpm.isFinite() && rpm >= limites.rpmMinimoTensao && tensao != null && tensao.isFinite() && tensao < limites.tensaoMinV) {
                 add(AlertaProtecao(TipoAlertaProtecao.TENSAO, tensao, limites.tensaoMinV))
             }
         }

@@ -30,6 +30,8 @@ data class ValorExibicao(val valor: Double, val unidade: String, val casas: Int)
 data class ConversorUnidades(
     val sistema: SistemaUnidades = SistemaUnidades.PADRAO,
     private val pressaoMetrica: UnidadePressao = UnidadePressao.PADRAO,
+    /** v2.3.0: km/L ou L/100km no métrico; no imperial o consumo é sempre MPG. */
+    private val consumoMetrico: UnidadeConsumo = UnidadeConsumo.PADRAO,
 ) {
     /** Unidade efetiva das pressões (Turbo/MAP, combustível, barométrica). */
     val pressao: UnidadePressao get() = if (sistema == SistemaUnidades.IMPERIAL) UnidadePressao.PSI else pressaoMetrica
@@ -47,9 +49,18 @@ data class ConversorUnidades(
     fun pressao(kpa: Double): Double = pressao.deKpa(kpa)
     val simboloPressao: String get() = pressao.simbolo
 
-    /** km/L → MPG (galão americano): 1 km/L = 2,352 MPG. */
-    fun consumo(kmPorLitro: Double): Double = if (imperial) kmPorLitro * LITROS_POR_GALAO / KM_POR_MILHA else kmPorLitro
-    val simboloConsumo: String get() = if (imperial) MPG else KM_L
+    /** Unidade efetiva do consumo no métrico (no imperial, MPG). */
+    val unidadeConsumo: UnidadeConsumo get() = consumoMetrico
+
+    /**
+     * km/L → MPG (galão americano: 1 km/L = 2,352 MPG) no imperial; no métrico, km/L ou L/100km
+     * (v2.3.0; 0 km/L em L/100km = NaN, sem leitura).
+     */
+    fun consumo(kmPorLitro: Double): Double = when {
+        imperial -> kmPorLitro * LITROS_POR_GALAO / KM_POR_MILHA
+        else -> consumoMetrico.deKmPorLitro(kmPorLitro)
+    }
+    val simboloConsumo: String get() = if (imperial) MPG else consumoMetrico.simbolo
 
     fun distancia(km: Double): Double = if (imperial) km / KM_POR_MILHA else km
     val simboloDistancia: String get() = if (imperial) MILHAS else KM

@@ -57,6 +57,7 @@ class DiagnosticoErrosActivity : AppCompatActivity(), FerramentaManualObd {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { viewModel.estado.collect { atualizarBotoes() } }
                 launch { viewModel.ocupado.collect { atualizarBotoes() } }
+                launch { app.sessaoObd.infoConexao.collect { binding.textoFalhasModo21.isVisible = it.modo.avisaModos07e0A } }
                 launch { viewModel.diagnostico.collect(::mostrarDiagnostico) }
                 launch { app.preferenciasApp.config.collect { mostrarDiagnostico(viewModel.diagnostico.value) } }
                 launch {

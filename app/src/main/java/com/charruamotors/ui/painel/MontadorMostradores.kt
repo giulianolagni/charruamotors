@@ -7,6 +7,7 @@ import com.charruamotors.direcao.painel.EstiloMostrador
 import com.charruamotors.direcao.painel.GradeMostradores
 import com.charruamotors.direcao.painel.Mostrador
 import com.charruamotors.direcao.painel.SensorPainel
+import com.charruamotors.domain.perfis.PerfilCambio
 import com.charruamotors.sistema.unidades.ConversorUnidades
 import com.charruamotors.ui.componentes.GaugeView
 
@@ -17,7 +18,12 @@ import com.charruamotors.ui.componentes.GaugeView
 object MontadorMostradores {
 
     /** Recria as linhas e devolve os [GaugeView]s na ordem dos [mostradores]. */
-    fun montar(container: LinearLayout, mostradores: List<Mostrador>, conversor: ConversorUnidades): List<GaugeView> {
+    fun montar(
+        container: LinearLayout,
+        mostradores: List<Mostrador>,
+        conversor: ConversorUnidades,
+        cambio: PerfilCambio? = null,
+    ): List<GaugeView> {
         container.removeAllViews()
         val contexto = container.context
         val espaco = contexto.resources.getDimensionPixelSize(R.dimen.espaco_minimo)
@@ -35,7 +41,7 @@ object MontadorMostradores {
                     val lateral = if (m.estilo == EstiloMostrador.FITA) espacoFita else espaco
                     setPadding(lateral, espaco, lateral, espaco)
                 }
-                configurarGauge(gauge, m.sensor, m.estilo, conversor)
+                configurarGauge(gauge, m.sensor, m.estilo, conversor, cambio)
                 fileira.addView(gauge, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                 gauges[i] = gauge
             }
@@ -49,8 +55,14 @@ object MontadorMostradores {
     }
 
     /** Título, unidade, escala, casas e estilo do [sensor] num mostrador. */
-    fun configurarGauge(gauge: GaugeView, sensor: SensorPainel, estilo: EstiloMostrador, conversor: ConversorUnidades) {
-        gauge.titulo = sensor.titulo
+    fun configurarGauge(
+        gauge: GaugeView,
+        sensor: SensorPainel,
+        estilo: EstiloMostrador,
+        conversor: ConversorUnidades,
+        cambio: PerfilCambio? = null,
+    ) {
+        gauge.titulo = sensor.tituloPara(cambio)
         gauge.unidade = sensor.unidade(conversor)
         gauge.escala = sensor.escala(conversor)
         gauge.casasDecimais = sensor.exibir(0.0, conversor).casas

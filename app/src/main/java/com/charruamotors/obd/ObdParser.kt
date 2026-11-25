@@ -133,6 +133,13 @@ object ObdParser {
             .map(::compactar)
             .firstNotNullOfOrNull { Regex("^A?([0-9A-C])$").matchEntire(it)?.groupValues?.get(1)?.toInt(16) }
 
+    /** `ATDPN` com a marca de automático (`A6`): o protocolo em uso, para reconhecer e fixar o CAN. */
+    fun parseProtocoloAtivo(bruto: String, comando: String? = "ATDPN"): ProtocoloAtivo? =
+        linhasLimpas(bruto, comando)
+            .map(::compactar)
+            .firstNotNullOfOrNull { Regex("^(A?)([0-9A-C])$").matchEntire(it) }
+            ?.let { ProtocoloAtivo(it.groupValues[2].toInt(16), automatico = it.groupValues[1].isNotEmpty()) }
+
     /** Protocolos CAN de 11 bits, os únicos em que o app usa cabeçalhos físicos (`ATSH 7E0`). */
     val PROTOCOLOS_CAN_11_BITS: Set<Int> = setOf(6, 8)
 

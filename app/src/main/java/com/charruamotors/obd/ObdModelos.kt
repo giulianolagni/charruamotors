@@ -133,6 +133,40 @@ data class InfoConexao(
 }
 
 /**
+ * Protocolo ativo informado pelo `ATDPN` (v2.3.1): `A6` = automático que achou o 6. Os números 6 a 9
+ * são o CAN ISO 15765-4, mesmo quando o `ATDP` de um clone v2.1 devolve só `AUTO, `.
+ */
+data class ProtocoloAtivo(val numero: Int, val automatico: Boolean) {
+    val ehCan: Boolean get() = numero in NOMES_CAN
+
+    /** `ATSP6`..`ATSP9`: fixa o protocolo no adaptador. */
+    val comandoFixar: String get() = "ATSP%X".format(numero)
+
+    /** Cabeçalho funcional para o `ATSH`: `7DF` no CAN de 11 bits; `DB33F1` no de 29 bits (7 e 9). */
+    val cabecalhoFuncional: String get() = if (numero == 7 || numero == 9) "DB33F1" else "7DF"
+
+    /**
+     * Descrição para o card e o relatório: a do `ATDP` quando ela já nomeia o CAN (ou o protocolo
+     * não é CAN); senão o nome completo (`AUTO, ISO 15765-4 (CAN 11/500)`).
+     */
+    fun descrever(atdp: String?): String? {
+        val nome = NOMES_CAN[numero] ?: return atdp
+        val d = atdp?.uppercase().orEmpty()
+        if ("CAN" in d || "15765" in d) return atdp
+        return (if (automatico) "AUTO, " else "") + nome
+    }
+
+    private companion object {
+        val NOMES_CAN = mapOf(
+            6 to "ISO 15765-4 (CAN 11/500)",
+            7 to "ISO 15765-4 (CAN 29/500)",
+            8 to "ISO 15765-4 (CAN 11/250)",
+            9 to "ISO 15765-4 (CAN 29/250)",
+        )
+    }
+}
+
+/**
  * Troca manual com o adaptador (Ferramentas de Oficina: terminal, varredura, teste de bateria):
  * o [comando] como foi enviado, a [resposta] bruta até o prompt `>` (sem ele) e a [latenciaMs]
  * medida em volta da troca. [semPrompt] = o adaptador não concluiu no prazo ([resposta] vazia).

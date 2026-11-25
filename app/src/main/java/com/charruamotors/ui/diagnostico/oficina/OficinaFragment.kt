@@ -34,6 +34,8 @@ import com.charruamotors.ui.oficina.bateria.TesteBateriaActivity
 import com.charruamotors.ui.oficina.checkup.CheckupObdActivity
 import com.charruamotors.ui.oficina.checkup.FerramentaCheckup
 import com.charruamotors.ui.oficina.falhas.DiagnosticoErrosActivity
+import com.charruamotors.ui.oficina.sensores.GraficosActivity
+import com.charruamotors.ui.oficina.sensores.SensoresActivity
 import com.charruamotors.ui.oficina.terminal.TerminalObdActivity
 import com.charruamotors.ui.util.definirTexto
 import com.google.android.material.snackbar.Snackbar
@@ -63,6 +65,8 @@ class OficinaFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         with(binding) {
+            preencher(cardSensores, R.string.oficina_card_sensores, R.string.oficina_card_sensores_desc, R.drawable.ic_checklist, R.color.azul_primario)
+            preencher(cardGraficos, R.string.oficina_card_graficos, R.string.oficina_card_graficos_desc, R.drawable.ic_grafico, R.color.terminal_card)
             preencher(cardBateria, R.string.oficina_card_bateria, R.string.oficina_card_bateria_desc, R.drawable.ic_bateria, R.color.veredito_bom)
             preencher(cardFalhas, R.string.oficina_card_falhas, R.string.oficina_card_falhas_desc, R.drawable.ic_falha, R.color.dtc_confirmado)
             preencher(cardCheckup, R.string.oficina_card_checkup, R.string.oficina_card_checkup_desc, R.drawable.ic_checklist, R.color.status_ok)
@@ -71,6 +75,8 @@ class OficinaFragment : Fragment() {
             preencher(cardTerminal, R.string.oficina_card_terminal, R.string.oficina_card_terminal_desc, R.drawable.ic_terminal, R.color.terminal_card)
             preencher(cardAtuadores, R.string.oficina_card_atuadores, R.string.oficina_card_atuadores_desc, R.drawable.ic_atuador, R.color.atuador_card)
 
+            cardSensores.root.setOnClickListener { abrirConectada { SensoresActivity.intent(requireContext()) } }
+            cardGraficos.root.setOnClickListener { abrirConectada { GraficosActivity.intent(requireContext()) } }
             cardBateria.root.setOnClickListener { abrirConectada { TesteBateriaActivity.intent(requireContext(), veiculoId) } }
             // O DTC abre sempre: a tela mostra o estado e só habilita ler/apagar com o scanner ligado.
             cardFalhas.root.setOnClickListener { startActivity(DiagnosticoErrosActivity.intent(requireContext(), veiculoId)) }
@@ -123,7 +129,7 @@ class OficinaFragment : Fragment() {
         textoConexao.definirTexto(getString(if (conectado) R.string.oficina_conectado else R.string.oficina_desconectado))
         val cor = if (conectado) R.color.status_ok else R.color.status_espera
         pontoConexao.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), cor))
-        listOf(cardBateria, cardCheckup, cardMisfire, cardVarredura, cardTerminal, cardAtuadores).forEach { card ->
+        listOf(cardSensores, cardGraficos, cardBateria, cardCheckup, cardMisfire, cardVarredura, cardTerminal, cardAtuadores).forEach { card ->
             card.textoRequisito.isVisible = !conectado
             card.root.alpha = if (conectado) 1f else ALFA_INDISPONIVEL
         }

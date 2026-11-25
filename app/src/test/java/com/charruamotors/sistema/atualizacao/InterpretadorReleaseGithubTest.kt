@@ -125,14 +125,14 @@ class InterpretadorReleaseGithubTest {
     // ---------------------------------------------------------------- verificador (rede injetada)
 
     @Test
-    fun `verificador consulta a URL da API e interpreta a resposta`() = runTest {
+    fun `sem o redirect da pagina o verificador cai na API e interpreta a resposta`() = runTest {
         val urls = mutableListOf<String>()
         val verificador = VerificadorAtualizacao("1.5", dispatcher = StandardTestDispatcher(testScheduler)) { url ->
             urls += url
-            RespostaHttp(200, json("v1.6"))
+            if (url == InterpretadorReleaseGithub.URL_API_ULTIMA) RespostaHttp(200, json("v1.6")) else RespostaHttp(200, null)
         }
         assertTrue(verificador.verificar() is ResultadoVerificacao.NovaVersao)
-        assertEquals(listOf(InterpretadorReleaseGithub.URL_API_ULTIMA), urls)
+        assertEquals(listOf(InterpretadorReleaseGithub.URL_PAGINA_ULTIMA, InterpretadorReleaseGithub.URL_API_ULTIMA), urls)
     }
 
     @Test

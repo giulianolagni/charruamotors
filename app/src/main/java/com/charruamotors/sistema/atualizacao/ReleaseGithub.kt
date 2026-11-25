@@ -2,11 +2,12 @@ package com.charruamotors.sistema.atualizacao
 
 import org.json.JSONException
 import org.json.JSONObject
+import java.net.URLDecoder
 
 /** Arquivo anexado à release (o `.apk` de instalação). */
 data class AnexoRelease(val nome: String, val url: String, val tamanhoBytes: Long)
 
-/** Release publicada no GitHub (`GET /repos/{dono}/{repo}/releases/latest`). */
+/** Release publicada no GitHub (pelo redirect de `/releases/latest` ou pela API). */
 data class ReleaseGithub(
     val tag: String,
     val versao: VersaoSemantica,
@@ -62,12 +63,7 @@ object InterpretadorReleaseGithub {
         } catch (e: JSONException) {
             return ResultadoVerificacao.Falha("resposta inesperada da API do GitHub")
         } ?: return ResultadoVerificacao.Falha("a release não tem uma tag de versão (ex.: v1.6)")
-        val atual = VersaoSemantica.deTexto(versaoAtual)
-        return if (atual == null || release.versao > atual) {
-            ResultadoVerificacao.NovaVersao(versaoAtual, release)
-        } else {
-            ResultadoVerificacao.Atualizado(versaoAtual, release)
-        }
+        return comparar(release, versaoAtual)
     }
 
     /**
@@ -108,8 +104,51 @@ object InterpretadorReleaseGithub {
         return if (limpo.length <= maximo) limpo else limpo.take(maximo).trimEnd() + "…"
     }
 
+    // ---------------------------------------------------------------- redirect da página (v2.3.1)
+
+    /**
+     * Tag no endereço para onde `github.com/{dono}/{repo}/releases/latest` redireciona
+     * (`.../releases/tag/v2.3.1`); null em qualquer outro endereço (portal cativo, `/releases` sem
+     * release publicada...).
+     */
+    fun tagDoRedirecionamento(url: String): String? {
+        val bruta = REGEX_URL_TAG.find(url.trim())?.groupValues?.get(1) ?: return null
+        return runCatching { URLDecoder.decode(bruta, "UTF-8") }.getOrNull()
+    }
+
+    /**
+     * Release montada só com a [tag] (sem a API): o APK pelo endereço direto
+     * `releases/download/vX.Y.Z/CharruaOBDPro-X.Y.Z-release.apk`, sem notas nem tamanho.
+     * Null se a tag não for uma versão.
+     */
+    fun releaseDaTag(tag: String): ReleaseGithub? {
+        val versao = VersaoSemantica.deTexto(tag) ?: return null
+        val nome = "CharruaOBDPro-${tag.removePrefix("v").removePrefix("V")}-release.apk"
+        return ReleaseGithub(
+            tag = tag,
+            versao = versao,
+            titulo = tag,
+            notas = "",
+            urlPagina = "$URL_RELEASES/tag/$tag",
+            apk = AnexoRelease(nome, "$URL_RELEASES/download/$tag/$nome", -1L),
+        )
+    }
+
+    /** O [resultado] de comparar a [release] com a versão instalada. */
+    fun comparar(release: ReleaseGithub, versaoAtual: String): ResultadoVerificacao {
+        val atual = VersaoSemantica.deTexto(versaoAtual)
+        return if (atual == null || release.versao > atual) {
+            ResultadoVerificacao.NovaVersao(versaoAtual, release)
+        } else {
+            ResultadoVerificacao.Atualizado(versaoAtual, release)
+        }
+    }
+
+    private val REGEX_URL_TAG = Regex("^https://github\\.com/[^/]+/[^/]+/releases/tag/([^/?#]+)")
+
     const val DONO = "giulianolagni"
     const val REPOSITORIO = "charruamotors-pro"
     const val URL_API_ULTIMA = "https://api.github.com/repos/$DONO/$REPOSITORIO/releases/latest"
     const val URL_RELEASES = "https://github.com/$DONO/$REPOSITORIO/releases"
+    const val URL_PAGINA_ULTIMA = "$URL_RELEASES/latest"
 }

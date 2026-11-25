@@ -155,8 +155,8 @@ class ImpressaoEcuTest {
         assertEquals(true, imp.tcmDetectado)
         assertEquals("7E1", imp.tcmCabecalho)
         val novos = t.enviados.drop(antes)
-        // O 0904 é um comando de prazo longo: o adaptador alterna ATST32/ATST0C em volta dele.
-        assertEquals(listOf("0151", "ATST32", "0904", "ATST0C", "ATSH7E1", "0100", "ATSH7DF"), novos)
+        // O 0904 é um comando de prazo longo: o adaptador alterna ATST32/ATST19 em volta dele.
+        assertEquals(listOf("0151", "ATST32", "0904", "ATST19", "ATSH7E1", "0100", "ATSH7DF"), novos)
         assertEquals(EstadoConexaoObd.Conectado, obd.estado.value)
     }
 
@@ -177,7 +177,7 @@ class ImpressaoEcuTest {
         assertEquals(false, imp.tcmDetectado)
         assertNull(imp.tcmCabecalho)
         assertEquals(
-            listOf("0151", "ATST32", "0904", "ATST0C", "ATSH7E1", "0100", "ATSH7E2", "0100", "ATSH7DF"),
+            listOf("0151", "ATST32", "0904", "ATST19", "ATSH7E1", "0100", "ATSH7E2", "0100", "ATSH7DF"),
             t.enviados.drop(antes),
         )
         // A sessão segue: um PID normal ainda é lido depois da sondagem.

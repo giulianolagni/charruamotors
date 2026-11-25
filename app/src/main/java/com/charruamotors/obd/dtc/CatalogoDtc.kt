@@ -16,6 +16,9 @@ enum class TipoDtc(val modo: String) {
 
     /** Modo 0A: não é apagada pelo modo 04; só a ECU a remove após validar o reparo. */
     PERMANENTE("0A"),
+
+    /** v2.2.9: falha do câmbio automático lida no TCM `7E1` (`03`, ou UDS `19 02 FF`). */
+    CAMBIO("03 · 7E1"),
 }
 
 /** Entrada do catálogo: título curto e descrição técnica (causas prováveis e o que verificar). */

@@ -27,7 +27,7 @@ import com.charruamotors.obd.pid.Pids
 class EscalonadorPolling(
     private val lentosPorVez: Int = LENTOS_POR_VEZ,
     private val ciclosPorLento: Int = CICLOS_POR_LENTO,
-    private val candidatosRapidos: List<String> = Pids.candidatosFilaRapida(consumoPorMaf = true),
+    private var candidatosRapidos: List<String> = Pids.candidatosFilaRapida(consumoPorMaf = true),
     /** Sensores de outro módulo (câmbio `7E1`): fila própria, em cadência mais leve que a lenta. */
     private val leves: Set<String> = emptySet(),
     private val ciclosPorLeve: Int = CICLOS_POR_LEVE,
@@ -51,6 +51,7 @@ class EscalonadorPolling(
         private set
 
     private var suportados: Set<String> = emptySet()
+    private var grupoAtual: (String) -> String = { it }
     private var cursor = 0
 
     /** Ciclos já montados; a fila lenta anda quando `ciclos % ciclosPorLento == 0`. */
@@ -67,6 +68,7 @@ class EscalonadorPolling(
      */
     fun atualizarSuportados(suportados: Collection<String>, grupoDe: (String) -> String = { it }) {
         val conjunto = suportados.toCollection(linkedSetOf())
+        grupoAtual = grupoDe
         if (conjunto == this.suportados) return
         this.suportados = conjunto
         filaRapida = candidatosRapidos.filter { it in conjunto }.distinct()
@@ -75,6 +77,19 @@ class EscalonadorPolling(
         filaLenta = conjunto.filter { it !in rapidos && it !in leves }.map(grupoDe).distinct()
         cursor = if (filaLenta.isEmpty()) 0 else cursor % filaLenta.size
         instantaneo.keys.retainAll(conjunto)
+    }
+
+    /**
+     * Troca os candidatos da fila rápida com o polling rodando (v2.2.9: o pedal `0149` entra junto do
+     * Multi-PID em lote e sai se o lote for desligado). Sem mudança, não faz nada; com mudança, as filas
+     * são remontadas sobre os mesmos suportados.
+     */
+    fun trocarCandidatosRapidos(novos: List<String>) {
+        if (novos == candidatosRapidos) return
+        candidatosRapidos = novos
+        val atuais = suportados
+        suportados = emptySet()
+        atualizarSuportados(atuais, grupoAtual)
     }
 
     /** Comandos do próximo ciclo: toda a fila rápida + a vez da fila lenta (1 a cada [ciclosPorLento]). */

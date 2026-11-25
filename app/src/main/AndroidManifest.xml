@@ -134,6 +134,11 @@
             android:name=".ui.oficina.falhas.DiagnosticoErrosActivity"
             android:exported="false"
             android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
+        <!-- v2.2.9: Checkup OBD2 / Prontidão e Falhas de Ignição (Modo 06) -->
+        <activity
+            android:name=".ui.oficina.checkup.CheckupObdActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
         <activity
             android:name=".ui.painel.PersonalizarPainelActivity"
             android:exported="false"

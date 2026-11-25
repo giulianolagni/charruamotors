@@ -110,6 +110,8 @@ class DiagnosticoErrosViewModel(
         val pendentes = cliente.lerCodigosPendentes().getOrNull()
         val permanentes = cliente.lerCodigosPermanentes().getOrNull()
         val freezeFrame = cliente.lerFreezeFrame().getOrNull()
+        // v2.2.9: TCM 7E1 (Cruze); null nos modos 21/22 da SW4 e sem TCM, sem gastar comandos.
+        val cambio = cliente.lerCodigosFalhaCambio().getOrNull()
         val m = marca.await()
         fun exibir(tipo: TipoDtc, dtc: DtcLido) = DtcExibicao(tipo, catalogoDtc.descrever(dtc.codigo, m))
 
@@ -122,6 +124,7 @@ class DiagnosticoErrosViewModel(
             permanentes = permanentes?.map { exibir(TipoDtc.PERMANENTE, it) },
             freezeFrame = freezeFrame,
             infoFreezeFrame = freezeFrame?.dtc?.let { catalogoDtc.descrever(it, m) },
+            cambio = cambio?.map { exibir(TipoDtc.CAMBIO, it) },
         )
         _diagnostico.value = resultado
         sessao.registrarDtcs(

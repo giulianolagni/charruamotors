@@ -275,6 +275,7 @@ object Pids {
     const val LAMBDA_BANDA_LARGA_CORRENTE = "0134"
     const val TENSAO_ECU = "0142"
     const val LAMBDA_COMANDADO = "0144"
+    const val PEDAL_ACELERADOR = "0149"
     const val PERCENTUAL_ETANOL = "0152"
     const val CONSUMO_ECU = "015E"
     const val TENSAO_BATERIA = "ATRV"

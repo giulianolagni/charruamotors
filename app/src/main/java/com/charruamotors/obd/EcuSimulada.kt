@@ -183,6 +183,8 @@ internal class EcuSimulada(private val random: Random) {
             chassi && servico == 0x21 -> servico21(pedido, leitura())
             chassi -> listOf(0x7F, servico, NRC_SERVICO_NAO_SUPORTADO)
             servico == 0x01 && motor -> modo01(pedido, leitura())
+            servico == 0x06 && motor && perfil == PerfilSimulacao.CRUZE_14T_FLEX -> modo06(pedido)
+            servico == 0x09 && motor && perfil == PerfilSimulacao.CRUZE_14T_FLEX -> modo09(pedido)
             servico == 0x03 && motor -> listOf(0x43, codigos().size) + codigos().flatMap(::bytesDtc)
             servico == 0x13 && cabecalho == MOTOR -> listOf(0x53, codigos().size) + codigos().flatMap(::bytesDtc)
             servico == 0x21 && (cabecalho == MOTOR || cabecalho == CAMBIO) -> servico21(pedido, leitura())
@@ -246,9 +248,29 @@ internal class EcuSimulada(private val random: Random) {
             0x0C -> ((valores["010C"] ?: 800.0) * 4).roundToInt().let { listOf(it shr 8, it and 0xFF) }
             0x0D -> listOf((valores["010D"] ?: 0.0).roundToInt())
             0x0F -> listOf(((valores["010F"] ?: 30.0) + 40).roundToInt())
+            // v2.2.9 (Cruze): checkup de prontidão — MIL apagada, EVAP pendente, 1.234 km e 45 aquecimentos desde a limpeza.
+            in PIDS_CHECKUP_CRUZE -> if (perfil == PerfilSimulacao.CRUZE_14T_FLEX) PIDS_CHECKUP_CRUZE.getValue(pid) else return null
             else -> return null
         }
         return listOf(0x41, pid) + dados.map { it.coerceIn(0, 0xFF) }
+    }
+
+    /** Modo 06 do Cruze simulado: MIDs A2–A5 (cilindros 1–4), TID 0B (EWMA) e 0C (ciclo atual); o #3 falha um pouco. */
+    private fun modo06(pedido: String): List<Int>? {
+        if (pedido.length != 4) return listOf(0x7F, 0x06, NRC_FORMATO_INVALIDO)
+        val mid = pedido.substring(2).toInt(16)
+        if (mid !in 0xA2..0xA5) return null
+        val (ewma, atual) = if (mid == 0xA4) 1 to 3 else 0 to 0
+        fun registro(tid: Int, valor: Int) = listOf(mid, tid, 0x24, valor shr 8, valor and 0xFF, 0x00, 0x00, 0xFF, 0xFF)
+        return listOf(0x46) + registro(0x0B, ewma) + registro(0x0C, atual)
+    }
+
+    /** Modo 09 do Cruze simulado: VIN, CALID e CVN (multi-frame como no ELM327 real). */
+    private fun modo09(pedido: String): List<Int>? = when (pedido) {
+        "0902" -> listOf(0x49, 0x02, 0x01) + VIN_CRUZE.map { it.code }
+        "0904" -> listOf(0x49, 0x04, 0x01) + CALID_CRUZE.padEnd(16, Char(0)).map { it.code }
+        "0906" -> listOf(0x49, 0x06, 0x01, 0x5A, 0x3C, 0x91, 0x0E)
+        else -> null
     }
 
     /** Blocos de identificadores locais da central (os demais: `7F 21 31` requestOutOfRange). */
@@ -341,6 +363,20 @@ internal class EcuSimulada(private val random: Random) {
     companion object {
         const val CABECALHO_FUNCIONAL = "7DF"
         const val MOTOR = "7E0"
+
+        /** VIN e CALID do Cruze simulado (Modo 09). */
+        const val VIN_CRUZE = "8AGBN69S0JR123456"
+        const val CALID_CRUZE = "12681234"
+
+        /** Contadores do checkup de prontidão no Cruze simulado (bytes A, B... de cada PID). */
+        private val PIDS_CHECKUP_CRUZE: Map<Int, List<Int>> = mapOf(
+            0x01 to listOf(0x00, 0x07, 0x65, 0x04),
+            0x21 to listOf(0x00, 0x00),
+            0x30 to listOf(0x2D),
+            0x31 to listOf(0x04, 0xD2),
+            0x4D to listOf(0x00, 0x00),
+            0x4E to listOf(0x03, 0x15),
+        )
         const val CAMBIO = "7E1"
         const val MODULO_AUSENTE = "7E2"
         const val ABS_VSC = "7B0"

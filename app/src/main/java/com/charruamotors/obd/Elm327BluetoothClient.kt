@@ -84,6 +84,8 @@ import java.io.IOException
  *   1 PID lento a cada 3 ciclos.
  * - Perfis de montadora (`pids_estendidos.json`) com cabeçalho CAN físico, ativados só em CAN de
  *   11 bits e se a ECU responder; no modo 21/22, só os do mesmo módulo e serviço da camada ativa.
+ * - Linha K (v2.3.4): ao fim da sessão manual com [OCIOSIDADE_LINHA_K_MS] sem comando OBD (ou erro no
+ *   primeiro comando retomado), `ATPC` + `0100` reabrem o protocolo, sem cabeçalho de CAN.
  * - Falhas: `03`/`07`/`0A`/`04` no padrão; no modo 21 `13` (cai para `18 00 FF 00`) e `14`
  *   (cai para `14 FF 00`); no modo 22 `19 02 FF` e `14 FF FF FF`.
  * - Sujeira de protocolo: `STOPPED` repete o comando uma vez; `LV RESET` (queda de tensão na
@@ -109,6 +111,7 @@ import java.io.IOException
  * @param catalogoCascata camadas 2 e 3 da cascata (`cascata_conexao.json`); vazio = só OBD2 padrão.
  * @param intervaloEntreComandosMs respiro entre o fim de uma resposta e o próximo comando (0 = nenhum).
  * @param intervaloSeguroMs respiro adotado pelo resto da sessão depois de um timeout/`STOPPED`.
+ * @param relogioMs relógio monotônico da ociosidade da linha K (injetável nos testes).
  */
 @SuppressLint("MissingPermission") // SecurityException é tratada e convertida em EstadoConexaoObd.Erro
 class Elm327BluetoothClient(
@@ -122,6 +125,7 @@ class Elm327BluetoothClient(
     private val catalogoCascata: CatalogoCascata = CatalogoCascata.VAZIO,
     private val intervaloEntreComandosMs: Long = INTERVALO_ENTRE_COMANDOS_MS,
     private val intervaloSeguroMs: Long = INTERVALO_SEGURO_MS,
+    private val relogioMs: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : ObdClient {
 
     private val _estado = MutableStateFlow<EstadoConexaoObd>(EstadoConexaoObd.Desconectado)
@@ -241,7 +245,24 @@ class Elm327BluetoothClient(
 
     /** `ATSH` do cabeçalho funcional do protocolo em uso. */
     private val cabecalhoFuncional: String
-        get() = protocoloCanAtivo?.cabecalhoFuncional ?: RequisicaoEstendida.CABECALHO_FUNCIONAL
+        get() = protocoloCanAtivo?.cabecalhoFuncional ?: cabecalhoLinhaK ?: RequisicaoEstendida.CABECALHO_FUNCIONAL
+
+    /** Cabeçalho padrão do ELM327 na linha K (ISO 9141-2 / KWP2000), pelo protocolo da sessão; null fora dela. */
+    private val cabecalhoLinhaK: String?
+        get() {
+            val d = _infoConexao.value.protocolo?.uppercase() ?: return null
+            return when {
+                "9141" in d -> CABECALHO_ISO9141
+                "14230" in d || "KWP" in d -> CABECALHO_KWP
+                else -> null
+            }
+        }
+
+    /** [relogioMs] da última resposta sem erro a um comando OBD (não AT); null = nenhuma nesta sessão. */
+    @Volatile private var ultimaRespostaObdMs: Long? = null
+
+    /** Linha K pós-sessão manual sem re-init: um erro no primeiro comando OBD dispara [reiniciarLinhaK]. */
+    @Volatile private var conferirLinhaK = false
 
     /** Valor do `ATST` configurado no adaptador; null = o padrão (`32`, 200 ms). */
     @Volatile private var timeoutAdaptadorAtivo: String? = null
@@ -939,11 +960,35 @@ class Elm327BluetoothClient(
         }
         if (filtroRecepcaoAtivo != filtroRecepcaoPara(alvo)) ajustarFiltroRecepcao(canal, alvo, registrar = true)
         configuracaoAlteradaManual = false
+        if (cabecalhoLinhaK != null) {
+            // v2.3.4: só com ATRV (ou na queda de tensão da partida) a ECU encerra a sessão da linha K.
+            val ultima = ultimaRespostaObdMs
+            if (ultima == null || relogioMs() - ultima >= OCIOSIDADE_LINHA_K_MS) {
+                conferirLinhaK = !reiniciarLinhaK(canal, registrar = true)
+            } else {
+                conferirLinhaK = true
+            }
+        }
         registro.evento(
             "Sessão manual encerrada: polling retomado" +
                 (if (reconfigurar) ", configuração reaplicada" else "") +
                 (alvo?.let { ", ATSH $it" } ?: ", cabeçalho funcional"),
         )
+    }
+
+    /**
+     * Reabre a sessão da linha K: `ATPC` fecha o protocolo e o `0100`, com prazo de busca, refaz a
+     * inicialização. Devolve true se a ECU respondeu. Chamado com o [mutexComandos] já tomado.
+     */
+    private suspend fun reiniciarLinhaK(canal: ObdTransport, registrar: Boolean): Boolean {
+        registro.evento("Linha K: reinicializando o protocolo (ATPC + $COMANDO_BUSCA)")
+        return try {
+            trocar(canal, "ATPC", timeoutComandoMs, registrar)
+            ajustarTimeoutAdaptador(canal, folgado = true, registrar)
+            ObdParser.erroElm(trocar(canal, COMANDO_BUSCA, TIMEOUT_BUSCA_PROTOCOLO_MS, registrar)) == null
+        } catch (_: ObdTimeoutException) {
+            false
+        }
     }
 
     /**
@@ -2009,6 +2054,14 @@ class Elm327BluetoothClient(
                 for (c in reconfiguracao) runCatching { trocar(canal, c, timeoutComandoMs, true) }
             }
             if (multiFrame) blindarPosMultiFrame(canal, registrar)
+            if (conferirLinhaK && !comando.startsWith("AT")) {
+                conferirLinhaK = false
+                if (ObdParser.erroElm(resposta) != null) {
+                    reiniciarLinhaK(canal, registrar = true)
+                    ajustarTimeoutAdaptador(canal, folgado = timeoutMs > timeoutComandoMs, registrar)
+                    resposta = trocar(canal, comando, timeoutMs, registrar)
+                }
+            }
             resposta
         } catch (e: IOException) {
             if (transporte !== canal) throw ObdException("Scanner desconectado", e)
@@ -2089,6 +2142,7 @@ class Elm327BluetoothClient(
         if (transporte !== canal) throw IOException("Sessão encerrada durante o $comando")
         timeoutsSeguidos = 0
         val erro = ObdParser.erroElm(resposta)
+        if (erro == null && !comando.startsWith("AT", ignoreCase = true)) ultimaRespostaObdMs = relogioMs()
         if (registrar || erro != null) registro.comando(comando, resposta, duracao()) else registro.comandoSomenteLog(comando, resposta, duracao())
         if (erro == "STOPPED" || erro == "BUFFER FULL") ativarRespiroSeguro("$erro no $comando")
         return resposta
@@ -2207,6 +2261,8 @@ class Elm327BluetoothClient(
         respiroMs = intervaloEntreComandosMs
         timeoutsSeguidos = 0
         fimUltimoComandoNs = 0L
+        ultimaRespostaObdMs = null
+        conferirLinhaK = false
         cabecalhoEntradaManual = null
         configuracaoAlteradaManual = false
         _sessaoManual.value = false // libera o polling suspenso, que então encerra
@@ -2284,6 +2340,13 @@ class Elm327BluetoothClient(
 
         /** Cabeçalho desconhecido (restauração falhou): difere de qualquer pedido, então o próximo reenvia o `ATSH`. */
         private const val CABECALHO_INDEFINIDO = "?"
+
+        /** Cabeçalhos padrão do ELM327 na linha K: ISO 9141-2 e ISO 14230-4. */
+        private const val CABECALHO_ISO9141 = "686AF1"
+        private const val CABECALHO_KWP = "C133F1"
+
+        /** Sem comando OBD por este tempo, a sessão da linha K é dada como encerrada pela ECU. */
+        const val OCIOSIDADE_LINHA_K_MS = 4_000L
 
         /** Comandos manuais que reiniciam o adaptador (voltam aos padrões: eco, cabeçalho, timeout). */
         private val COMANDOS_REINICIO = setOf("ATZ", "ATWS", "ATD")

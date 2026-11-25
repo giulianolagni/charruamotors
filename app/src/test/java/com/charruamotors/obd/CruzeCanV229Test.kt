@@ -71,7 +71,8 @@ class CruzeCanV229Test {
      * O lote de teste e o da fila rápida voltam em 2 quadros CAN (`0:`/`1:`), como num ELM327 v2.1 real.
      */
     private fun cruze() = mutableMapOf(
-        "ATZ" to "\r\rELM327 v2.1\r\r",
+        // v1.5: o lote de 2 quadros (`010C0D0B`) não é usado no v2.1 (ver HotfixCruzeV237Test).
+        "ATZ" to "\r\rELM327 v1.5\r\r",
         "0100" to "SEARCHING...\r41001E3F8000\r\r",
         "01001" to "41001E3F8000\r\r",
         "ATDP" to "AUTO, ISO 15765-4 (CAN 11/500)\r\r",
@@ -219,7 +220,7 @@ class CruzeCanV229Test {
 
     @Test
     fun `ELM327 v2_1 nao sonda o CALID 0904 na conexao`() = runTest {
-        val t = Ecu(cruze())
+        val t = Ecu(cruze().apply { put("ATZ", "\r\rELM327 v2.1\r\r") })
         val obd = cliente(t)
         obd.conectar(dispositivo, "Chevrolet Cruze")
         t.enviados.clear()

@@ -57,6 +57,7 @@ class CanElm327V231Test {
             "ATDPN" to "$atdpn\r\r",
             "ATRV" to "14.1V\r\r",
             "010C0D0B" to "008\r0:410C0FA00D32\r1:0B650000000000\r\r",
+            "010C0D" to "410C0FA00D32\r\r", // v2.3.7: lote de quadro único do v2.1
             "0902" to "014\r0:490201394247\r1:4B533438423044\r2:47313233343536\r\r",
         ),
     )

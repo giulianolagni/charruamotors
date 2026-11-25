@@ -40,12 +40,14 @@ object CambioGm6T {
 }
 
 /**
- * Pós-processamento do instantâneo do Cruze na sessão: publica a marcha estimada em `TOYOTA_MARCHA`
- * quando a ECU não traz marcha própria. Sem velocidade no instantâneo, ele segue igual.
+ * Pós-processamento do instantâneo do Cruze na sessão. v2.3.7: com a posição do TCM `7E2`
+ * ([AlavancaGmTcm]), publica [AlavancaGmTcm.CHAVE_POSICAO] no lugar da estimativa; sem ela, publica a
+ * marcha estimada em `TOYOTA_MARCHA` quando a ECU não traz marcha própria.
  */
 class EstimadorCambioGm6T {
 
     fun aplicar(dados: DadosObd): DadosObd {
+        AlavancaGmTcm.aplicar(dados)?.let { return it }
         if (dados.valores[CambioA750f.CHAVE_MARCHA]?.isFinite() == true) return dados
         val velocidade = dados.valores[Pids.VELOCIDADE]?.takeIf { it.isFinite() }
         val marcha = CambioGm6T.marchaExibida(dados.valores[Pids.RPM], velocidade) ?: return dados

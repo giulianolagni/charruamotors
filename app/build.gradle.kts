@@ -22,8 +22,8 @@ android {
         applicationId = "com.charruamotors.pro"
         minSdk = 26
         targetSdk = 37
-        versionCode = 36
-        versionName = "2.3.6"
+        versionCode = 37
+        versionName = "2.3.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -1,5 +1,6 @@
 package com.charruamotors.direcao.hud
 
+import com.charruamotors.domain.calculo.AlavancaGmTcm
 import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.faixas.FaixasVeiculo
 import com.charruamotors.domain.faixas.ParametroFaixa
@@ -199,6 +200,7 @@ object FormatadorHudEsportivo {
      * engatar P andando) e andando é `N`. Sem alavanca nem marcha, `–`.
      */
     fun marcha(valores: ValoresSensores?): String {
+        AlavancaGmTcm.rotulo(valores?.get(AlavancaGmTcm.CHAVE_POSICAO))?.let { return it }
         val alavanca = listOf(CambioA750f.CHAVE_ALAVANCA, "TOYOTA_ALAVANCA_ECM").firstNotNullOfOrNull { c -> valores?.get(c)?.takeIf { it.isFinite() } }
         val codigo = valores?.get(CambioA750f.CHAVE_MARCHA)?.takeIf { it.isFinite() }?.roundToInt()
         val velocidade = listOf(Pids.VELOCIDADE, Pids.VELOCIDADE_GPS).firstNotNullOfOrNull { c -> valores?.get(c)?.takeIf { it.isFinite() } }

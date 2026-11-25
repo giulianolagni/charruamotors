@@ -1,5 +1,6 @@
 package com.charruamotors.direcao.painel
 
+import com.charruamotors.domain.calculo.AlavancaGmTcm
 import com.charruamotors.domain.calculo.AlertaProtecao
 import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.calculo.TipoAlertaProtecao
@@ -142,15 +143,18 @@ enum class SensorPainel(
         "TOYOTA_ALAVANCA", "Alavanca (P/R/D)", "ALAVANCA", "", 0,
         mapOf("" to EscalaGauge(0f, 9f, null, 9, 1)),
         // O 7E1 · 21D9 (bytes C/D) vem primeiro: o 7E0 · 21D9 devolve sempre 00 (P) na SW4 2013.
-        alternativos = listOf("TOYOTA_ALAVANCA_ECM"),
-        rotulos = mapOf(0 to "P", 1 to "R", 2 to "N", 3 to "D", 4 to "3", 5 to "M", 6 to "L", 7 to "P/N", 8 to "4", 9 to "2"),
+        // GM (Cruze): a posição do TCM 7E2, com códigos próprios ([AlavancaGmTcm]).
+        alternativos = listOf("TOYOTA_ALAVANCA_ECM", AlavancaGmTcm.CHAVE_POSICAO),
+        rotulos = mapOf(0 to "P", 1 to "R", 2 to "N", 3 to "D", 4 to "3", 5 to "M", 6 to "L", 7 to "P/N", 8 to "4", 9 to "2") +
+            AlavancaGmTcm.ROTULOS,
     ),
     MARCHA_ATUAL(
         "TOYOTA_MARCHA", "Marcha (1ª–6ª)", "MARCHA", "", 0,
         mapOf("" to EscalaGauge(0f, 6f, null, 6, 1)),
         // 1..5 do 2130 (SW4) ou 1..6 estimada pela razão rpm/velocidade (CambioA750f / CambioGm6T); 11..15 = 1ª L..5ª L
         // (reduzida 4L, v2.2.6); 254 = R, 255 = parado.
-        rotulos = CambioA750f.ROTULOS_MARCHA,
+        alternativos = listOf(AlavancaGmTcm.CHAVE_POSICAO),
+        rotulos = CambioA750f.ROTULOS_MARCHA + AlavancaGmTcm.ROTULOS,
     ),
     TRACAO_4X4(
         "TOYOTA_4WD", "Tração 4x4", "4X4", "", 0,

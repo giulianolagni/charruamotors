@@ -1,5 +1,6 @@
 package com.charruamotors.obd
 
+import com.charruamotors.domain.calculo.AlavancaGmTcm
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import com.charruamotors.domain.model.EstadoConexaoObd
@@ -282,6 +283,9 @@ class Elm327BluetoothClient(
     /** Falhas seguidas de cada comando de lote no polling (ver [registrarFalhaLote]). */
     private val falhasLote = mutableMapOf<String, Int>()
 
+    /** Última resposta bruta de cada DID de posição do TCM GM (ver [registrarPosicaoTcm]). */
+    private val brutosTcm = mutableMapOf<String, String>()
+
     /**
      * No OBD2 padrão, o câmbio `7E1` também sai com `ATCRA 7E9` explícito (v2.2.9: perfil GM/Cruze e a
      * leitura de falhas do TCM). Nos modos 21/22 o filtro do câmbio já é sempre explícito.
@@ -466,6 +470,7 @@ class Elm327BluetoothClient(
                             } catch (e: ObdTimeoutException) {
                                 continue // módulo ausente (ex.: carro sem câmbio automático)
                             }
+                            registrarPosicaoTcm(requisicao, bruto)
                             // A faixa do JSON já descarta leituras implausíveis (ATF GM: −20 a 150 °C).
                             addAll(definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok })
                         }
@@ -1502,7 +1507,9 @@ class Elm327BluetoothClient(
             registro.evento("Multi-PID em lote desligado: o protocolo (${protocolo ?: "não informado"}) não é CAN ISO 15765-4")
             return
         }
-        val candidatos = PIDS_TESTE_LOTE.mapNotNull { catalogo[it] }.filter { it.ehModo01 && it.pid in suportados }
+        val doTeste = PIDS_TESTE_LOTE.mapNotNull { catalogo[it] }.filter { it.ehModo01 && it.pid in suportados }
+        // No v2.1 o teste é o 1º lote de quadro único (`010C0D`).
+        val candidatos = if (adaptadorV21()) montarLotes(doTeste).firstOrNull().orEmpty() else doTeste
         if (candidatos.size < 2) {
             registro.evento("Multi-PID em lote desligado: a ECU não suporta PIDs rápidos suficientes (${candidatos.size})")
             return
@@ -1551,14 +1558,16 @@ class Elm327BluetoothClient(
 
     /**
      * Divide os PIDs do modo 01 do ciclo em lotes de até [MAX_PIDS_LOTE] PIDs e
-     * [MAX_BYTES_RESPOSTA_LOTE] bytes (2 quadros CAN, o que o handshake validou). Lote de 1 PID não é
-     * lote: vai pela leitura normal.
+     * [MAX_BYTES_RESPOSTA_LOTE] bytes (2 quadros CAN, o que o handshake validou). No ELM327 v2.1, só
+     * quadro único ([MAX_BYTES_QUADRO_UNICO]): o multi-frame chega corrompido (`1:0000AAAA...`). Cada
+     * PID entra no primeiro lote em que couber; lote de 1 PID não é lote: vai pela leitura normal.
      */
     private fun montarLotes(definicoes: List<DefinicaoPid>): List<List<DefinicaoPid>> {
         val lotes = mutableListOf<MutableList<DefinicaoPid>>()
+        val maximo = if (adaptadorV21()) MAX_BYTES_QUADRO_UNICO else MAX_BYTES_RESPOSTA_LOTE
         for (d in definicoes) {
-            val atual = lotes.lastOrNull()
-            if (atual != null && atual.size < MAX_PIDS_LOTE && ObdParser.bytesRespostaLote(atual + d) <= MAX_BYTES_RESPOSTA_LOTE) {
+            val atual = lotes.firstOrNull { it.size < MAX_PIDS_LOTE && ObdParser.bytesRespostaLote(it + d) <= maximo }
+            if (atual != null) {
                 atual += d
             } else {
                 lotes += mutableListOf(d)
@@ -1566,6 +1575,9 @@ class Elm327BluetoothClient(
         }
         return lotes.filter { it.size >= 2 }
     }
+
+    private fun adaptadorV21(): Boolean =
+        adaptadorDaConexao?.contains(VERSAO_SEM_CALID_AUTOMATICO, ignoreCase = true) == true
 
     // ---------------------------------------------------------------- protocolo ELM327
 
@@ -1699,7 +1711,12 @@ class Elm327BluetoothClient(
 
     /** Comando efetivamente enviado: PIDs do modo 01 ganham o sufixo `1` quando suportado. */
     private fun comandoDe(definicao: DefinicaoPid): String =
-        if (usaSufixoRespostaUnica && definicao.ehModo01) definicao.comando + SUFIXO_RESPOSTA_UNICA else definicao.comando
+        // v2.3.7: o `0142` vai sem sufixo, senão o ELM327 para na 1ª resposta (a do TCM, com 0 V).
+        if (usaSufixoRespostaUnica && definicao.ehModo01 && definicao.comando != Pids.TENSAO_ECU) {
+            definicao.comando + SUFIXO_RESPOSTA_UNICA
+        } else {
+            definicao.comando
+        }
 
     /** Requisição de montadora com o sufixo `1` (`210C1`), salvo as multi-frame (`21D9`, `21AD`) e as que voltaram incompletas com ele. */
     private fun comandoDe(requisicao: RequisicaoEstendida): String =
@@ -1831,6 +1848,7 @@ class Elm327BluetoothClient(
         val bruto = enviar(comando, timeoutComandoMs, cabecalho, registrar = false)
         val resultados = grupo.associateWith { ObdParser.parsePid(bruto, it, comando) }
         registrarDecodificados(comando, resultados)
+        registrarPosicaoTcm(requisicao, bruto)
         if (comando == requisicao.comando || requisicao in requisicoesConferidas) return bruto to resultados
         val erro = ObdParser.erroElm(bruto)
         val suspeita = (erro == null || erro == "?") &&
@@ -1846,6 +1864,18 @@ class Elm327BluetoothClient(
         requisicoesSemSufixo = requisicoesSemSufixo + requisicao
         registro.evento("$comando voltou incompleto com o sufixo de resposta única; ${requisicao.comando} segue sem ele")
         return puro to semSufixo
+    }
+
+    /**
+     * v2.3.7: resposta bruta dos DIDs de alavanca/marcha do TCM GM (`7E2`) no log, na sondagem e a cada
+     * mudança: é o dado para calibrar [AlavancaGmTcm] no carro.
+     */
+    private fun registrarPosicaoTcm(requisicao: RequisicaoEstendida, bruto: String) {
+        if (requisicao.cabecalho != CABECALHO_TCM_GM || requisicao.identificador !in AlavancaGmTcm.IDS_BYTE_UNICO) return
+        val visivel = RegistroComunicacao.visivel(bruto)
+        if (brutosTcm.put(requisicao.comando, visivel) != visivel) {
+            registro.evento("TCM $CABECALHO_TCM_GM · ${requisicao.comando}: \"$visivel\"")
+        }
     }
 
     /** Lê uma vez os [comandos] suportados (`null` = todos), do jeito do polling legado. */
@@ -2274,6 +2304,7 @@ class Elm327BluetoothClient(
         cambioAtivo = false
         usaLoteMultiPid = false
         falhasLote.clear()
+        brutosTcm.clear()
         filtroCambioPadrao = false
         usaSufixoRespostaUnica = false
         requisicoesSemSufixo = emptySet()
@@ -2310,6 +2341,9 @@ class Elm327BluetoothClient(
         private val CABECALHOS_TCM = listOf("7E1", "7E2")
         private const val FILTRO_CAMBIO = "7E9"
 
+        /** TCM GM do Cruze (6T30/6T35) que informa a alavanca e a marcha. */
+        private const val CABECALHO_TCM_GM = "7E2"
+
         /** Perfil de montadora que lê o TCM `7E1` com filtro explícito no OBD2 padrão (Cruze). */
         private const val MARCA_GM = "gm"
 
@@ -2341,7 +2375,8 @@ class Elm327BluetoothClient(
          * Sensores do câmbio lidos em cadência leve (ver [EscalonadorPolling]): A750F no modo 21 e, desde a
          * v2.2.9, o ATF do TCM GM (`22 1940` no `7E1`/`7E2`) no OBD2 padrão do Cruze.
          */
-        private val CHAVES_CAMBIO = setOf("TOYOTA_ALAVANCA", "TOYOTA_ATF_CAMBIO", "TOYOTA_MARCHA", "GM_ATF", "GM_ATF_7E2")
+        private val CHAVES_CAMBIO = setOf("TOYOTA_ALAVANCA", "TOYOTA_ATF_CAMBIO", "TOYOTA_MARCHA", "GM_ATF", "GM_ATF_7E2") +
+            AlavancaGmTcm.CHAVES_TCM
 
         /** Handshake do lote: RPM + velocidade + MAP (`010C0D0B`, 8 bytes de resposta = 2 quadros CAN). */
         private val PIDS_TESTE_LOTE = listOf(Pids.RPM, Pids.VELOCIDADE, Pids.PRESSAO_COLETOR)
@@ -2354,6 +2389,9 @@ class Elm327BluetoothClient(
 
         /** Resposta de até 2 quadros CAN (6 + 7 bytes), como a do pedido de teste do handshake. */
         const val MAX_BYTES_RESPOSTA_LOTE = 13
+
+        /** Bytes úteis de um quadro único ISO-TP: o limite do lote no ELM327 v2.1. */
+        const val MAX_BYTES_QUADRO_UNICO = 7
 
         /** Falhas seguidas do lote no polling até voltar a 1 PID por vez. */
         const val MAX_FALHAS_LOTE_SEGUIDAS = 2

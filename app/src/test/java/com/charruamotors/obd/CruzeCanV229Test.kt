@@ -27,6 +27,7 @@ class CruzeCanV229Test {
     private class Ecu(respostas: Map<String, String>) : ObdTransport {
         val respostas = respostas.toMutableMap()
         val enviados = mutableListOf<String>()
+        val semPrompt = mutableSetOf<String>()
         var cabecalho = "7DF"
         var filtro: String? = null
         private var aberto = false
@@ -38,6 +39,7 @@ class CruzeCanV229Test {
         override suspend fun enviarComando(comando: String, timeoutMs: Long): String {
             if (!aberto) throw IOException("fechado")
             enviados += comando
+            if (comando in semPrompt) throw ObdTimeoutException("sem prompt")
             val r = respostas["$cabecalho:$comando"] ?: respostas[comando]
                 ?: if (comando.startsWith("AT")) "OK\r\r" else "NO DATA\r\r"
             if (comando.startsWith("ATSH") && "OK" in r) cabecalho = comando.removePrefix("ATSH")
@@ -76,7 +78,6 @@ class CruzeCanV229Test {
         "ATDPN" to "A6\r\r",
         "ATRV" to "14.1V\r\r",
         "010C0D0B" to "008\r0:410C0FA00D32\r1:0B650000000000\r\r",
-        "010C0B0D10" to "00B\r0:410C0FA00B65\r1:0D321001F4000000\r\r",
         "010C1" to "410C0FA0\r\r",
         "010B1" to "410B65\r\r",
         "010D1" to "410D32\r\r",
@@ -124,9 +125,11 @@ class CruzeCanV229Test {
 
         val leituras = obd.lerTelemetria(intervaloMinimoMs = 1).take(3).toList()
 
-        assertEquals(3, t.enviados.count { it == "010C0B0D10" })
+        assertEquals(3, t.enviados.count { it == "010C0D0B" })
+        // No máximo 3 PIDs por comando: o MAF, que sobra sozinho, sai fora do lote.
+        assertEquals(3, t.enviados.count { it == "01101" })
         // Nenhum dos PIDs do lote saiu sozinho.
-        assertTrue(t.enviados.none { it in setOf("010C1", "010B1", "010D1", "01101") })
+        assertTrue(t.enviados.none { it in setOf("010C1", "010B1", "010D1") })
         leituras.forEach { l ->
             assertEquals(1000.0, l[Pids.RPM]!!, 1e-9)
             assertEquals(50.0, l[Pids.VELOCIDADE]!!, 1e-9)
@@ -154,7 +157,8 @@ class CruzeCanV229Test {
             t.enviados.clear()
             val leituras = obd.lerTelemetria(intervaloMinimoMs = 1).take(2).toList()
             // Fallback: 1 PID por vez, com o sufixo de resposta única, e nada de lote no polling.
-            assertTrue(resposta, t.enviados.none { it == "010C0B0D10" })
+            // Só o pedido do handshake (feito antes do clear) usa o lote.
+            assertTrue(resposta, t.enviados.none { it.startsWith("010C0D") })
             assertEquals(resposta, 2, t.enviados.count { it == "010C1" })
             assertEquals(1000.0, leituras.last()[Pids.RPM]!!, 1e-9)
         }
@@ -162,20 +166,38 @@ class CruzeCanV229Test {
 
     @Test
     fun `duas falhas seguidas do lote no polling voltam a 1 PID por vez sem perder leitura`() = runTest {
-        val t = Ecu(cruze().apply { put("010C0B0D10", "BUFFER FULL\r\r") })
+        val t = Ecu(cruze())
         val obd = cliente(t)
         obd.conectar(dispositivo, "Chevrolet Cruze")
         assertTrue(obd.usaLoteMultiPid)
+        t.respostas["010C0D0B"] = "BUFFER FULL\r\r"
         t.enviados.clear()
 
         val leituras = obd.lerTelemetria(intervaloMinimoMs = 1).take(4).toList()
 
-        assertEquals("2 tentativas e desliga", 2, t.enviados.count { it == "010C0B0D10" })
+        assertEquals("2 tentativas e desliga", 2, t.enviados.count { it == "010C0D0B" })
         assertFalse(obd.usaLoteMultiPid)
-        assertTrue(obd.eventos().any { "Multi-PID em lote desligado após 2 falhas seguidas (010C0B0D10 → BUFFER FULL)" in it })
+        assertTrue(obd.eventos().any { "Multi-PID em lote desligado após 2 falhas seguidas (010C0D0B → BUFFER FULL)" in it })
         // Nos ciclos com falha, os PIDs que faltaram foram lidos 1 a 1: o painel nunca ficou sem RPM.
         assertEquals(4, t.enviados.count { it == "010C1" })
         assertTrue(leituras.all { it[Pids.RPM] == 1000.0 && it[Pids.MAF] == 5.0 })
+    }
+
+    @Test
+    fun `um TIMEOUT do lote ja volta a 1 PID por vez no mesmo ciclo`() = runTest {
+        val t = Ecu(cruze())
+        val obd = cliente(t)
+        obd.conectar(dispositivo, "Chevrolet Cruze")
+        t.semPrompt += "010C0D0B"
+        t.enviados.clear()
+
+        val leituras = obd.lerTelemetria(intervaloMinimoMs = 1).take(3).toList()
+
+        assertEquals(1, t.enviados.count { it == "010C0D0B" })
+        assertFalse(obd.usaLoteMultiPid)
+        assertTrue(obd.eventos().any { "Multi-PID em lote desligado no TIMEOUT (010C0D0B" in it })
+        assertEquals(3, t.enviados.count { it == "010C1" })
+        assertTrue(leituras.all { it[Pids.RPM] == 1000.0 })
     }
 
     @Test
@@ -183,16 +205,31 @@ class CruzeCanV229Test {
         val t = Ecu(cruze())
         val obd = cliente(t)
         obd.conectar(dispositivo, "Chevrolet Cruze")
-        val respostaBoa = t.respostas.getValue("010C0B0D10")
-        val truncada = "410C0FA00B650D32\r\r" // sem o MAF
+        val respostaBoa = t.respostas.getValue("010C0D0B")
+        val truncada = "410C0FA00D32\r\r" // sem o MAP
 
         for (resposta in listOf(truncada, respostaBoa, truncada)) {
-            t.respostas["010C0B0D10"] = resposta
+            t.respostas["010C0D0B"] = resposta
             val leitura = obd.lerTelemetria(intervaloMinimoMs = 1).take(1).toList().single()
-            assertEquals(5.0, leitura[Pids.MAF]!!, 1e-9) // o MAF que faltou veio pela leitura individual
+            assertEquals(101.0, leitura[Pids.PRESSAO_COLETOR]!!, 1e-9) // o MAP que faltou veio pela leitura individual
         }
 
         assertTrue("falha → sucesso → falha não são 2 seguidas", obd.usaLoteMultiPid)
+    }
+
+    @Test
+    fun `ELM327 v2_1 nao sonda o CALID 0904 na conexao`() = runTest {
+        val t = Ecu(cruze())
+        val obd = cliente(t)
+        obd.conectar(dispositivo, "Chevrolet Cruze")
+        t.enviados.clear()
+
+        val impressao = obd.sondarEcu(sondarTcm = false)
+
+        assertTrue("0151" in t.enviados)
+        assertFalse("0904" in t.enviados)
+        assertTrue(impressao.calidNaoSondado)
+        assertNull(impressao.calid)
     }
 
     @Test
@@ -281,7 +318,7 @@ class CruzeCanV229Test {
             }
         }
         assertEquals(90.0, leituras.first()["GM_ATF"]!!, 1e-9)
-        assertEquals(8, t.enviados.count { it == "010C0B0D10" })
+        assertEquals(8, t.enviados.count { it == "010C0D0B" })
         assertEquals("7DF", t.cabecalho)
     }
 

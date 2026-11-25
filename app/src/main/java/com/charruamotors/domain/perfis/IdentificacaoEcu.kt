@@ -66,6 +66,8 @@ data class ImpressaoEcu(
     val tcmDetectado: Boolean? = null,
     /** Cabeçalho do TCM que respondeu (`7E1`/`7E2`). */
     val tcmCabecalho: String? = null,
+    /** O `0904` foi pulado de propósito na conexão (ELM327 v2.1); não é "sem resposta". */
+    val calidNaoSondado: Boolean = false,
 ) {
     val combustivel: CombustivelEcu? get() = codigoCombustivel?.let(CombustivelEcu::deByte)
 
@@ -73,7 +75,7 @@ data class ImpressaoEcu(
     val descricaoCombustivel: String?
         get() = codigoCombustivel?.let { "${CombustivelEcu.deByte(it).rotulo} (${"%02X".format(it)})" }
 
-    val vazia: Boolean get() = this == VAZIA
+    val vazia: Boolean get() = copy(calidNaoSondado = false) == VAZIA
 
     companion object {
         val VAZIA = ImpressaoEcu()

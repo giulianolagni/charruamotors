@@ -635,7 +635,7 @@ class SessaoObd(
         g?.registrarImpressao(impressao)
         g?.evento(
             "Impressão da ECU: combustível ${impressao.descricaoCombustivel ?: "sem resposta"}, " +
-                "CALID ${impressao.calid ?: "sem resposta"}, TCM " +
+                "CALID ${impressao.calid ?: if (impressao.calidNaoSondado) "não sondado" else "sem resposta"}, TCM " +
                 (impressao.tcmDetectado?.let { if (it) "detectado (${impressao.tcmCabecalho})" else "não detectado" } ?: "não sondado"),
             relogio(),
         )

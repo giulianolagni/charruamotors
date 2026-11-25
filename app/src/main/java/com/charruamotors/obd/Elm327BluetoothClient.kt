@@ -254,8 +254,8 @@ class Elm327BluetoothClient(
     @Volatile var usaLoteMultiPid: Boolean = false
         private set
 
-    /** Lotes seguidos que falharam no polling; em [MAX_FALHAS_LOTE_SEGUIDAS] o lote é desligado. */
-    @Volatile private var falhasLoteSeguidas = 0
+    /** Falhas seguidas de cada comando de lote no polling (ver [registrarFalhaLote]). */
+    private val falhasLote = mutableMapOf<String, Int>()
 
     /**
      * No OBD2 padrão, o câmbio `7E1` também sai com `ATCRA 7E9` explícito (v2.2.9: perfil GM/Cruze e a
@@ -680,7 +680,7 @@ class Elm327BluetoothClient(
     }
 
     /**
-     * Impressão digital da ECU (v2.2.2): `0151` (combustível) e `0904` (CALID) com o cabeçalho de
+     * Impressão digital da ECU (v2.2.2): `0151` (combustível) e `0904` (CALID; fora no ELM327 v2.1) com o cabeçalho de
      * diagnóstico e, se pedido, o TCM (`0100` em `ATSH 7E1`, depois `7E2`). Nada aqui derruba a
      * sessão: `NO DATA`, `7F` e timeout só deixam o campo nulo (só a queda do adaptador propaga, pelo
      * caminho normal do estado). O cabeçalho/filtro anteriores voltam sempre ao fim da visita ao TCM.
@@ -692,9 +692,13 @@ class Elm327BluetoothClient(
         var calid: String? = null
         var tcm: Boolean? = null
         var tcmCabecalho: String? = null
+        // v2.3.2: no clone v2.1 o `0904` multi-frame trava o firmware ~10 s e derruba o Bluetooth.
+        val calidPulado = adaptadorDaConexao?.contains(VERSAO_SEM_CALID_AUTOMATICO, ignoreCase = true) == true
         try {
             combustivel = (ObdParser.parseCombustivelEcu(sondar("0151", cabecalhoDiagnostico).orEmpty()) as? RespostaObd.Ok)?.valor
-            calid = (ObdParser.parseCalid(sondar("0904", cabecalhoDiagnostico, TIMEOUT_DTC_MS).orEmpty()) as? RespostaObd.Ok)?.valor
+            if (!calidPulado) {
+                calid = (ObdParser.parseCalid(sondar("0904", cabecalhoDiagnostico, TIMEOUT_DTC_MS).orEmpty()) as? RespostaObd.Ok)?.valor
+            }
             if (sondarTcm) {
                 tcm = false
                 val anterior = cabecalhoAtivo.takeIf { it != CABECALHO_INDEFINIDO }
@@ -716,10 +720,10 @@ class Elm327BluetoothClient(
         }
         registro.evento(
             "Impressão da ECU: combustível 0151=${combustivel?.let { "%02X".format(it) } ?: "sem resposta"}, " +
-                "CALID 0904=${calid ?: "sem resposta"}" +
+                "CALID 0904=${calid ?: if (calidPulado) "não sondado (ELM327 v2.1)" else "sem resposta"}" +
                 (tcm?.let { ", TCM=${if (it) "detectado em $tcmCabecalho" else "não detectado (7E1/7E2)"}" }.orEmpty()),
         )
-        ImpressaoEcu(combustivel, calid, tcm, tcmCabecalho)
+        ImpressaoEcu(combustivel, calid, tcm, tcmCabecalho, calidPulado)
     }
 
     /**
@@ -1413,7 +1417,7 @@ class Elm327BluetoothClient(
      */
     private suspend fun testarLoteMultiPid(suportados: Set<Int>, protocolo: String?) {
         usaLoteMultiPid = false
-        falhasLoteSeguidas = 0
+        falhasLote.clear()
         if (modoServico != null) return
         if (!protocoloCan(protocolo)) {
             registro.evento("Multi-PID em lote desligado: o protocolo (${protocolo ?: "não informado"}) não é CAN ISO 15765-4")
@@ -1452,21 +1456,24 @@ class Elm327BluetoothClient(
         return "CAN" in d || "15765" in d
     }
 
-    /** Uma falha do lote no polling: na [MAX_FALHAS_LOTE_SEGUIDAS]ª seguida o lote é desligado na sessão. */
-    private fun registrarFalhaLote(comando: String, motivo: String) {
-        falhasLoteSeguidas++
-        if (falhasLoteSeguidas < MAX_FALHAS_LOTE_SEGUIDAS || !usaLoteMultiPid) return
+    /**
+     * Uma falha do lote no polling: na [MAX_FALHAS_LOTE_SEGUIDAS]ª seguida do mesmo comando o lote é
+     * desligado na sessão. Um TIMEOUT ([semPrompt]) desliga na primeira (v2.3.2): no clone v2.1 é o
+     * buffer estourado, e cada nova tentativa custa o prazo inteiro.
+     */
+    private fun registrarFalhaLote(comando: String, motivo: String, semPrompt: Boolean) {
+        val falhas = (falhasLote[comando] ?: 0) + 1
+        falhasLote[comando] = falhas
+        if (!usaLoteMultiPid || (!semPrompt && falhas < MAX_FALHAS_LOTE_SEGUIDAS)) return
         usaLoteMultiPid = false
-        registro.evento(
-            "Multi-PID em lote desligado após $falhasLoteSeguidas falhas seguidas ($comando → $motivo); " +
-                "polling volta a 1 PID por vez",
-        )
+        val quando = if (semPrompt) "no TIMEOUT" else "após $falhas falhas seguidas"
+        registro.evento("Multi-PID em lote desligado $quando ($comando → $motivo); polling volta a 1 PID por vez")
     }
 
     /**
-     * Divide os PIDs do modo 01 do ciclo em lotes que caibam em 2 quadros CAN (o tamanho que o
-     * handshake validou: até [MAX_BYTES_RESPOSTA_LOTE] bytes e [MAX_PIDS_LOTE] PIDs). Lote de 1 PID não
-     * é lote: vai pela leitura normal.
+     * Divide os PIDs do modo 01 do ciclo em lotes de até [MAX_PIDS_LOTE] PIDs e
+     * [MAX_BYTES_RESPOSTA_LOTE] bytes (2 quadros CAN, o que o handshake validou). Lote de 1 PID não é
+     * lote: vai pela leitura normal.
      */
     private fun montarLotes(definicoes: List<DefinicaoPid>): List<List<DefinicaoPid>> {
         val lotes = mutableListOf<MutableList<DefinicaoPid>>()
@@ -1696,10 +1703,10 @@ class Elm327BluetoothClient(
         }
 
         /**
-         * Lê os PIDs do modo 01 de um [lote] num único comando (`010C0B0D10`). Devolve null se todos
-         * vieram; senão, o motivo da falha (os que faltaram ficam para a leitura individual do ciclo).
+         * Lê os PIDs do modo 01 de um [lote] num único comando (`010C0D0B`). Devolve null se todos
+         * vieram; senão, a [FalhaLote] (os que faltaram ficam para a leitura individual do ciclo).
          */
-        suspend fun lerLote(lote: List<DefinicaoPid>): String? {
+        suspend fun lerLote(lote: List<DefinicaoPid>): FalhaLote? {
             consultados += lote.map { it.comando }
             pedidosEcu++
             val comando = ObdParser.comandoLote(lote)
@@ -1720,11 +1727,15 @@ class Elm327BluetoothClient(
                 }
             }
             if (algum) respostasEcu++ else bruto?.let(ObdParser::erroElm)?.let { ultimoErro = it }
-            return if (resultados != null && resultados.values.all { it is RespostaObd.Ok }) null else motivoFalhaLote(bruto, resultados)
+            if (resultados != null && resultados.values.all { it is RespostaObd.Ok }) return null
+            return FalhaLote(motivoFalhaLote(bruto, resultados), semPrompt = bruto == null)
         }
 
         fun ciclo() = Ciclo(consultados, lidos, pedidosEcu > 0 && respostasEcu == 0, ultimoErro)
     }
+
+    /** Por que um lote falhou; [semPrompt] = TIMEOUT. */
+    private class FalhaLote(val motivo: String, val semPrompt: Boolean)
 
     /**
      * Uma requisição de montadora, decodificada para cada PID do [grupo]. Com o sufixo `1`, uma
@@ -1810,22 +1821,28 @@ class Elm327BluetoothClient(
      */
     private fun lotesDoCiclo(chaves: List<String>, estendidas: Map<String, DefinicaoPid>): Map<String, List<DefinicaoPid>> {
         if (!usaLoteMultiPid || modoServico != null) return emptyMap()
+        // Os do handshake primeiro, na mesma ordem: o 1º lote é o `010C0D0B` já validado.
         val loteaveis = chaves.filter { it in CHAVES_LOTE && it !in estendidas }
             .mapNotNull { catalogo[it]?.takeIf { d -> d.ehModo01 } }
+            .sortedBy { d -> PIDS_TESTE_LOTE.indexOf(d.comando).takeIf { it >= 0 } ?: PIDS_TESTE_LOTE.size }
         return montarLotes(loteaveis).flatMap { lote -> lote.map { it.comando to lote } }.toMap()
     }
 
     /**
      * Um lote no polling; se não vierem todos os PIDs, os que faltaram são lidos 1 a 1 no mesmo ciclo
-     * (o painel não perde a leitura) e a falha conta para o fallback ([registrarFalhaLote]).
+     * (o painel não perde a leitura) e a falha conta para o fallback ([registrarFalhaLote]). Se um
+     * lote anterior do mesmo ciclo já desligou o recurso, este vai direto 1 a 1.
      */
     private suspend fun lerLoteComFallback(coletor: Coletor, lote: List<DefinicaoPid>) {
-        val falha = coletor.lerLote(lote)
-        if (falha == null) {
-            falhasLoteSeguidas = 0
-            return
+        if (usaLoteMultiPid) {
+            val comando = ObdParser.comandoLote(lote)
+            val falha = coletor.lerLote(lote)
+            if (falha == null) {
+                falhasLote.remove(comando)
+                return
+            }
+            registrarFalhaLote(comando, falha.motivo, falha.semPrompt)
         }
-        registrarFalhaLote(ObdParser.comandoLote(lote), falha)
         for (d in lote) if (d.comando !in coletor.lidos) coletor.lerPadrao(d.comando, d)
     }
 
@@ -2169,7 +2186,7 @@ class Elm327BluetoothClient(
         cabecalhoServico = null
         cambioAtivo = false
         usaLoteMultiPid = false
-        falhasLoteSeguidas = 0
+        falhasLote.clear()
         filtroCambioPadrao = false
         usaSufixoRespostaUnica = false
         requisicoesSemSufixo = emptySet()
@@ -2243,13 +2260,16 @@ class Elm327BluetoothClient(
         val CHAVES_LOTE: Set<String> = (Pids.candidatosFilaRapida(consumoPorMaf = true) + Pids.PEDAL_ACELERADOR).toSet()
 
         /** ISO 15765-4: até 6 PIDs por pedido do modo 01. */
-        const val MAX_PIDS_LOTE = 6
+        const val MAX_PIDS_LOTE = 3
 
         /** Resposta de até 2 quadros CAN (6 + 7 bytes), como a do pedido de teste do handshake. */
         const val MAX_BYTES_RESPOSTA_LOTE = 13
 
         /** Falhas seguidas do lote no polling até voltar a 1 PID por vez. */
         const val MAX_FALHAS_LOTE_SEGUIDAS = 2
+
+        /** Adaptador em que o `0904` não é sondado na conexão (só no Checkup manual). */
+        const val VERSAO_SEM_CALID_AUTOMATICO = "v2.1"
 
         /** Marcador de "qualquer cabeçalho" (comandos AT) em [ordenarPorCabecalho]. */
         private const val NEUTRO = "*"

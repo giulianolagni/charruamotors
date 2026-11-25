@@ -139,6 +139,16 @@
             android:name=".ui.oficina.checkup.CheckupObdActivity"
             android:exported="false"
             android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
+        <!-- v2.3.1: Todos os Sensores e Gráficos em Tempo Real -->
+        <activity
+            android:name=".ui.oficina.sensores.SensoresActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity
+            android:name=".ui.oficina.sensores.GraficosActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.diagnostico.DiagnosticoActivity" />
         <activity
             android:name=".ui.painel.PersonalizarPainelActivity"
             android:exported="false"

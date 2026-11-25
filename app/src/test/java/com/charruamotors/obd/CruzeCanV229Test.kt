@@ -197,7 +197,12 @@ class CruzeCanV229Test {
 
     @Test
     fun `fora do CAN o lote nem e testado`() = runTest {
-        val t = Ecu(cruze().apply { put("ATDP", "AUTO, ISO 9141-2\r\r") })
+        val t = Ecu(
+            cruze().apply {
+                put("ATDP", "AUTO, ISO 9141-2\r\r")
+                put("ATDPN", "A3\r\r")
+            },
+        )
         val obd = cliente(t)
         obd.conectar(dispositivo, "Chevrolet Cruze")
 

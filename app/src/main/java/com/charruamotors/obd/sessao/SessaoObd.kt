@@ -43,6 +43,7 @@ import com.charruamotors.obd.log.LogsSessaoSalvos
 import com.charruamotors.obd.pid.CatalogoPids
 import com.charruamotors.obd.pid.DefinicaoPid
 import com.charruamotors.obd.pid.Pids
+import com.charruamotors.oficina.sensores.HistoricoSessao
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -279,6 +280,12 @@ class SessaoObd(
     private val _eventos = MutableSharedFlow<EventoSessao>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val eventos: SharedFlow<EventoSessao> = _eventos.asSharedFlow()
 
+    /** v2.3.1: amostras recentes e mínimo/máximo da sessão (Todos os Sensores e Gráficos). Zera a cada sessão. */
+    val historico = HistoricoSessao()
+
+    /** Marca usada nos recursos da montadora na sessão em curso (ou na última); null no OBD2 Genérico. */
+    val marcaMontadora: String? get() = marcaMontadoraAtual
+
     private var sessaoJob: Job? = null
     @Volatile private var clienteDaSessao: ObdClient? = null
     @Volatile private var gravador: GravadorLogsSessao? = null
@@ -474,6 +481,7 @@ class SessaoObd(
     ) {
         val inicioMs = relogio()
         veiculoIdSessao = veiculoId
+        historico.limpar()
         sessaoSimulada = _modo.value == ModoObd.SIMULADO
         var conectou = false
         var motivoFim = "Sessão encerrada"
@@ -589,6 +597,7 @@ class SessaoObd(
             porPerfil != null -> porPerfil.aplicar(base)
             else -> estimadorCambio.aplicar(base)
         }
+        historico.registrar(dados.valores, relogio())
         _dados.value = dados
         _amostras.tryEmit(dados)
         telemetria.publicar(dados, conectado = true)

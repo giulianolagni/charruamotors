@@ -337,4 +337,40 @@ Toque em “Novo abastecimento” para começar.</string>
         <item quantity="other">Baseado em %d logs reais deste veículo</item>
     </plurals>
     <string name="simulado_fonte_sintetica">Simulação sintética (sem logs reais)</string>
+
+    <!-- v2.3.1: Pacote de Oficina -->
+    <string name="oficina_card_sensores">Todos os Sensores</string>
+    <string name="oficina_card_sensores_desc">Inspeção rápida: tudo o que a ECU responde, com mínimo/máximo, busca e o atalho + Painel</string>
+    <string name="oficina_card_graficos">Gráficos em Tempo Real</string>
+    <string name="oficina_card_graficos_desc">Osciloscópio ao vivo de 1 a 4 sensores, com pausa e cursor de leitura</string>
+    <string name="sensores_titulo">Todos os Sensores</string>
+    <string name="sensores_busca">Buscar por nome ou PID</string>
+    <string name="sensores_so_ativos">Só ativos</string>
+    <string name="sensores_todos">Todos do perfil</string>
+    <string name="sensores_resumo">%1$d na lista · %2$d responderam nesta sessão</string>
+    <string name="sensores_vazio">Nenhum sensor para mostrar. Ajuste a busca ou aguarde as primeiras leituras.</string>
+    <string name="sensores_extremos">Mín %1$s · Máx %2$s</string>
+    <string name="sensores_fixar_no_painel">Fixar %1$s no Painel</string>
+    <string name="sensores_tirar_do_painel">Tirar %1$s do Painel</string>
+    <string name="sensores_mostrador_adicionado">Mostrador adicionado ao Painel deste veículo</string>
+    <string name="sensores_mostrador_removido">Mostrador removido do Painel</string>
+    <string name="sensores_lista_adicionado">Fixado na lista rápida do Painel (ela passa a mostrar só os fixados)</string>
+    <string name="sensores_lista_removido">Removido da lista rápida do Painel</string>
+    <string name="sensores_ultimo_mostrador">O Painel precisa de pelo menos um mostrador</string>
+    <string name="graficos_titulo">Gráficos em Tempo Real</string>
+    <string name="graficos_30s">30 s</string>
+    <string name="graficos_60s">60 s</string>
+    <string name="graficos_120s">120 s</string>
+    <string name="graficos_pausar">Pausar</string>
+    <string name="graficos_retomar">Retomar</string>
+    <string name="graficos_zerar">Zerar</string>
+    <string name="graficos_sensores">Sensores</string>
+    <string name="graficos_aplicar">Aplicar</string>
+    <string name="graficos_escolher">Sensores do gráfico (até %1$d)</string>
+    <string name="graficos_limite">O gráfico mostra até %1$d sensores</string>
+    <string name="graficos_sem_dados">Aguardando leituras desta sessão…</string>
+    <string name="graficos_dica_cursor">Arraste o dedo no gráfico para ler os valores</string>
+    <string name="graficos_cursor">Cursor: %1$s s antes do fim da janela</string>
+    <string name="graficos_legenda">● %1$s: %2$s %3$s · pico %4$s</string>
+    <string name="graficos_legenda_cursor">● %1$s: %2$s %3$s</string>
 </resources>

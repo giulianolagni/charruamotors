@@ -208,6 +208,127 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- v2.3.0: status separado do adaptador ELM327 e da ECU, e o resumo técnico quando conectado -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_status_elm_ecu"
+            style="@style/Widget.Material3.CardView.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/espaco_pequeno"
+            app:cardCornerRadius="@dimen/raio_card">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="@dimen/espaco_medio"
+                android:paddingTop="@dimen/espaco_pequeno"
+                android:paddingEnd="@dimen/espaco_medio"
+                android:paddingBottom="@dimen/espaco_pequeno">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:id="@+id/grupo_status_elm"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <View
+                                android:id="@+id/ponto_elm"
+                                android:layout_width="10dp"
+                                android:layout_height="10dp"
+                                android:background="@drawable/ponto_status"
+                                android:backgroundTint="@color/status_espera" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="@dimen/espaco_pequeno"
+                                android:text="@string/status_elm_titulo"
+                                android:textAppearance="?attr/textAppearanceLabelLarge" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/texto_status_elm"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="18dp"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="@color/texto_secundario"
+                            tools:text="Conectado (ELM327 v2.1)" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/grupo_status_ecu"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/espaco_pequeno"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <View
+                                android:id="@+id/ponto_ecu"
+                                android:layout_width="10dp"
+                                android:layout_height="10dp"
+                                android:background="@drawable/ponto_status"
+                                android:backgroundTint="@color/status_espera" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="@dimen/espaco_pequeno"
+                                android:text="@string/status_ecu_titulo"
+                                android:textAppearance="?attr/textAppearanceLabelLarge" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/texto_status_ecu"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="18dp"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="@color/texto_secundario"
+                            tools:text="Conectado · Modo 21 (M-OBD / KWP)" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Leitura rápida: Protocolo, VIN, CALID e TCM (se detectado) -->
+                <TextView
+                    android:id="@+id/texto_resumo_tecnico"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/espaco_pequeno"
+                    android:fontFamily="monospace"
+                    android:lineSpacingExtra="2dp"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textIsSelectable="true"
+                    android:visibility="gone"
+                    tools:text="Protocolo  ISO 15765-4 (CAN 11/500)
+VIN        8AJFZ29G4D6012345
+CALID      896610K770
+TCM        7E1"
+                    tools:visibility="visible" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- Modo Simulado: de onde vêm os dados (logs reais do veículo ou simulador sintético) -->
         <TextView
             android:id="@+id/texto_fonte_simulacao"

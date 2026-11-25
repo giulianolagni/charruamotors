@@ -121,6 +121,11 @@ data class InfoConexao(
     val comandosServico: List<String> = emptyList(),
     /** Espelhos ativos nos modos 21/22, já com o comando canônico do sensor (`010C`...) e o rótulo real (`7E0 · 210C`). */
     val espelhos: List<DefinicaoPid> = emptyList(),
+    /**
+     * v2.3.0: o adaptador como ele se identificou no ATZ/ATI (`ELM327 v2.1`), publicado logo
+     * depois da identificação (ainda conectando à ECU); null = ainda não respondeu nesta conexão.
+     */
+    val adaptador: String? = null,
 ) {
     companion object {
         const val NOME_OBD2_PADRAO = "OBD2 Padrão"

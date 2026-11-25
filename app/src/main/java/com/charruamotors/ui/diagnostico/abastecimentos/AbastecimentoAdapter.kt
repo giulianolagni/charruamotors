@@ -9,6 +9,7 @@ import com.charruamotors.R
 import com.charruamotors.databinding.ItemAbastecimentoBinding
 import com.charruamotors.databinding.ItemIndicadoresAbastecimentoBinding
 import com.charruamotors.domain.model.Abastecimento
+import com.charruamotors.ui.util.comoConsumo
 import com.charruamotors.ui.util.comoDecimal
 import com.charruamotors.ui.util.comoMilhar
 import com.charruamotors.ui.util.comoMoeda
@@ -81,7 +82,8 @@ class IndicadoresAbastecimentoAdapter : RecyclerView.Adapter<IndicadoresAbasteci
     override fun onBindViewHolder(holder: ViewHolder, position: Int) = with(holder.binding) {
         val context = root.context
         val vazio = context.getString(R.string.valor_indisponivel)
-        valorConsumo.text = consumo?.let { context.getString(R.string.abastecimento_valor_consumo, it.comoDecimal(1)) } ?: vazio
+        val conversor = (context.applicationContext as com.charruamotors.CharruaMotorsApp).preferenciasApp.config.value.conversor
+        valorConsumo.text = consumo?.comoConsumo(conversor) ?: vazio
         valorCustoKm.text = custoPorKm?.let { context.getString(R.string.abastecimento_valor_custo_km, it.comoMoeda()) } ?: vazio
     }
 

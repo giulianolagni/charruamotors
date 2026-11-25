@@ -192,19 +192,27 @@ class ClusterPainelActivity : AppCompatActivity() {
         desenhar(conversor)
     }
 
+    /** v2.3.0: as bolinhas são do perfil do carro ativo (trocar no Cruze não mexe na SW4). */
     private fun carregarEscolhas() {
-        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        for (i in escolhidos.indices) escolhidos[i] = SensorPainel.deCodigo(prefs.getString("bolinha$i", null))
+        val cluster = app.perfisCarro.ler(app.perfisCarro.veiculoAtivo.value).cluster
+        for (i in escolhidos.indices) escolhidos[i] = cluster.getOrNull(i)
     }
 
     private fun salvarEscolhas() {
-        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
-            escolhidos.forEachIndexed { i, s -> if (s == null) remove("bolinha$i") else putString("bolinha$i", s.name) }
-        }.apply()
+        val id = app.perfisCarro.veiculoAtivo.value
+        if (id <= 0) return
+        app.perfisCarro.atualizar(id) { it.copy(cluster = escolhidos.toList()) }
     }
 
     companion object {
-        private const val PREFS = "cluster_painel"
+        /** Arquivo das bolinhas até a v2.2.9 (global); migrado na v2.3.0 para o veículo padrão. */
+        const val PREFS_LEGADO = "cluster_painel"
+
+        /** Bolinhas salvas na v2.2.9 (só para a migração). */
+        fun lerClusterLegado(contexto: Context): List<SensorPainel?> {
+            val prefs = contexto.getSharedPreferences(PREFS_LEGADO, Context.MODE_PRIVATE)
+            return List(com.charruamotors.direcao.painel.ClusterPainel.BOLINHAS) { i -> SensorPainel.deCodigo(prefs.getString("bolinha$i", null)) }
+        }
         private const val TAG_PADDING_BASE = 0x7F0C0001
 
         /** O cluster está na tela (evita abri-lo duas vezes). */

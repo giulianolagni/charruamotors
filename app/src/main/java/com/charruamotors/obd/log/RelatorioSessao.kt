@@ -1,5 +1,6 @@
 package com.charruamotors.obd.log
 
+import com.charruamotors.sistema.unidades.UnidadeConsumo
 import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.calculo.ComputadorBordo
 import com.charruamotors.domain.calculo.EstequiometriaFlex
@@ -383,7 +384,8 @@ object RelatorioSessaoTxt {
             campo("Tensão mín. / máx.", if (tMin != null && tMax != null) "${numero(tMin, 1)} V / ${numero(tMax, 1)} V" else "—")
             val viagem = e.consumo
             campo("Distância percorrida", if (viagem.distanciaKm > 0.0) "${numero(viagem.distanciaKm, 1)} km" else "—")
-            campo("Consumo médio (km/L)", viagem.mediaKmPorLitro?.let { "${numero(it, 1)} km/L" } ?: "—")
+            // v2.3.0: as duas unidades de consumo (km/L e L/100km), qualquer que seja a escolha do app.
+            campo("Consumo médio", viagem.mediaKmPorLitro?.let { "${numero(it, 1)} km/L · ${numero(UnidadeConsumo.L_100KM.deKmPorLitro(it), 1)} L/100km" } ?: "—")
             campo("Combustível estimado (L)", if (viagem.litros > 0.0) "${numero(viagem.litros, 2)} L (via MAF)" else "—")
             e.etanol.maximo?.let { eMax ->
                 val eMin = e.etanol.minimo ?: eMax

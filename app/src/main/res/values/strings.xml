@@ -10,10 +10,11 @@
 
     <!-- Dashboard -->
     <string name="dashboard_boas_vindas">Olá, %1$s</string>
-    <string name="dashboard_lista_vazia">Nenhum veículo cadastrado.\nToque em “Novo veículo” para começar.</string>
+    <string name="dashboard_lista_vazia">Nenhum carro cadastrado.
+Toque em “Novo veículo” para começar.</string>
     <string name="botao_novo_veiculo">Novo veículo</string>
     <string name="item_veiculo_detalhes">%1$s km • %2$s</string>
-    <string name="item_veiculo_consumo">Consumo médio: %1$s km/l</string>
+    <string name="item_veiculo_consumo">Consumo médio: %1$s</string>
     <string name="item_veiculo_sem_consumo">Sem dados de consumo</string>
     <string name="item_veiculo_proxima_manutencao">Próxima manutenção: %1$s</string>
     <string name="item_veiculo_sem_previsao">Sem manutenção prevista</string>

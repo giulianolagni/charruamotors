@@ -3,19 +3,57 @@
      inteligente e Personalizar Painel 2.0. -->
 <resources>
     <!-- Toolbar das 4 abas: veículo ativo -->
-    <string name="veiculo_seletor_descricao">Veículo ativo. Toque para trocar de veículo</string>
+    <string name="veiculo_seletor_descricao">Carro ativo (perfil isolado). Toque para trocar de carro</string>
     <string name="veiculo_toolbar_favorito">%1$s · ★ Favorito</string>
-    <string name="veiculos_seletor_titulo">Trocar de veículo</string>
-    <string name="veiculos_seletor_item_favorito">★ %1$s (%2$s)</string>
-    <string name="veiculos_seletor_item">%1$s (%2$s)</string>
-    <string name="veiculos_gerenciar">Meus Veículos (favorito e cadastro)…</string>
+    <string name="veiculos_seletor_titulo">Trocar de carro (perfil)</string>
+    <string name="veiculos_seletor_item_favorito">● %1$s · %3$s (%2$s)</string>
+    <string name="veiculos_seletor_item">%1$s · %3$s (%2$s)</string>
+    <string name="veiculos_gerenciar">Meus Carros (editar, duplicar, novo)…</string>
 
     <!-- Meus Veículos -->
-    <string name="veiculos_titulo">Meus Veículos</string>
+    <string name="veiculos_titulo">Meus Carros</string>
     <string name="veiculos_dica_favorito">★ = favorito: o app abre direto nele, já no Painel.</string>
-    <string name="veiculos_marcar_favorito">Marcar %1$s como favorito</string>
-    <string name="veiculos_e_favorito">%1$s é o veículo favorito</string>
-    <string name="veiculos_favorito_definido">★ %1$s agora é o favorito: o app abre direto nele</string>
+    <string name="veiculos_marcar_favorito">Selecionar %1$s como carro ativo</string>
+    <string name="veiculos_e_favorito">%1$s é o carro ativo</string>
+    <string name="veiculos_favorito_definido">%1$s selecionado: Painel, HUD e Cluster passam a usar o perfil dele</string>
+    <!-- v2.3.0: status separado ELM x ECU -->
+    <string name="status_elm_titulo">Adaptador ELM327</string>
+    <string name="status_ecu_titulo">ECU do veículo</string>
+    <string name="status_elm_ecu_descricao">Adaptador ELM327: %1$s. ECU do veículo: %2$s</string>
+    <!-- v2.3.0: perfis isolados por veículo -->
+    <string name="veiculo_toolbar_tag">%1$s · %2$s</string>
+    <string name="carros_acao_selecionar">Selecionar (carro ativo)</string>
+    <string name="carros_acao_editar">Editar cadastro</string>
+    <string name="carros_acao_perfil_tecnico">Perfil técnico…</string>
+    <string name="carros_acao_duplicar">Duplicar</string>
+    <string name="carros_acao_mapeamento">Sessão de Mapeamento (Log Bruto)</string>
+    <string name="carros_mais_acoes">Mais ações de %1$s</string>
+    <string name="carros_perfil_ativo">● Ativo · %1$s</string>
+    <string name="carros_perfil_tag">%1$s</string>
+    <string name="perfil_tecnico_titulo">Perfil técnico · %1$s</string>
+    <string name="perfil_tecnico_faixas">Perfil de faixas: %1$s</string>
+    <string name="perfil_tecnico_cambio">Câmbio: %1$s</string>
+    <string name="perfil_tecnico_camada">Camada preferida: %1$s</string>
+    <string name="perfil_tecnico_bluetooth">Bluetooth do carro: %1$s</string>
+    <string name="perfil_tecnico_auto">Automático pelo cadastro (%1$s)</string>
+    <string name="perfil_tecnico_generico">OBD2 Genérico (sem PIDs de montadora)</string>
+    <string name="perfil_tecnico_cambio_auto">Do perfil (%1$s)</string>
+    <string name="perfil_tecnico_cambio_nenhum">nenhum</string>
+    <string name="perfil_tecnico_bluetooth_nenhum">não definido (usa o das Configurações)</string>
+    <string name="perfil_tecnico_bluetooth_remover">Remover o Bluetooth deste carro</string>
+    <string name="perfil_tecnico_salvo">Perfil técnico de %1$s atualizado</string>
+    <string name="perfil_tecnico_sessao_ativa">
+
+Vale a partir da próxima conexão (há uma sessão em andamento).</string>
+    <string name="carro_novo_generico_titulo">Carro novo no perfil OBD2 Genérico</string>
+    <string name="carro_novo_generico_mensagem">%1$s não tem perfil específico no catálogo: ele começa limpo no OBD2 Genérico, sem herdar os PIDs proprietários da SW4 nem do Cruze, com Painel e HUD próprios.
+
+A Sessão de Mapeamento liga o Log Bruto (todo comando e resposta no .txt) e conecta no carro, para capturar o primeiro log e adaptar um perfil depois.</string>
+    <string name="carro_novo_mapear">Sessão de Mapeamento</string>
+    <string name="carro_novo_depois">Depois</string>
+    <string name="mapeamento_iniciada">Sessão de Mapeamento: Log Bruto ligado. Conectando no carro…</string>
+    <string name="veiculo_titulo_duplicar">Duplicar carro</string>
+    <string name="veiculo_duplicado_dica">Cópia de %1$s: informe a placa do novo carro. Painel, HUD, Cluster e o perfil técnico vêm junto.</string>
     <string name="botao_abrir_painel">Abrir Painel</string>
 
     <!-- Painel: card de conexão inteligente -->

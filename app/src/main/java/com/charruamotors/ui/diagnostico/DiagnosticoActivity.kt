@@ -18,7 +18,7 @@ import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.databinding.ActivityDiagnosticoBinding
 import com.charruamotors.domain.model.Veiculo
-import com.charruamotors.sistema.navegacao.VeiculoFavorito
+import com.charruamotors.ui.carros.PerfisCarroUi
 import com.charruamotors.ui.dashboard.DashboardActivity
 import com.charruamotors.ui.navegacao.MenuLateralGlobal
 import com.charruamotors.ui.painel.PersonalizarPainelActivity
@@ -75,6 +75,10 @@ class DiagnosticoActivity : AppCompatActivity() {
             return
         }
 
+        // v2.3.0: o carro aberto nas abas é o carro ativo (Painel, HUD e Cluster leem o perfil dele).
+        // Recriada (tema, rotação): segue o ativo, que pode ter mudado nas Configurações.
+        if (savedInstanceState == null) app.ativarVeiculo(viewModel.veiculoId, null)
+
         binding = ActivityDiagnosticoBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.appbar.aplicarInsetsDoSistema(base = false)
@@ -119,32 +123,39 @@ class DiagnosticoActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.veiculo.combine(app.preferenciasAutoConexao.config) { v, c -> v to c.veiculoId }
-                    .collect { (veiculo, favorito) -> if (veiculo != null) mostrarVeiculo(veiculo, favorito) }
+                launch {
+                    viewModel.veiculo.combine(app.perfisCarro.alteracoes) { v, _ -> v }
+                        .collect { veiculo -> if (veiculo != null) mostrarVeiculo(veiculo) }
+                }
+                launch {
+                    // Outro carro selecionado fora daqui (Configurações → veículo padrão, Bluetooth do
+                    // carro, Meus Carros): as abas trocam para ele, sem misturar perfis.
+                    app.perfisCarro.veiculoAtivo.collect { ativo ->
+                        if (ativo > 0 && ativo != viewModel.veiculoId && !trocando) trocarVeiculo(ativo)
+                    }
+                }
             }
         }
     }
 
-    private fun mostrarVeiculo(veiculo: Veiculo, favorito: Long) {
+    /** `Toyota SW4 2013` e, embaixo, a tag do perfil isolado: `Modo 21 · ABC-1234`. */
+    private fun mostrarVeiculo(veiculo: Veiculo) {
+        val tag = PerfisCarroUi.tag(app, veiculo)
         binding.textoVeiculoToolbar.text = veiculo.descricao
-        binding.textoPlacaToolbar.text = if (veiculo.id == favorito) {
-            getString(R.string.veiculo_toolbar_favorito, veiculo.placaFormatada)
-        } else {
-            veiculo.placaFormatada
-        }
-        binding.seletorVeiculo.contentDescription = "${veiculo.descricao}. ${getString(R.string.veiculo_seletor_descricao)}"
+        binding.textoPlacaToolbar.text = getString(R.string.veiculo_toolbar_tag, tag, veiculo.placaFormatada)
+        binding.seletorVeiculo.contentDescription = "${veiculo.descricao}, $tag. ${getString(R.string.veiculo_seletor_descricao)}"
     }
 
     /** Toque no nome do veículo: troca rápida (★ = favorito) ou Meus Veículos para gerenciar. */
     private fun escolherVeiculoRapido() {
         lifecycleScope.launch {
             val veiculos = app.veiculoRepository.observarTodos().first()
-            val favorito = VeiculoFavorito.idEfetivo(veiculos.map { it.id }, app.preferenciasAutoConexao.config.value.veiculoId)
             val opcoes = veiculos.map { v ->
                 getString(
-                    if (v.id == favorito) R.string.veiculos_seletor_item_favorito else R.string.veiculos_seletor_item,
+                    if (v.id == viewModel.veiculoId) R.string.veiculos_seletor_item_favorito else R.string.veiculos_seletor_item,
                     v.descricao,
                     v.placaFormatada,
+                    PerfisCarroUi.tag(app, v),
                 )
             } + getString(R.string.veiculos_gerenciar)
             val atual = veiculos.indexOfFirst { it.id == viewModel.veiculoId }
@@ -163,8 +174,17 @@ class DiagnosticoActivity : AppCompatActivity() {
         }
     }
 
-    /** Recria a tela no outro veículo, na mesma aba (as abas e ViewModels são por veículo). */
+    /** Já recriando para outro carro (evita abrir a tela duas vezes). */
+    private var trocando = false
+
+    /**
+     * Recria a tela no outro veículo, na mesma aba (as abas e ViewModels são por veículo); o novo
+     * carro vira o ativo, com o perfil isolado dele.
+     */
     private fun trocarVeiculo(id: Long) {
+        if (trocando) return
+        trocando = true
+        app.ativarVeiculo(id, null)
         startActivity(intent(this, id, DiagnosticoPagerAdapter.paginaDoItem(binding.navegacao.selectedItemId)))
         finish()
     }
@@ -203,6 +223,9 @@ class DiagnosticoActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_VEICULO_ID = "extra_veiculo_id"
         const val EXTRA_ABA = "extra_aba"
+
+        /** v2.3.0: abre já conectando, com o Log Bruto ligado (Sessão de Mapeamento de um carro novo). */
+        const val EXTRA_MAPEAMENTO = "extra_mapeamento"
         private const val TAG = "DiagnosticoActivity"
 
         fun intent(context: Context, veiculoId: Long, aba: Int = DiagnosticoPagerAdapter.ABA_PAINEL): Intent =

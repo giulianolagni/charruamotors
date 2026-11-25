@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v2.3.0: ações de cada carro em Meus Carros (perfis isolados). -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/acao_carro_selecionar"
+        android:title="@string/carros_acao_selecionar" />
+    <item
+        android:id="@+id/acao_carro_editar"
+        android:title="@string/carros_acao_editar" />
+    <item
+        android:id="@+id/acao_carro_perfil"
+        android:title="@string/carros_acao_perfil_tecnico" />
+    <item
+        android:id="@+id/acao_carro_duplicar"
+        android:title="@string/carros_acao_duplicar" />
+    <item
+        android:id="@+id/acao_carro_mapeamento"
+        android:title="@string/carros_acao_mapeamento" />
+</menu>

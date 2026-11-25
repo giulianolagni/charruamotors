@@ -39,6 +39,13 @@ interface ObdClient {
     suspend fun conectar(dispositivo: DispositivoObd, marcaVeiculo: String? = null): Result<Unit>
 
     /**
+     * v2.3.0: camada preferida do perfil do carro — o serviço (`21`) que a camada 3 da cascata tenta
+     * primeiro na próxima [conectar], antes da ordem da marca. Null = só a marca decide. Clientes
+     * sem cascata (o simulado) ignoram.
+     */
+    fun definirServicoPreferido(servico: String?) = Unit
+
+    /**
      * Fluxo frio de leituras em tempo real, emitindo um [DadosObd] a cada [intervaloMs] com os
      * [comandos] pedidos que o veículo suporta (`null` = todos os suportados). Menos comandos =
      * ciclos mais rápidos no ELM327. Termina se a conexão for perdida.

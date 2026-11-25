@@ -124,6 +124,7 @@ enum class SensorPainel(
         mapOf(
             "km/L" to EscalaGauge(0f, 20f, null, 5, 4),
             "MPG" to EscalaGauge(0f, 50f, null, 5, 5),
+            "L/100km" to EscalaGauge(0f, 30f, null, 6, 5),
         ),
     ),
 

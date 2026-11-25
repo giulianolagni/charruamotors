@@ -1,5 +1,6 @@
 package com.charruamotors.obd.sessao
 
+import com.charruamotors.carros.PerfilCarro
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
 import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.calculo.EstequiometriaFlex
@@ -93,14 +94,24 @@ data class VeiculoSessao(
     val resolucao: ResolucaoPerfil? = null,
     /** Limites do cadastro (água, ATF, alternador), reaplicados se a sessão trocar o perfil genérico (v2.2.2). */
     val limites: LimitesProtecao? = null,
+    /**
+     * v2.3.0: marca usada nos recursos da montadora (fallback 21/22 pela marca, PIDs estendidos,
+     * estimador de marcha GM); null no perfil OBD2 Genérico/padrão — o carro não herda nada da SW4 nem do Cruze.
+     */
+    val marcaMontadora: String? = marca,
+    /** v2.3.0: serviço que a camada 3 tenta primeiro (`21` com a camada Modo 21 do perfil). */
+    val servicoPreferido: String? = null,
+    /** v2.3.0: câmbio escolhido no perfil técnico do carro (vale sobre o do perfil exato). */
+    private val cambioEscolhido: PerfilCambio? = null,
 ) {
     /** Câmbio do perfil exato (estima a marcha dos automáticos sem regra própria); null nos genéricos. */
     val cambio: PerfilCambio?
-        get() = resolucao?.takeIf { !it.generico }?.preset?.perfilCambio
+        get() = cambioEscolhido ?: resolucao?.takeIf { !it.generico }?.preset?.perfilCambio
 
     companion object {
-        fun de(v: Veiculo): VeiculoSessao {
-            val resolucao = ResolucaoPerfil.deVeiculo(v)
+        /** Veículo do cadastro com o [perfil] isolado dele (v2.3.0: faixas, câmbio e camada escolhidos). */
+        fun de(v: Veiculo, perfil: PerfilCarro = PerfilCarro(v.id)): VeiculoSessao {
+            val resolucao = perfil.resolver(v)
             return VeiculoSessao(
                 id = v.id,
                 descricao = v.descricao,
@@ -114,6 +125,9 @@ data class VeiculoSessao(
                 ano = v.ano,
                 resolucao = resolucao,
                 limites = LimitesProtecao.deVeiculo(v),
+                marcaMontadora = perfil.marcaMontadora(v.marca),
+                servicoPreferido = perfil.servicoPreferido,
+                cambioEscolhido = perfil.perfilCambioId?.let { perfil.cambio(resolucao) },
             )
         }
     }
@@ -148,6 +162,8 @@ data class EstadoSessao(
      * encerrá-la — só o botão Desconectar ou a ECU muda (ignição desligada). Zera com a sessão.
      */
     val assumidaPeloUsuario: Boolean = false,
+    /** v2.3.0: id do veículo da sessão (recordes e perfil isolado); 0 = sem veículo vinculado. */
+    val veiculoId: Long = 0,
 ) {
     val ativa: Boolean get() = fase != FaseSessao.Inativa
     val automatica: Boolean get() = ativa && origem == OrigemSessao.AUTOMATICA
@@ -268,6 +284,9 @@ class SessaoObd(
     @Volatile private var gravador: GravadorLogsSessao? = null
     @Volatile private var motivoPedido: String? = null
     @Volatile private var marcaAtual: String? = null
+
+    /** v2.3.0: marca para os recursos da montadora (null no OBD2 Genérico); ver [VeiculoSessao.marcaMontadora]. */
+    @Volatile private var marcaMontadoraAtual: String? = null
 
     /** Veículo e modo da sessão em curso, para o aprendizado de logs reais no encerramento. */
     @Volatile private var veiculoIdSessao: Long = 0
@@ -438,7 +457,7 @@ class SessaoObd(
         val temLambda = (Pids.COMANDOS_LAMBDA_MEDIDO + Pids.LAMBDA_COMANDADO).any { it in suportados }
         if (temLambda && combustivelAtual != TipoCombustivel.DIESEL) add(DefinicaoPid.RELACAO_AF_REAL)
         if (CambioA750f.CHAVE_ALAVANCA in suportados && CambioA750f.CHAVE_MARCHA !in suportados) add(DefinicaoPid.MARCHA_ESTIMADA_A750F)
-        else if ((PresetVeiculo.marcaGm(marcaAtual) || estimadorPerfil != null) && CambioA750f.CHAVE_MARCHA !in suportados) {
+        else if ((PresetVeiculo.marcaGm(marcaMontadoraAtual) || estimadorPerfil != null) && CambioA750f.CHAVE_MARCHA !in suportados) {
             add(DefinicaoPid.MARCHA_ESTIMADA_A750F)
         }
     }
@@ -462,6 +481,7 @@ class SessaoObd(
         try {
             val veiculo = if (veiculoId > 0) runCatching { buscarVeiculo(veiculoId) }.getOrNull() else null
             marcaAtual = veiculo?.marca
+            marcaMontadoraAtual = veiculo?.marcaMontadora
             veiculoAtual = veiculo
             _cambioAtivo.value = veiculo?.cambio
             estimadorCambio.reiniciar()
@@ -481,7 +501,7 @@ class SessaoObd(
                 cli.definirLogCompleto(logBruto)
                 cli.observarRegistro(g::registrarEntrada)
             }
-            _sessao.update { it.copy(veiculo = veiculo?.nomeCurto, gravandoLogs = g != null) }
+            _sessao.update { it.copy(veiculo = veiculo?.nomeCurto, gravandoLogs = g != null, veiculoId = if (veiculo != null) veiculoId else 0) }
             g?.evento("Iniciada (${descreverOrigem(origem, gatilho)}) com ${dispositivo.nome} (${dispositivo.endereco})", relogio())
 
             if (origem == OrigemSessao.AUTOMATICA && tempos.esperaEcuMs > 0) {
@@ -492,7 +512,8 @@ class SessaoObd(
             for (tentativa in 1..tentativas) {
                 _sessao.update { it.copy(fase = FaseSessao.Conectando(tentativa, tentativas)) }
                 if (tentativas > 1) g?.evento("Tentativa de conexão $tentativa/$tentativas", relogio())
-                val resultado = cli.conectar(dispositivo, veiculo?.marca)
+                cli.definirServicoPreferido(veiculo?.servicoPreferido)
+                val resultado = cli.conectar(dispositivo, veiculo?.marcaMontadora)
                 if (resultado.isSuccess) {
                     conectou = true
                     break
@@ -539,7 +560,8 @@ class SessaoObd(
         launch { identificarVeiculo(cli, veiculo, g) }
         launch {
             _perfil.value = null
-            val perfil = withTimeoutOrNull(tempos.prazoPerfilMs) { cli.ativarPerfilFabricante(veiculo?.marca) }
+            // v2.3.0: no OBD2 Genérico/padrão a marca não vai (nenhum PID proprietário da montadora).
+            val perfil = withTimeoutOrNull(tempos.prazoPerfilMs) { cli.ativarPerfilFabricante(veiculo?.marcaMontadora) }
                 ?: ResultadoPerfil.Indisponivel(veiculo?.marca ?: "montadora", "a ECU não respondeu no prazo")
             _perfil.value = perfil
             if (perfil is ResultadoPerfil.Ativo) {
@@ -563,7 +585,7 @@ class SessaoObd(
         val base = comCalculados(comVelocidadeGps(daEcu), combustivelAtual)
         val porPerfil = estimadorPerfil
         val dados = when {
-            PresetVeiculo.marcaGm(marcaAtual) -> estimadorCambioGm.aplicar(base)
+            PresetVeiculo.marcaGm(marcaMontadoraAtual) -> estimadorCambioGm.aplicar(base)
             porPerfil != null -> porPerfil.aplicar(base)
             else -> estimadorCambio.aplicar(base)
         }

@@ -26,6 +26,7 @@ import com.charruamotors.sistema.permissoes.LeitorPermissoes
 import com.charruamotors.sistema.preferencias.ConfigApp
 import com.charruamotors.sistema.preferencias.TemaApp
 import com.charruamotors.sistema.unidades.SistemaUnidades
+import com.charruamotors.sistema.unidades.UnidadeConsumo
 import com.charruamotors.sistema.unidades.UnidadePressao
 import com.charruamotors.BuildConfig
 import com.charruamotors.ui.assistente.AssistenteActivity
@@ -57,6 +58,9 @@ class ConfiguracoesActivity : AppCompatActivity() {
     private val dialogos = DialogosCaixaPreta(this) { solicitador.solicitarBluetooth() }
     private val atualizador = AtualizadorApp(this)
 
+    /** v2.3.0: Cópia de segurança (exportar/importar .json pelo SAF). */
+    private val backup = ControladorBackup(this) { binding.root }
+
     /** Localização precisa (o provedor GPS exige a FINE; a COARSE vai junto, como o Android 12+ pede). */
     private val pedirLocalizacao = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { resultado ->
         if (resultado[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
@@ -85,6 +89,8 @@ class ConfiguracoesActivity : AppCompatActivity() {
         binding.botaoChecklist.setOnClickListener { startActivity(ChecklistPermissoesActivity.intent(this)) }
         binding.textoVersaoInstalada.text = getString(R.string.config_atualizacoes_descricao, BuildConfig.VERSION_NAME)
         binding.botaoVerificarAtualizacoes.setOnClickListener { atualizador.verificarManualmente() }
+        binding.botaoBackupExportar.setOnClickListener { backup.exportar() }
+        binding.botaoBackupImportar.setOnClickListener { backup.importar() }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -187,6 +193,11 @@ class ConfiguracoesActivity : AppCompatActivity() {
             val sistema = if (id == R.id.botao_sistema_imperial) SistemaUnidades.IMPERIAL else SistemaUnidades.METRICO
             if (sistema != prefsApp.sistemaUnidades) prefsApp.definirSistemaUnidades(sistema)
         }
+        grupoUnidadeConsumo.addOnButtonCheckedListener { _, id, marcado ->
+            if (!marcado) return@addOnButtonCheckedListener
+            val consumo = if (id == R.id.botao_consumo_l_100km) UnidadeConsumo.L_100KM else UnidadeConsumo.KM_L
+            if (consumo != prefsApp.unidadeConsumo) prefsApp.definirUnidadeConsumo(consumo)
+        }
         grupoUnidade.addOnButtonCheckedListener { _, id, marcado ->
             if (!marcado) return@addOnButtonCheckedListener
             prefsApp.definirUnidadePressao(
@@ -218,6 +229,11 @@ class ConfiguracoesActivity : AppCompatActivity() {
         textoSistemaUnidades.setText(if (imperial) R.string.config_sistema_imperial_descricao else R.string.config_sistema_metrico_descricao)
         // No imperial a pressão é sempre psi: a escolha de kPa/bar só vale no métrico.
         grupoUnidade.isEnabled = !imperial
+        val consumo = if (config.unidadeConsumo == UnidadeConsumo.L_100KM) R.id.botao_consumo_l_100km else R.id.botao_consumo_km_l
+        if (grupoUnidadeConsumo.checkedButtonId != consumo) grupoUnidadeConsumo.check(consumo)
+        // No imperial o consumo é sempre MPG: a escolha de km/L ou L/100km só vale no métrico.
+        grupoUnidadeConsumo.isEnabled = !imperial
+        textoUnidadeConsumo.setText(if (imperial) R.string.config_unidade_consumo_imperial else R.string.config_unidade_consumo_descricao)
         textoUnidadePressao.setText(if (imperial) R.string.config_unidade_imperial else R.string.config_unidade_descricao)
     }
 

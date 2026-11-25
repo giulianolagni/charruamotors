@@ -5,7 +5,7 @@
     <string name="menu_abrir">Abrir menu</string>
     <string name="menu_secao_navegacao">Navegação rápida</string>
     <string name="menu_secao_sistema">Sistema &amp; App</string>
-    <string name="menu_veiculos">Meus Veículos (Trocar / Favorito)</string>
+    <string name="menu_veiculos">Meus Carros (trocar / perfis)</string>
     <string name="menu_configuracoes">Configurações</string>
     <string name="menu_checklist">Checklist de Permissões</string>
     <string name="menu_backup">Backup e Restauração</string>
@@ -29,20 +29,34 @@
     <string name="sobre_sem_conexao">sem conexão OBD2 ativa</string>
 
     <!-- Backup e Restauração -->
-    <string name="backup_titulo">Backup e Restauração</string>
-    <string name="backup_descricao">Exporta veículos, manutenções, abastecimentos, leituras, códigos de falha e as preferências da caixa-preta para um arquivo .json. Os logs .txt/.csv já ficam em Downloads/CharruaOBD.</string>
+    <string name="backup_titulo">Cópia de segurança (Backup)</string>
+    <string name="backup_descricao">Exporta um .json versionado com todos os carros e os perfis de cada um (Painel, HUD, Cluster, calibração, perfil técnico e recordes), manutenções, abastecimentos, leituras, códigos de falha e as configurações globais. Os logs .txt/.csv já ficam em Downloads/CharruaOBD.</string>
     <string name="backup_exportar">Exportar backup (.json)</string>
-    <string name="backup_restaurar">Restaurar backup (.json)</string>
-    <string name="backup_exportado">Backup salvo: %1$d veículo(s), %2$d manutenção(ões), %3$d abastecimento(s)</string>
+    <string name="backup_restaurar">Importar backup (.json)</string>
+    <string name="backup_exportado">Backup salvo: %1$d carro(s) com %2$d perfil(is), %3$d manutenção(ões), %4$d abastecimento(s)</string>
     <string name="backup_erro_exportar">Não foi possível salvar o backup: %1$s</string>
     <string name="backup_erro_ler">Backup inválido: %1$s</string>
-    <string name="backup_confirmar_titulo">Restaurar este backup?</string>
-    <string name="backup_confirmar_mensagem">Gerado em %1$s (versão %2$s) com %3$d veículo(s), %4$d manutenção(ões), %5$d abastecimento(s), %6$d leitura(s) e %7$d código(s) de falha.\n\nTodos os veículos e registros atuais serão SUBSTITUÍDOS pelos do arquivo, e as preferências da caixa-preta e da aparência também. Os logs .txt/.csv não são afetados.</string>
+    <string name="backup_confirmar_titulo">Importar este backup?</string>
+    <string name="backup_confirmar_mensagem">Gerado em %1$s (versão %2$s) com %3$d carro(s), %4$d manutenção(ões), %5$d abastecimento(s), %6$d leitura(s) e %7$d código(s) de falha.</string>
     <string name="backup_confirmar_sessao">\n\nHá uma sessão OBD2 em andamento: ela será encerrada antes da restauração.</string>
-    <string name="backup_confirmar_acao">Restaurar</string>
+    <string name="backup_confirmar_acao">Substituir tudo</string>
     <string name="backup_restaurado">Backup restaurado: %1$d veículo(s)</string>
     <string name="backup_erro_restaurar">Falha ao restaurar (nada foi alterado): %1$s</string>
     <string name="backup_versao_desconhecida">desconhecida</string>
+    <string name="backup_importar">Importar backup (.json)</string>
+    <string name="backup_confirmar_perfis">
+
+%1$d perfil(is) isolado(s) por carro (Painel, HUD, Cluster, perfil técnico e recordes).</string>
+    <string name="backup_confirmar_formato_antigo">
+
+Backup de uma versão anterior à 2.3.0: o Painel/HUD dele vai para o carro padrão do arquivo.</string>
+    <string name="backup_confirmar_escolha">
+
+MESCLAR: mantém tudo o que está no app e só acrescenta os %1$d carro(s) do arquivo com placa nova (com os históricos e perfis deles).
+SUBSTITUIR TUDO: troca carros, registros, perfis e configurações pelos do arquivo. Os logs .txt/.csv não são afetados.</string>
+    <string name="backup_mesclar">Mesclar</string>
+    <string name="backup_substituir">Substituir tudo</string>
+    <string name="backup_mesclado">Backup mesclado: %1$d carro(s) no app</string>
 
     <!-- Configurações -->
     <string name="config_titulo">Configurações</string>
@@ -51,9 +65,9 @@
     <string name="config_auto_conexao">Auto-conexão em segundo plano</string>
     <string name="config_logs">Gravar logs automaticamente (.txt + .csv; não grava no Modo Simulado)</string>
     <string name="config_log_completo">Log bruto detalhado (uso esporádico: comandos, bytes e tempos no .txt)</string>
-    <string name="config_gatilho">Bluetooth gatilho do carro</string>
+    <string name="config_gatilho">Bluetooth do carro ativo (gatilho)</string>
     <string name="config_scanner">Scanner OBD2 padrão</string>
-    <string name="config_veiculo">Veículo favorito (padrão)</string>
+    <string name="config_veiculo">Carro ativo (perfil e caixa-preta)</string>
     <string name="config_bateria">Bateria sem restrições</string>
     <string name="config_bateria_ok">Liberada: o Android não bloqueia a sessão em segundo plano</string>
     <string name="config_bateria_pendente">Otimizada: o One UI pode barrar a sessão automática</string>
@@ -72,6 +86,12 @@
     <string name="config_unidade_kpa">kPa</string>
     <string name="config_unidade_bar">bar</string>
     <string name="config_unidade_psi">psi</string>
+    <string name="config_unidade_consumo">Consumo</string>
+    <string name="config_unidade_consumo_descricao">Painel, computador de bordo, HUD, Meus Carros e abastecimentos. O banco e os logs continuam em km/L; o relatório da sessão mostra as duas.</string>
+    <string name="config_unidade_consumo_imperial">No imperial o consumo é sempre em MPG.</string>
+    <string name="config_consumo_km_l">km/L</string>
+    <string name="config_consumo_l_100km">L/100km</string>
+    <string name="config_secao_backup">Cópia de segurança (Backup)</string>
     <string name="config_secao_assistente">Assistente e permissões</string>
     <string name="config_refazer_assistente">Refazer Assistente Inicial</string>
     <string name="config_abrir_checklist">Abrir Checklist de Permissões</string>

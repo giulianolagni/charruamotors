@@ -43,8 +43,15 @@
       "pids": [
         { "id": "GM_ATF", "cabecalho": "7E1", "servico": "22", "identificador": "1940", "nome": "Temperatura do fluido do câmbio (ATF, TCM 7E1)", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -20, "max": 150, "casas": 0 },
         { "id": "GM_ATF_7E2", "cabecalho": "7E2", "servico": "22", "identificador": "1940", "nome": "Temperatura do fluido do câmbio (ATF, TCM 7E2)", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -20, "max": 150, "casas": 0 },
-        { "id": "GM_TCM_SELETOR", "cabecalho": "7E2", "servico": "22", "identificador": "199B", "nome": "Seletor do câmbio, código bruto (TCM 7E2)", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 4, "casas": 0 },
-        { "id": "GM_TCM_SELETOR_ALT", "cabecalho": "7E2", "servico": "22", "identificador": "1942", "nome": "Seletor do câmbio, código bruto alternativo (TCM 7E2)", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 4, "casas": 0 },
+        { "id": "GM_TCM_SONDA_19AD", "cabecalho": "7E2", "servico": "22", "identificador": "19AD", "nome": "Sonda de alavanca 22 19AD, 1º byte (TCM 7E2)", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 255, "casas": 0 },
+        { "id": "GM_TCM_SONDA_1925", "cabecalho": "7E2", "servico": "22", "identificador": "1925", "nome": "Sonda de alavanca 22 1925, 1º byte (TCM 7E2)", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 255, "casas": 0 },
+        { "id": "GM_TCM_SONDA_192A", "cabecalho": "7E2", "servico": "22", "identificador": "192A", "nome": "Sonda de alavanca 22 192A, 1º byte (TCM 7E2)", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 255, "casas": 0 },
+        { "id": "GM_TCM_SONDA_192F", "cabecalho": "7E2", "servico": "22", "identificador": "192F", "nome": "Sonda de alavanca 22 192F, 1º byte (TCM 7E2)", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 255, "casas": 0 },
+        { "id": "GM_TCM_SONDA_1963", "cabecalho": "7E2", "servico": "22", "identificador": "1963", "nome": "Sonda de alavanca 22 1963, 1º byte (TCM 7E2)", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 255, "casas": 0 },
+        { "id": "GM_TCM_SONDA_1982", "cabecalho": "7E2", "servico": "22", "identificador": "1982", "nome": "Sonda de alavanca 22 1982, 1º byte (TCM 7E2)", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 255, "casas": 0 },
+        { "id": "GM_TCM_SONDA_19B5", "cabecalho": "7E2", "servico": "22", "identificador": "19B5", "nome": "Sonda de alavanca 22 19B5, 1º byte (TCM 7E2)", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 255, "casas": 0 },
+        { "id": "GM_TCM_SONDA_2889", "cabecalho": "7E2", "servico": "22", "identificador": "2889", "nome": "Sonda de alavanca 22 2889, 1º byte (TCM 7E2)", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 255, "casas": 0 },
+        { "id": "GM_TCM_SONDA_1941", "cabecalho": "7E2", "servico": "22", "identificador": "1941", "nome": "Sonda de alavanca 22 1941, 1º byte (TCM 7E2)", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 255, "casas": 0 },
         { "id": "GM_TCM_MARCHA", "cabecalho": "7E2", "servico": "22", "identificador": "199A", "nome": "Marcha atual informada pelo TCM 7E2", "unidade": "", "bytes": 1, "formula": "A", "min": 0, "max": 6, "casas": 0 }
       ]
     }

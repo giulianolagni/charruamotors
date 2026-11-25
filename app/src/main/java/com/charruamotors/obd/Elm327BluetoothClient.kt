@@ -1,6 +1,7 @@
 package com.charruamotors.obd
 
 import com.charruamotors.domain.calculo.AlavancaGmTcm
+import com.charruamotors.domain.calculo.FiltroVelocidadeEspuria
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import com.charruamotors.domain.model.EstadoConexaoObd
@@ -285,6 +286,9 @@ class Elm327BluetoothClient(
 
     /** Última resposta bruta de cada DID de posição do TCM GM (ver [registrarPosicaoTcm]). */
     private val brutosTcm = mutableMapOf<String, String>()
+
+    /** v2.3.8: descarte do `010D = FF` espúrio no OBD2 padrão (ver [descartarVelocidadeEspuria]). */
+    private val filtroVelocidade = FiltroVelocidadeEspuria()
 
     /**
      * No OBD2 padrão, o câmbio `7E1` também sai com `ATCRA 7E9` explícito (v2.2.9: perfil GM/Cruze e a
@@ -1827,7 +1831,19 @@ class Elm327BluetoothClient(
             return FalhaLote(motivoFalhaLote(bruto, resultados), semPrompt = bruto == null)
         }
 
-        fun ciclo() = Ciclo(consultados, lidos, pedidosEcu > 0 && respostasEcu == 0, ultimoErro)
+        fun ciclo(): Ciclo {
+            descartarVelocidadeEspuria(lidos)
+            return Ciclo(consultados, lidos, pedidosEcu > 0 && respostasEcu == 0, ultimoErro)
+        }
+    }
+
+    /** Tira de [lidos] o `010D` de 255 km/h fisicamente impossível. Os modos 21/22 ficam como estão. */
+    private fun descartarVelocidadeEspuria(lidos: MutableMap<String, Double>) {
+        if (modoServico != null) return
+        if (!filtroVelocidade.aceitar(lidos[Pids.VELOCIDADE], lidos[Pids.RPM], relogioMs())) {
+            lidos.remove(Pids.VELOCIDADE)
+            registro.evento("010D = FF (255 km/h) descartado: leitura espúria")
+        }
     }
 
     /** Por que um lote falhou; [semPrompt] = TIMEOUT. */
@@ -1868,10 +1884,16 @@ class Elm327BluetoothClient(
 
     /**
      * v2.3.7: resposta bruta dos DIDs de alavanca/marcha do TCM GM (`7E2`) no log, na sondagem e a cada
-     * mudança: é o dado para calibrar [AlavancaGmTcm] no carro.
+     * mudança: é o dado para calibrar [AlavancaGmTcm] no carro. v2.3.8: dos candidatos de alavanca,
+     * só a resposta positiva (`62...`) vai para o log.
      */
     private fun registrarPosicaoTcm(requisicao: RequisicaoEstendida, bruto: String) {
-        if (requisicao.cabecalho != CABECALHO_TCM_GM || requisicao.identificador !in AlavancaGmTcm.IDS_BYTE_UNICO) return
+        if (requisicao.cabecalho != CABECALHO_TCM_GM || requisicao.identificador !in AlavancaGmTcm.IDS_REGISTRADOS) return
+        if (requisicao.identificador in AlavancaGmTcm.IDS_SONDA &&
+            !ObdParser.respostaPositiva(bruto, requisicao.comando)
+        ) {
+            return
+        }
         val visivel = RegistroComunicacao.visivel(bruto)
         if (brutosTcm.put(requisicao.comando, visivel) != visivel) {
             registro.evento("TCM $CABECALHO_TCM_GM · ${requisicao.comando}: \"$visivel\"")
@@ -2305,6 +2327,7 @@ class Elm327BluetoothClient(
         usaLoteMultiPid = false
         falhasLote.clear()
         brutosTcm.clear()
+        filtroVelocidade.reiniciar()
         filtroCambioPadrao = false
         usaSufixoRespostaUnica = false
         requisicoesSemSufixo = emptySet()

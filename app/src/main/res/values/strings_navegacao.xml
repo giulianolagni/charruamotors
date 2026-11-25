@@ -45,12 +45,6 @@
     <string name="perfil_tecnico_sessao_ativa">
 
 Vale a partir da próxima conexão (há uma sessão em andamento).</string>
-    <string name="carro_novo_generico_titulo">Carro novo no perfil OBD2 Genérico</string>
-    <string name="carro_novo_generico_mensagem">%1$s não tem perfil específico no catálogo: ele começa limpo no OBD2 Genérico, sem herdar os PIDs proprietários da SW4 nem do Cruze, com Painel e HUD próprios.
-
-A Sessão de Mapeamento liga o Log Bruto (todo comando e resposta no .txt) e conecta no carro, para capturar o primeiro log e adaptar um perfil depois.</string>
-    <string name="carro_novo_mapear">Sessão de Mapeamento</string>
-    <string name="carro_novo_depois">Depois</string>
     <string name="mapeamento_iniciada">Sessão de Mapeamento: Log Bruto ligado. Conectando no carro…</string>
     <string name="veiculo_titulo_duplicar">Duplicar carro</string>
     <string name="veiculo_duplicado_dica">Cópia de %1$s: informe a placa do novo carro. Painel, HUD, Cluster e o perfil técnico vêm junto.</string>

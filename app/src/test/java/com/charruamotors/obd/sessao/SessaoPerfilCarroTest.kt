@@ -3,6 +3,7 @@ package com.charruamotors.obd.sessao
 import com.charruamotors.carros.CamadaPreferida
 import com.charruamotors.carros.PerfilCarro
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
+import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.Veiculo
 import com.charruamotors.obd.DispositivoObd
@@ -24,7 +25,9 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -68,14 +71,19 @@ class SessaoPerfilCarroTest {
     @After
     fun cancelarEscopos() = escopos.forEach { it.cancel() }
 
-    private fun TestScope.sessaoCom(cliente: ObdClient, veiculo: VeiculoSessao) = SessaoObd(
+    private fun TestScope.sessaoCom(
+        cliente: ObdClient,
+        veiculo: VeiculoSessao,
+        modo: ModoObd = ModoObd.SIMULADO,
+        destino: DestinoMemoria? = null,
+    ) = SessaoObd(
         clientePorModo = { cliente },
-        modoInicial = ModoObd.SIMULADO,
+        modoInicial = modo,
         catalogoPids = CatalogoTeste.padrao,
         catalogoDtc = CatalogoDtc.VAZIO,
-        config = { ConfigAutoConexao(veiculoId = veiculo.id, gravarLogsAutomaticos = false) },
+        config = { ConfigAutoConexao(veiculoId = veiculo.id, gravarLogsAutomaticos = destino != null) },
         buscarVeiculo = { id -> veiculo.takeIf { id == it.id } },
-        destinoLogs = DestinoMemoria(),
+        destinoLogs = destino ?: DestinoMemoria(),
         pastaTemporaria = pasta.newFolder(),
         escopo = CoroutineScope(StandardTestDispatcher(testScheduler)).also { escopos += it },
         io = StandardTestDispatcher(testScheduler),
@@ -105,6 +113,26 @@ class SessaoPerfilCarroTest {
         assertEquals(corolla.id, sessao.estadoSessao.value.veiculoId)
         sessao.desconectar()
         advanceUntilIdle()
+    }
+
+    @Test
+    fun `carro recem-cadastrado conecta direto, le a telemetria e grava o log sem resposta do usuario`() = runTest {
+        val novo = Veiculo(id = 21, marca = "Marca X", modelo = "Hatch 1.0", ano = 2015, placa = "NOV0A21", kmAtual = 1, tipoCombustivel = TipoCombustivel.FLEX)
+        val perfil = PerfilCarro.paraCarroNovo(novo.id, PerfilCarro(novo.id).resolver(novo))
+        val destino = DestinoMemoria()
+        val cliente = ObdClientFake(random = Random(3), latenciaMs = 10)
+        val sessao = sessaoCom(cliente, VeiculoSessao.de(novo, perfil), ModoObd.BLUETOOTH, destino)
+
+        // Só o "conectar": nenhuma chamada a manter/ignorar perfil nem abertura de ferramenta.
+        sessao.conectar(scanner, novo.id, OrigemSessao.MANUAL)
+        avancar(8_000)
+
+        assertEquals(EstadoConexaoObd.Conectado, sessao.estado.value)
+        assertNotNull("telemetria em andamento", sessao.dados.value)
+        sessao.desconectar()
+        advanceUntilIdle()
+        assertTrue(destino.terminadoEm(".csv").conteudo.lines().size > 2)
+        assertTrue(destino.terminadoEm(".txt").conteudo.isNotBlank())
     }
 
     @Test

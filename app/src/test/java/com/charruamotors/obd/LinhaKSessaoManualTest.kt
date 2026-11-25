@@ -10,11 +10,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** v2.3.4: retomada do polling na linha K depois da sessão manual e o `ATRV` corrompido do clone v2.1. */
+/** v2.3.4/2.3.5: retomada do polling na linha K depois da sessão manual e o `ATRV` corrompido do clone v2.1. */
 class LinhaKSessaoManualTest {
 
     private class TransporteKwp : ObdTransport {
         val enviados = mutableListOf<String>()
+
+        /** Resposta ao `0100` depois do `ATPC`: só com o `ATSP0` o clone busca o protocolo. */
+        var respostaReinicio = "SEARCHING...\rOK\r4100BE1FA813\r\r"
 
         override suspend fun conectar() = Unit
 
@@ -25,7 +28,12 @@ class LinhaKSessaoManualTest {
                 "ATDP" -> "AUTO, ISO 14230-4 (KWP FAST)\r\r"
                 "ATDPN" -> "A5\r\r"
                 "ATRV" -> ":.0V\r\r"
-                "0100", "01001" -> "41 00 BE 1F A8 13\r\r"
+                "0100" -> when {
+                    "ATPC" !in enviados -> "41 00 BE 1F A8 13\r\r"
+                    enviados.lastIndexOf("ATSP0") > enviados.lastIndexOf("ATPC") -> respostaReinicio
+                    else -> "NO DATA\r\r"
+                }
+                "01001" -> "41 00 BE 1F A8 13\r\r"
                 else -> if (comando.startsWith("AT")) "OK\r\r" else "NO DATA\r\r"
             }
         }
@@ -48,7 +56,7 @@ class LinhaKSessaoManualTest {
     }
 
     @Test
-    fun `KWP ocioso na sessao manual reinicia com ATPC e 0100 sem ATSH de CAN`() = runTest {
+    fun `KWP ocioso na sessao manual reinicia com ATSP0 e 0100 e restaura o ATST19`() = runTest {
         val (t, obd) = conectado()
         obd.iniciarSessaoManual()
         advanceTimeBy(Elm327BluetoothClient.OCIOSIDADE_LINHA_K_MS)
@@ -56,8 +64,22 @@ class LinhaKSessaoManualTest {
         obd.enviarComandoManual("ATH1") // força a reaplicação da configuração e do cabeçalho
         obd.encerrarSessaoManual()
 
-        assertEquals(listOf("ATPC", "0100"), t.enviados.filter { it == "ATPC" || it == "0100" })
+        val reinicio = t.enviados.drop(t.enviados.indexOf("ATPC"))
+        assertEquals(listOf("ATPC", "ATSP0", "ATST64", "0100", "ATST19"), reinicio)
         assertTrue(t.enviados.none { it in listOf("ATSH7DF", "ATSH7E1", "ATSH7E2") })
+    }
+
+    @Test
+    fun `re-init sem resposta nao restaura o ATST19 nem se repete na retomada`() = runTest {
+        val (t, obd) = conectado()
+        t.respostaReinicio = "NO DATA\r\r"
+        obd.iniciarSessaoManual()
+        advanceTimeBy(Elm327BluetoothClient.OCIOSIDADE_LINHA_K_MS)
+        obd.encerrarSessaoManual()
+        obd.lerCodigosFalha() // primeiro comando OBD retomado, também sem resposta
+
+        assertEquals(1, t.enviados.count { it == "ATPC" })
+        assertTrue("ATST19" !in t.enviados)
     }
 
     @Test

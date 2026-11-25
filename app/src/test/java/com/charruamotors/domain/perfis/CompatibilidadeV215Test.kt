@@ -55,17 +55,18 @@ class CompatibilidadeV215Test {
         ),
     )
 
-    private val cruzeV215 = FaixasVeiculo(
+    private val cruzeV229 = FaixasVeiculo(
         "Chevrolet Cruze 1.4 Turbo Flex 2018 (LE2)",
         listOf(
             FaixaEsperada(RPM_LENTA, 600.0, 850.0),
-            FaixaEsperada(RPM_MAXIMO, null, 6_000.0),
+            // v2.2.9 (pedido explícito): redline 6.500 rpm e MAP até 260 kPa (boost ~1,6 bar); o resto igual à v2.1.5.
+            FaixaEsperada(RPM_MAXIMO, null, 6_500.0),
             FaixaEsperada(TEMP_AGUA, 85.0, 108.0),
             FaixaEsperada(TEMP_ATF, 60.0, 105.0),
             FaixaEsperada(TENSAO, 12.6, 14.8),
             FaixaEsperada(RAIL, 30.0, 200.0),
             FaixaEsperada(RAIL_LENTA, 30.0, 60.0),
-            FaixaEsperada(MAP_TURBO, 25.0, 215.0),
+            FaixaEsperada(MAP_TURBO, 25.0, 260.0),
             FaixaEsperada(STFT, -10.0, 10.0),
             FaixaEsperada(LTFT, -10.0, 10.0),
             FaixaEsperada(CARGA_MOTOR, 0.0, 100.0),
@@ -95,9 +96,9 @@ class CompatibilidadeV215Test {
     }
 
     @Test
-    fun `Cruze 1_4T com exatamente as faixas e os dados da v2_1_5`() {
+    fun `Cruze 1_4T com as faixas da v2_2_9 e os dados da v2_1_5`() {
         val p = PresetVeiculo.CRUZE_2018
-        assertEquals(cruzeV215, p.faixas)
+        assertEquals(cruzeV229, p.faixas)
         assertEquals("Chevrolet", p.marca)
         assertEquals("Cruze 1.4 Turbo Flex", p.modelo)
         assertEquals(2018, p.ano)
@@ -143,7 +144,7 @@ class CompatibilidadeV215Test {
         // O perfil exato manda nas faixas, como na v2.1.5 (o limite do cadastro só vale nos genéricos).
         assertEquals(sw4V215, FaixasVeiculo.paraVeiculo(sw4))
         val cruze = sw4.copy(marca = "Chevrolet", modelo = "Cruze LTZ 1.4", ano = 2018, tipoCombustivel = TipoCombustivel.FLEX)
-        assertEquals(cruzeV215, FaixasVeiculo.paraVeiculo(cruze))
+        assertEquals(cruzeV229, FaixasVeiculo.paraVeiculo(cruze))
     }
 
     @Test

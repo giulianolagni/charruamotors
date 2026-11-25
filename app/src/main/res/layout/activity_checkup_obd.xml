@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Oficina → Checkup OBD2 / Prontidão e Falhas de Ignição (Modo 06): leitura sob demanda (polling
+     pausado), resumo em texto limpo e as ações Copiar/Compartilhar. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:colorBackground"
+    android:orientation="vertical"
+    tools:context=".ui.oficina.checkup.CheckupObdActivity">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorPrimary">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            style="@style/Widget.CharruaMotors.Toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:theme="@style/ThemeOverlay.Material3.Dark.ActionBar"
+            app:navigationContentDescription="@string/voltar"
+            app:navigationIcon="?attr/homeAsUpIndicator"
+            app:subtitleTextColor="@color/branco"
+            tools:title="@string/checkup_titulo" />
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <ScrollView
+        android:id="@+id/conteudo"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="@dimen/margem_tela">
+
+            <TextView
+                android:id="@+id/texto_descricao"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="@color/texto_secundario"
+                tools:text="@string/checkup_descricao" />
+
+            <TextView
+                android:id="@+id/texto_estado"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="@color/texto_secundario"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/botao_ler"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_medio"
+                tools:text="@string/checkup_ler" />
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/progresso"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:indeterminate="true"
+                android:visibility="gone" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_resultado"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_medio"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/texto_resultado"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:padding="@dimen/espaco_medio"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textIsSelectable="true" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <LinearLayout
+                android:id="@+id/grupo_acoes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/espaco_pequeno"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_copiar"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/espaco_pequeno"
+                    android:layout_weight="1"
+                    android:text="@string/oficina_copiar" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/botao_compartilhar"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/oficina_compartilhar" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

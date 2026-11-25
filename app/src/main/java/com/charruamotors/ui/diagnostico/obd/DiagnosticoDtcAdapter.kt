@@ -94,6 +94,7 @@ private val TipoDtc.titulo: Int
         TipoDtc.CONFIRMADO -> R.string.dtc_tipo_confirmado
         TipoDtc.PENDENTE -> R.string.dtc_tipo_pendente
         TipoDtc.PERMANENTE -> R.string.dtc_tipo_permanente
+        TipoDtc.CAMBIO -> R.string.dtc_tipo_cambio
     }
 
 @get:StringRes
@@ -102,6 +103,7 @@ private val TipoDtc.badge: Int
         TipoDtc.CONFIRMADO -> R.string.dtc_badge_confirmado
         TipoDtc.PENDENTE -> R.string.dtc_badge_pendente
         TipoDtc.PERMANENTE -> R.string.dtc_badge_permanente
+        TipoDtc.CAMBIO -> R.string.dtc_badge_cambio
     }
 
 @get:ColorRes
@@ -110,4 +112,5 @@ private val TipoDtc.cor: Int
         TipoDtc.CONFIRMADO -> R.color.dtc_confirmado
         TipoDtc.PENDENTE -> R.color.dtc_pendente
         TipoDtc.PERMANENTE -> R.color.dtc_permanente
+        TipoDtc.CAMBIO -> R.color.dtc_cambio
     }

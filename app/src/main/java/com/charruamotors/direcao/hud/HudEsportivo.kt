@@ -41,9 +41,11 @@ data class EscalaRpm(val redlineRpm: Double, val fimMil: Int) {
 /**
  * Escala do mostrador de turbo em bar de pressão positiva (boost = MAP − barômetro), sempre a partir
  * de `0.0` (sem vácuo). Números a cada 0,4 bar até [rotuloMaximo]; o arco vai um pouco além para
- * mostrar o vermelho a partir de [redlineBar] (SW4: `0.0 · 0.4 · 0.8 · 1.2`, vermelho acima de 1,25).
+ * mostrar o vermelho a partir de [redlineBar]. Dinâmica pelo teto de boost do perfil ativo (v2.2.9):
+ * SW4 `0.0 · 0.4 · 0.8 · 1.2` (vermelho acima de 1,25), Cruze 1.4T até `1.6`. Num motor [aspirado]
+ * (MAP máximo do perfil ≈ atmosférico) o ponteiro fica travado em `0.0`.
  */
-data class EscalaTurbo(val rotuloMaximo: Double, val redlineBar: Double, val fimBar: Double) {
+data class EscalaTurbo(val rotuloMaximo: Double, val redlineBar: Double, val fimBar: Double, val aspirado: Boolean = false) {
 
     val rotulos: List<Double> get() = generateSequence(0.0) { it + PASSO }.takeWhile { it <= rotuloMaximo + 1e-9 }.toList()
 
@@ -56,12 +58,21 @@ data class EscalaTurbo(val rotuloMaximo: Double, val redlineBar: Double, val fim
         private const val ROTULO_MINIMO = 1.2
         private const val ROTULO_MAXIMO = 2.4
 
+        /** Teto de boost do perfil abaixo do qual o motor conta como aspirado (MAP máx. ≈ 1 atm). */
+        const val BOOST_MAXIMO_ASPIRADO_BAR = 0.2
+
         /** Escala pelo MAP máximo do perfil (kPa absolutos); sem perfil, a da SW4 (até 1,2 bar). */
         fun para(mapMaximoKpa: Double?): EscalaTurbo {
-            val boostMax = mapMaximoKpa?.takeIf { it.isFinite() }?.let { (it - FormatadorHudEsportivo.BAROMETRO_PADRAO_KPA) / 100.0 } ?: 0.0
+            val mapMax = mapMaximoKpa?.takeIf { it.isFinite() }
+            val boostMax = mapMax?.let { (it - FormatadorHudEsportivo.BAROMETRO_PADRAO_KPA) / 100.0 } ?: 0.0
             val passos = ceil(boostMax / PASSO - 1e-9).coerceAtLeast(0.0)
             val rotulo = (Math.round(passos * PASSO * 10) / 10.0).coerceIn(ROTULO_MINIMO, ROTULO_MAXIMO)
-            return EscalaTurbo(rotulo, (Math.round((rotulo + 0.05) * 100) / 100.0), Math.round((rotulo + 0.2) * 10) / 10.0)
+            return EscalaTurbo(
+                rotuloMaximo = rotulo,
+                redlineBar = Math.round((rotulo + 0.05) * 100) / 100.0,
+                fimBar = Math.round((rotulo + 0.2) * 10) / 10.0,
+                aspirado = mapMax != null && boostMax < BOOST_MAXIMO_ASPIRADO_BAR,
+            )
         }
     }
 }
@@ -100,8 +111,11 @@ class CalibradorPedal {
         /** Só conta como pisado a partir de 1,0 ponto percentual acima do repouso. */
         const val DELTA_MINIMO = 1.0
 
-        /** Sensores de pedal em ordem de preferência: Toyota (2149), OBD2 (0149) e a borboleta (0111). */
-        val COMANDOS = listOf("TOYOTA_PEDAL_D", "0149", Pids.BORBOLETA)
+        /**
+         * Sensores de pedal em ordem de preferência: Toyota (2149), OBD2 (0149, o do Cruze — no Multi-PID em
+         * lote ele vem junto da fila rápida) e a borboleta (0111).
+         */
+        val COMANDOS = listOf("TOYOTA_PEDAL_D", Pids.PEDAL_ACELERADOR, Pids.BORBOLETA)
     }
 }
 
@@ -146,6 +160,7 @@ object FormatadorHudEsportivo {
         val valores = dados.takeIf { conectado }
         val escalaRpm = EscalaRpm.para(faixas?.get(ParametroFaixa.RPM_MAXIMO)?.max)
         val rpm = valores?.get(Pids.RPM)?.takeIf { it.isFinite() && it >= 0 }
+        val escalaTurbo = EscalaTurbo.para(faixas?.get(ParametroFaixa.MAP_TURBO)?.max)
         return EstadoHudEsportivo(
             conectado = conectado,
             escalaRpm = escalaRpm,
@@ -153,8 +168,9 @@ object FormatadorHudEsportivo {
             marcha = marcha(valores),
             shiftLight = rpm != null && rpm >= escalaRpm.redlineRpm * FRACAO_SHIFT_LIGHT,
             velocidade = velocidade(valores),
-            escalaTurbo = EscalaTurbo.para(faixas?.get(ParametroFaixa.MAP_TURBO)?.max),
-            boostBar = boostBar(valores),
+            escalaTurbo = escalaTurbo,
+            // Aspirado: travado no 0,0 (o MAP em plena carga pode passar um pouco do barômetro lido).
+            boostBar = if (escalaTurbo.aspirado) 0.0 else boostBar(valores),
             pedal = calibrador.registrar(CalibradorPedal.COMANDOS.firstNotNullOfOrNull { c -> valores?.get(c)?.takeIf { it.isFinite() } }),
         )
     }

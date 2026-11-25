@@ -14,6 +14,7 @@
     <color name="dtc_confirmado">#B3261E</color>
     <color name="dtc_pendente">#B26A00</color>
     <color name="dtc_permanente">#6A1B9A</color>
+    <color name="dtc_cambio">#00838F</color>
 
     <!-- v1.6: Modo Painel Automotivo (cluster horizontal) -->
     <color name="cluster_fundo">#000000</color>

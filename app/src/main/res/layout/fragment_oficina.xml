@@ -74,6 +74,14 @@
             layout="@layout/item_card_oficina" />
 
         <include
+            android:id="@+id/card_checkup"
+            layout="@layout/item_card_oficina" />
+
+        <include
+            android:id="@+id/card_misfire"
+            layout="@layout/item_card_oficina" />
+
+        <include
             android:id="@+id/card_varredura"
             layout="@layout/item_card_oficina" />
 

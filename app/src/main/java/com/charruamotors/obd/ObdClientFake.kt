@@ -592,14 +592,20 @@ class ObdClientFake(
             // Sonda de banda larga: segue o λ comandado com o erro da malha fechada (v2.1).
             Pids.LAMBDA_BANDA_LARGA to (lambda + random.nextDouble(-0.015, 0.015)).arredondar(3),
             "012F" to (nivelCombustivel + random.nextDouble(-0.4, 0.4)).coerceIn(0.0, 100.0).arredondar(1),
+            "0130" to CICLOS_AQUECIMENTO_SIMULADOS,
             "0131" to kmDesdeLimpeza.roundToInt().toDouble(),
             "0133" to PRESSAO_BAROMETRICA,
             Pids.LAMBDA_BANDA_LARGA_CORRENTE to (lambda + random.nextDouble(-0.015, 0.015)).arredondar(3),
+            // Catalisador: acompanha o aquecimento do motor e a carga (v2.2.9).
+            "013C" to (temperatura * 3.5 + carga * 2.5 + random.nextDouble(-4.0, 4.0)).roundToInt().toDouble(),
             "0142" to (tensao - 0.2).arredondar(2),
             Pids.LAMBDA_COMANDADO to lambda.arredondar(3),
             "0145" to (borboleta - BORBOLETA_FECHADA).coerceAtLeast(0.0).arredondar(1),
             "0146" to TEMPERATURA_AMBIENTE,
             "0149" to pedal.arredondar(1),
+            "014A" to (pedal / 2 + DESVIO_PEDAL_E).arredondar(1),
+            "014D" to 0.0,
+            "014E" to (MINUTOS_DESDE_LIMPEZA_INICIAIS + segundosMotorLigado / 60).roundToInt().toDouble(),
             Pids.PERCENTUAL_ETANOL to PERCENTUAL_ETANOL_GASOLINA_C,
             "015C" to temperaturaOleo.roundToInt().toDouble(),
             Pids.CONSUMO_ECU to consumoLh.arredondar(1),
@@ -678,9 +684,16 @@ class ObdClientFake(
         /** PIDs que a "ECU" simulada suporta: todos os do catálogo padrão (`pids_padrao.json`). */
         val COMANDOS_SIMULADOS: Set<String> = setOf(
             "0104", "0105", "0106", "0107", "010A", "010B", "010C", "010D", "010E", "010F",
-            "0110", "0111", "0114", "011F", "0121", "0123", "0124", "012F", "0131", "0133", "0134", "0142",
-            "0144", "0145", "0146", "0149", "0152", "015C", "015E", "ATRV",
+            "0110", "0111", "0114", "011F", "0121", "0123", "0124", "012F", "0130", "0131", "0133", "0134", "013C",
+            "0142", "0144", "0145", "0146", "0149", "014A", "014D", "014E", "0152", "015C", "015E", "ATRV",
         )
+
+        /** Contadores do checkup (v2.2.9): ciclos de aquecimento e minutos de motor desde a limpeza dos códigos. */
+        const val CICLOS_AQUECIMENTO_SIMULADOS = 42.0
+        const val MINUTOS_DESDE_LIMPEZA_INICIAIS = 780.0
+
+        /** Pedal E (`014A`): metade do curso do D somada a este desvio, como nos sensores duplos reais. */
+        const val DESVIO_PEDAL_E = 7.8
 
         /**
          * PIDs de montadora que a ECU simulada responde. `VW_TEMP_DSG` fica de fora de propósito:

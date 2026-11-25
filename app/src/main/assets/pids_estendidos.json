@@ -39,10 +39,10 @@
     {
       "fabricante": "Chevrolet / GM",
       "aliases": ["chevrolet", "gm", "chevy", "general motors"],
-      "observacao": "Perfil GM (CAN 11 bits / 500 kbps, ATSP6, UDS serviço 22) com preset para o Cruze 1.4 Turbo Flex 2018 (LE2) + câmbio automático de 6 marchas. O motor (7E0) responde ao OBD2 padrão (RPM, MAP/turbo, MAF, rail GDI 0123, avanço 010E, sonda lambda 0114/0124, etanol 0152, STFT/LTFT, tensão 0142). A temperatura do ATF é lida por UDS 22 1940 (referência da comunidade, °C = A − 40): primeiro no TCM 7E1 e, como alternativa segura, no 7E2 (endereço do TCM em parte da plataforma Global A). Cada requisição é testada na conexão; um módulo que não responder fica fora do polling sem derrubar a sessão. Confirme os DIDs com o GDS2 antes de usá-los para diagnóstico.",
+      "observacao": "Perfil GM (CAN 11 bits / 500 kbps, ATSP6, UDS serviço 22) com preset para o Cruze 1.4 Turbo Flex 2018 (LE2) + câmbio automático de 6 marchas. O motor (7E0) responde ao OBD2 padrão (RPM, MAP/turbo, MAF, rail GDI 0123, avanço 010E, sonda lambda 0114/0124, etanol 0152, STFT/LTFT, tensão 0142). A temperatura do ATF é lida por UDS 22 1940 (referência da comunidade, °C = A − 40): primeiro no TCM 7E1 e, como alternativa segura, no 7E2 (endereço do TCM em parte da plataforma Global A). Cada requisição é testada na conexão (v2.2.9: só ativa com o ATF na faixa plausível de −20 a 150 °C, lido em cadência leve com ATSH 7E1 + ATCRA 7E9); um módulo que não responder fica fora do polling sem derrubar a sessão. Confirme os DIDs com o GDS2 antes de usá-los para diagnóstico.",
       "pids": [
-        { "id": "GM_ATF", "cabecalho": "7E1", "servico": "22", "identificador": "1940", "nome": "Temperatura do fluido do câmbio (ATF, TCM 7E1)", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -40, "max": 215, "casas": 0 },
-        { "id": "GM_ATF_7E2", "cabecalho": "7E2", "servico": "22", "identificador": "1940", "nome": "Temperatura do fluido do câmbio (ATF, TCM 7E2)", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -40, "max": 215, "casas": 0 }
+        { "id": "GM_ATF", "cabecalho": "7E1", "servico": "22", "identificador": "1940", "nome": "Temperatura do fluido do câmbio (ATF, TCM 7E1)", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -20, "max": 150, "casas": 0 },
+        { "id": "GM_ATF_7E2", "cabecalho": "7E2", "servico": "22", "identificador": "1940", "nome": "Temperatura do fluido do câmbio (ATF, TCM 7E2)", "unidade": "°C", "bytes": 1, "formula": "A-40", "min": -20, "max": 150, "casas": 0 }
       ]
     }
   ]

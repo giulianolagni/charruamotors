@@ -75,6 +75,13 @@ interface ObdClient {
     /** Lê os códigos de falha armazenados/confirmados (modo 03). Lista vazia = nenhum código. */
     suspend fun lerCodigosFalha(): Result<List<DtcLido>>
 
+    /**
+     * Falhas do câmbio automático no TCM `7E1` (v2.2.9, OBD2 padrão em CAN 11 bits): `03` e o fallback
+     * UDS `19 02 FF`, com o cabeçalho e o filtro de recepção sempre restaurados. `success(null)` = sem
+     * TCM legível ou indisponível nesta conexão (modo 21/22 da SW4, linha K); lista vazia = TCM sem falhas.
+     */
+    suspend fun lerCodigosFalhaCambio(): Result<List<DtcLido>?> = Result.success(null)
+
     /** Lê os códigos pendentes, ainda não confirmados pela ECU (modo 07). */
     suspend fun lerCodigosPendentes(): Result<List<DtcLido>>
 

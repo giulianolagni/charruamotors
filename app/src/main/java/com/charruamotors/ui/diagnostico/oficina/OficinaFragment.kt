@@ -31,6 +31,8 @@ import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.diagnostico.DiagnosticoPagerAdapter
 import com.charruamotors.ui.oficina.atuadores.TesteAtuadoresActivity
 import com.charruamotors.ui.oficina.bateria.TesteBateriaActivity
+import com.charruamotors.ui.oficina.checkup.CheckupObdActivity
+import com.charruamotors.ui.oficina.checkup.FerramentaCheckup
 import com.charruamotors.ui.oficina.falhas.DiagnosticoErrosActivity
 import com.charruamotors.ui.oficina.terminal.TerminalObdActivity
 import com.charruamotors.ui.util.definirTexto
@@ -40,7 +42,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Aba Oficina: as ferramentas de diagnóstico em cards grandes e ilustrados — Teste de Bateria
- * (guiado, com laudo), Diagnóstico de Erros (ler e apagar DTCs), Varredura de PIDs (busca de
+ * (guiado, com laudo), Diagnóstico de Erros (ler e apagar DTCs), Checkup OBD2 / Prontidão e Falhas
+ * de Ignição (Modo 06) sob demanda (v2.2.9), Varredura de PIDs (busca de
  * sensores extras), Terminal ELM327 e Teste de Atuadores (UDS 2F, v2.1). Todas usam o scanner conectado no Painel; bateria, varredura
  * e terminal abrem uma sessão manual que pausa o polling até voltar.
  */
@@ -62,6 +65,8 @@ class OficinaFragment : Fragment() {
         with(binding) {
             preencher(cardBateria, R.string.oficina_card_bateria, R.string.oficina_card_bateria_desc, R.drawable.ic_bateria, R.color.veredito_bom)
             preencher(cardFalhas, R.string.oficina_card_falhas, R.string.oficina_card_falhas_desc, R.drawable.ic_falha, R.color.dtc_confirmado)
+            preencher(cardCheckup, R.string.oficina_card_checkup, R.string.oficina_card_checkup_desc, R.drawable.ic_checklist, R.color.status_ok)
+            preencher(cardMisfire, R.string.oficina_card_misfire, R.string.oficina_card_misfire_desc, R.drawable.ic_falha, R.color.veredito_atencao)
             preencher(cardVarredura, R.string.oficina_card_varredura, R.string.oficina_card_varredura_desc, R.drawable.ic_varredura, R.color.azul_primario)
             preencher(cardTerminal, R.string.oficina_card_terminal, R.string.oficina_card_terminal_desc, R.drawable.ic_terminal, R.color.terminal_card)
             preencher(cardAtuadores, R.string.oficina_card_atuadores, R.string.oficina_card_atuadores_desc, R.drawable.ic_atuador, R.color.atuador_card)
@@ -69,6 +74,12 @@ class OficinaFragment : Fragment() {
             cardBateria.root.setOnClickListener { abrirConectada { TesteBateriaActivity.intent(requireContext(), veiculoId) } }
             // O DTC abre sempre: a tela mostra o estado e só habilita ler/apagar com o scanner ligado.
             cardFalhas.root.setOnClickListener { startActivity(DiagnosticoErrosActivity.intent(requireContext(), veiculoId)) }
+            cardCheckup.root.setOnClickListener {
+                abrirConectada { CheckupObdActivity.intent(requireContext(), veiculoId, FerramentaCheckup.PRONTIDAO) }
+            }
+            cardMisfire.root.setOnClickListener {
+                abrirConectada { CheckupObdActivity.intent(requireContext(), veiculoId, FerramentaCheckup.MISFIRE) }
+            }
             cardVarredura.root.setOnClickListener {
                 abrirConectada { TerminalObdActivity.intent(requireContext(), veiculoId, TerminalObdActivity.ABA_VARREDURA) }
             }
@@ -112,7 +123,7 @@ class OficinaFragment : Fragment() {
         textoConexao.definirTexto(getString(if (conectado) R.string.oficina_conectado else R.string.oficina_desconectado))
         val cor = if (conectado) R.color.status_ok else R.color.status_espera
         pontoConexao.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), cor))
-        listOf(cardBateria, cardVarredura, cardTerminal, cardAtuadores).forEach { card ->
+        listOf(cardBateria, cardCheckup, cardMisfire, cardVarredura, cardTerminal, cardAtuadores).forEach { card ->
             card.textoRequisito.isVisible = !conectado
             card.root.alpha = if (conectado) 1f else ALFA_INDISPONIVEL
         }

@@ -332,6 +332,127 @@ object ObdParser {
         return if (ids.isEmpty()) RespostaObd.Invalido(bruto) else RespostaObd.Ok(ids.joinToString(" / "))
     }
 
+    /**
+     * `0906`: CVN (*Calibration Verification Number*, checksum da calibração). Resposta `49 06 NN` +
+     * `NN` blocos de 4 bytes (um por calibração), em quadro único ou multi-frame. Devolve cada CVN em
+     * hexadecimal (`1A2B3C4D`); vários saem unidos por ` / `.
+     */
+    fun parseCvn(bruto: String, comando: String? = "0906"): RespostaObd<String> {
+        val linhas = linhasLimpas(bruto, comando)
+        val partes = linhas.mapNotNull { linha ->
+            val compacta = compactar(linha)
+            val i = compacta.indexOf("4906")
+            if (i < 0) null else hexParaBytes(compacta.substring(i + 4))
+        }.filter { it.isNotEmpty() }
+        if (partes.isEmpty()) return classificarErro(linhas, bruto)
+        val cvns = partes.flatMap { parte ->
+            val quantidade = parte.first().coerceAtLeast(1)
+            parte.drop(1).chunked(TAMANHO_CVN).filter { it.size == TAMANHO_CVN }.take(quantidade)
+        }.map { bloco -> bloco.joinToString("") { "%02X".format(it) } }.distinct()
+        return if (cvns.isEmpty()) RespostaObd.Invalido(bruto) else RespostaObd.Ok(cvns.joinToString(" / "))
+    }
+
+    private const val TAMANHO_CVN = 4
+
+    // ---------------------------------------------------------------- Multi-PID em lote (modo 01, CAN)
+
+    /** Comando de uma leitura em lote do modo 01: `010C0D0B` (RPM + velocidade + MAP). */
+    fun comandoLote(definicoes: List<DefinicaoPid>): String {
+        require(definicoes.isNotEmpty() && definicoes.all { it.ehModo01 }) { "O lote só aceita PIDs do modo 01" }
+        return "01" + definicoes.joinToString("") { it.pidHex!! }
+    }
+
+    /** Bytes da resposta a um lote: `41` + (PID + dados) de cada um. Acima de 7, a resposta vira multi-frame CAN. */
+    fun bytesRespostaLote(definicoes: List<DefinicaoPid>): Int = 1 + definicoes.sumOf { 1 + it.bytes }
+
+    /**
+     * Resposta a um pedido Multi-PID em lote (ISO 15765-4, até 6 PIDs): `41 0C A B 0D A 0B A`, em
+     * quadro único ou multi-frame (`0:`/`1:`, já unidos). Cada PID é lido em sequência pelo tamanho do
+     * catálogo; o preenchimento do último quadro (`00`/`AA`) e a resposta de outra ECU que chegue depois
+     * são ignorados. Devolve o resultado de cada definição pedida: `Ok`, ou o erro do adaptador (`NO
+     * DATA`, `?`, `BUFFER FULL`, `7F 01 xx`...) e [RespostaObd.Invalido] para o PID que não veio na
+     * resposta (truncada ou que a ECU não atendeu no lote).
+     */
+    fun parseLote(
+        bruto: String,
+        definicoes: List<DefinicaoPid>,
+        comando: String? = comandoLote(definicoes),
+    ): Map<DefinicaoPid, RespostaObd<Double>> {
+        val linhas = linhasLimpas(bruto, comando)
+        val porPid = definicoes.associateBy { it.pid!! }
+        val achados = HashMap<Int, List<Int>>()
+        var algumaResposta = false
+        for (linha in linhas) {
+            val bytes = hexParaBytes(compactar(linha))
+            var i = bytes.indexOf(0x41)
+            while (i >= 0 && i < bytes.size) {
+                algumaResposta = true
+                i++ // depois do 41: PID, dados, PID, dados...
+                while (i < bytes.size) {
+                    val definicao = porPid[bytes[i]] ?: break
+                    val fim = i + 1 + definicao.bytes
+                    if (fim > bytes.size) {
+                        i = bytes.size // truncada no meio do PID
+                        break
+                    }
+                    achados.putIfAbsent(bytes[i], bytes.subList(i + 1, fim))
+                    i = fim
+                }
+                // Outra mensagem `41` na mesma linha (outra ECU depois do preenchimento): segue nela.
+                i = if (i < bytes.size) bytes.subList(i, bytes.size).indexOf(0x41).let { if (it < 0) -1 else i + it } else -1
+            }
+        }
+        val erro: RespostaObd<Nothing> = if (algumaResposta) RespostaObd.Invalido(bruto) else classificarErro(linhas, bruto)
+        return definicoes.associateWith { d ->
+            achados[d.pid!!]?.let { validarFaixa(d.converter(it), d, bruto) } ?: erro
+        }
+    }
+
+    // ---------------------------------------------------------------- Prontidão (0101) e contadores do modo 01
+
+    /**
+     * `0101`: luz de injeção (MIL), quantidade de DTCs e os monitores de prontidão (SAE J1979):
+     * `41 01 A B C D`. Ver [StatusProntidao.decodificar].
+     */
+    fun parseProntidao(bruto: String, comando: String? = "0101"): RespostaObd<StatusProntidao> =
+        bytesDoPid(bruto, "01", 4, comando).mapear { (a, b, c, d) -> StatusProntidao.decodificar(a, b, c, d) }
+
+    /**
+     * Contador de 1 ou 2 bytes do modo 01 (`0121`, `0130`, `0131`, `014D`, `014E`): `256·A + B` (ou `A`).
+     * [pid] é o byte hexadecimal (`"31"`).
+     */
+    fun parseContador(bruto: String, pid: String, bytes: Int, comando: String? = "01$pid"): RespostaObd<Int> {
+        require(bytes in 1..2) { "Contadores do modo 01 têm 1 ou 2 bytes" }
+        return bytesDoPid(bruto, pid.uppercase(), bytes, comando).mapear { if (bytes == 1) it[0] else it[0] * 256 + it[1] }
+    }
+
+    // ---------------------------------------------------------------- Modo 06 (resultados de testes de bordo, CAN)
+
+    /**
+     * `06 <MID>` no CAN (ISO 15765-4): `46` seguido de registros de 9 bytes — MID, TID, UASID (unidade e
+     * escala), valor, mínimo e máximo (2 bytes cada), com o MID repetido em cada teste. Ex.: `46 A2 0B 24
+     * 00 03 00 00 FF FF A2 0C 24 00 01 00 00 FF FF` (cilindro 1: EWMA = 3, ciclo atual = 1). Registro
+     * cortado (resposta parcial) é descartado. Negativa `7F 06 xx` = [RespostaObd.SemDados].
+     */
+    fun parseModo06(bruto: String, mid: Int, comando: String? = "06%02X".format(mid)): RespostaObd<List<TesteModo06>> {
+        val linhas = linhasLimpas(bruto, comando)
+        val prefixo = "46%02X".format(mid)
+        for (linha in linhas) {
+            val compacta = compactar(linha)
+            val i = compacta.indexOf(prefixo)
+            if (i < 0) continue
+            val registros = hexParaBytes(compacta.substring(i + 2))
+                .chunked(TAMANHO_TESTE_MODO_06)
+                .filter { it.size == TAMANHO_TESTE_MODO_06 && it[0] == mid }
+                .map { b -> TesteModo06(mid, b[1], b[2], b[3] * 256 + b[4], b[5] * 256 + b[6], b[7] * 256 + b[8]) }
+            return if (registros.isEmpty()) RespostaObd.Invalido(bruto) else RespostaObd.Ok(registros)
+        }
+        if (respostaNegativa(bruto, "06", comando) != null) return RespostaObd.SemDados
+        return classificarErro(linhas, bruto)
+    }
+
+    private const val TAMANHO_TESTE_MODO_06 = 9
+
     // ---------------------------------------------------------------- DTCs (modos 03 e 04)
 
     /**

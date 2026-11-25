@@ -153,6 +153,19 @@
     <string name="dtc_badge_confirmado">Confirmada · 03</string>
     <string name="dtc_badge_pendente">Pendente · 07</string>
     <string name="dtc_badge_permanente">Permanente · 0A</string>
+    <string name="dtc_tipo_cambio">Câmbio (TCM)</string>
+    <!-- v2.2.9: Checkup OBD2 / Prontidão e Falhas de Ignição (Modo 06), aba Oficina -->
+    <string name="oficina_card_checkup">Checkup OBD2 / Prontidão</string>
+    <string name="oficina_card_checkup_desc">Pré-compra em 1 clique: luz de injeção, monitores, km desde a limpeza de falhas, VIN, CALID e CVN</string>
+    <string name="oficina_card_misfire">Falhas de Ignição (Modo 06)</string>
+    <string name="oficina_card_misfire_desc">Contagem de falhas de ignição por cilindro (1 a 4): ciclo atual e média, em carros CAN</string>
+    <string name="checkup_titulo">Checkup OBD2 / Prontidão</string>
+    <string name="checkup_descricao">Lê, com o polling pausado, o status da luz de injeção, os monitores de prontidão (pronto / pendente / não aplicável), a distância e os ciclos desde a última limpeza de falhas e a identificação da ECU (VIN, CALID e CVN). Ignição ligada; o motor pode estar ligado.</string>
+    <string name="checkup_ler">Fazer checkup</string>
+    <string name="misfire_titulo">Falhas de Ignição (Modo 06)</string>
+    <string name="misfire_descricao">Consulta os resultados de bordo do Modo 06 (MIDs A2–A5) e mostra, por cilindro, as falhas de ignição do ciclo atual (TID 0C) e a média EWMA (TID 0B). Disponível em carros CAN no OBD2 padrão.</string>
+    <string name="misfire_ler">Ler falhas de ignição</string>
+    <string name="dtc_badge_cambio">Câmbio · TCM 7E1</string>
     <string name="dtc_categoria_qtd">%1$s · %2$d</string>
     <string name="dtc_categoria_vazia">Nenhuma falha nesta categoria.</string>
     <string name="dtc_categoria_nao_suportada">Não suportado por esta ECU.</string>

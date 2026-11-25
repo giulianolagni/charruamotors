@@ -218,6 +218,23 @@ class Elm327BluetoothClient(
     /** Valor do `ATST` configurado no adaptador; null = o padrão (`32`, 200 ms). */
     @Volatile private var timeoutAdaptadorAtivo: String? = null
 
+    /**
+     * v2.2.9: Multi-PID em lote (`010C0D0B`) validado no handshake — só no OBD2 padrão sobre CAN
+     * (ISO 15765-4), nunca nos modos 21/22. Os PIDs rápidos do ciclo saem num único comando; ver
+     * [lerChaves] e [registrarFalhaLote].
+     */
+    @Volatile var usaLoteMultiPid: Boolean = false
+        private set
+
+    /** Lotes seguidos que falharam no polling; em [MAX_FALHAS_LOTE_SEGUIDAS] o lote é desligado. */
+    @Volatile private var falhasLoteSeguidas = 0
+
+    /**
+     * No OBD2 padrão, o câmbio `7E1` também sai com `ATCRA 7E9` explícito (v2.2.9: perfil GM/Cruze e a
+     * leitura de falhas do TCM). Nos modos 21/22 o filtro do câmbio já é sempre explícito.
+     */
+    @Volatile private var filtroCambioPadrao = false
+
     /** Respiro atual entre comandos: [intervaloEntreComandosMs], ou [intervaloSeguroMs] depois de um erro. */
     @Volatile private var respiroMs: Long = intervaloEntreComandosMs
 
@@ -328,7 +345,8 @@ class Elm327BluetoothClient(
         ciclosPorLento: Int,
     ): Flow<DadosObd> = flow {
         val sessao = transporte ?: return@flow
-        val escalonador = EscalonadorPolling(lentosPorVez, ciclosPorLento, Pids.candidatosFilaRapida(consumoPorMaf), CHAVES_CAMBIO)
+        val rapidos = Pids.candidatosFilaRapida(consumoPorMaf)
+        val escalonador = EscalonadorPolling(lentosPorVez, ciclosPorLento, rapidos, CHAVES_CAMBIO)
         var geracaoManualVista = sessoesManuaisEncerradas.get()
         var ciclosSemEcu = 0
         while (_estado.value == EstadoConexaoObd.Conectado && transporte === sessao) {
@@ -347,6 +365,8 @@ class Elm327BluetoothClient(
             val inicioNs = System.nanoTime()
             // Relido a cada ciclo: um perfil de montadora pode ser ativado com o polling já rodando.
             escalonador.atualizarSuportados(_pidsSuportados.value, ::grupoDe)
+            // Com o lote ativo, o pedal vai junto no mesmo comando (arco PED do HUD fluido); sem ele, volta à fila lenta.
+            escalonador.trocarCandidatosRapidos(if (usaLoteMultiPid) rapidos + Pids.PEDAL_ACELERADOR else rapidos)
             val ciclo = try {
                 cicloForaDaSessaoManual { lerChaves(escalonador.proximoCiclo()) } ?: continue
             } catch (e: CancellationException) {
@@ -381,18 +401,25 @@ class Elm327BluetoothClient(
                     "o perfil exige CAN de 11 bits (o veículo usa o protocolo ${protocolo ?: "desconhecido"})",
                 )
             }
-            val ativos = semAlavancaRedundante(
-                buildList {
-                    for ((requisicao, definicoes) in perfil.requisicoes) {
-                        val bruto = try {
-                            enviar(requisicao.comando, timeoutComandoMs, requisicao.cabecalho)
-                        } catch (e: ObdTimeoutException) {
-                            continue // módulo ausente (ex.: carro sem câmbio automático)
+            // v2.2.9: no Cruze (perfil GM) o TCM 7E1 é sondado com ATSH 7E1 + ATCRA 7E9 e o cabeçalho volta ao funcional.
+            filtroCambioPadrao = perfil.atende(MARCA_GM)
+            val ativos = try {
+                semAlavancaRedundante(
+                    buildList {
+                        for ((requisicao, definicoes) in perfil.requisicoes) {
+                            val bruto = try {
+                                enviar(requisicao.comando, timeoutComandoMs, requisicao.cabecalho)
+                            } catch (e: ObdTimeoutException) {
+                                continue // módulo ausente (ex.: carro sem câmbio automático)
+                            }
+                            // A faixa do JSON já descarta leituras implausíveis (ATF GM: −20 a 150 °C).
+                            addAll(definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok })
                         }
-                        addAll(definicoes.filter { ObdParser.parsePid(bruto, it) is RespostaObd.Ok })
-                    }
-                },
-            )
+                    },
+                )
+            } finally {
+                if (filtroCambioPadrao) withContext(NonCancellable) { restaurarCabecalho(null) }
+            }
             if (ativos.isEmpty()) {
                 registro.evento("Perfil ${perfil.nome}: nenhuma requisição respondeu")
                 return@withContext ResultadoPerfil.Indisponivel(perfil.nome, "a ECU não respondeu aos PIDs do perfil")
@@ -530,6 +557,49 @@ class Elm327BluetoothClient(
     override suspend fun lerCodigosFalha(): Result<List<DtcLido>> {
         val modo = modoServico ?: return lerDtcs("03", "ler os códigos de falha", ObdParser::parseDtcs)
         return lerDtcsDoModo(modo)
+    }
+
+    /**
+     * v2.2.9: falhas do câmbio no TCM `7E1` (OBD2 padrão em CAN de 11 bits): `ATSH 7E1` + `ATCRA 7E9`,
+     * `03` e, se o TCM não responder a ele, o UDS `19 02 FF`. O cabeçalho funcional (`ATSH 7DF`) e o
+     * `ATCRA` padrão voltam sempre. Nos modos 21/22 (SW4) e fora do CAN 11 bits devolve null sem enviar
+     * nada; TCM mudo também é null (não é erro).
+     */
+    override suspend fun lerCodigosFalhaCambio(): Result<List<DtcLido>?> = withContext(dispatcher) {
+        if (modoServico != null || !protocoloCan11Bits(_infoConexao.value.protocolo)) return@withContext Result.success(null)
+        operacao {
+            exigirConectado()
+            val filtroAntes = filtroCambioPadrao
+            filtroCambioPadrao = true
+            try {
+                lerDtcsTcm()
+            } finally {
+                withContext(NonCancellable) {
+                    restaurarCabecalho(null)
+                    filtroCambioPadrao = filtroAntes
+                }
+            }
+        }
+    }
+
+    private suspend fun lerDtcsTcm(): List<DtcLido>? {
+        val bruto03 = sondar("03", CABECALHO_CAMBIO, TIMEOUT_DTC_MS)
+        val r03 = bruto03?.let { ObdParser.parseDtcs(it, "03") }
+        if (r03 is RespostaObd.Ok) return r03.valor.map { DtcLido(it, DescricaoDtc.descricaoDe(it)) }
+        val brutoUds = sondar(COMANDO_DTC_UDS, CABECALHO_CAMBIO, TIMEOUT_DTC_MS)
+        val rUds = brutoUds?.let { ObdParser.parseDtcsUds(it, COMANDO_DTC_UDS) }
+        if (rUds is RespostaObd.Ok) return rUds.valor.map { DtcLido(it, DescricaoDtc.descricaoDe(it)) }
+        registro.evento(
+            "TCM 7E1 sem falhas legíveis (03: ${bruto03?.let { ObdParser.erroElm(it) ?: RegistroComunicacao.visivel(it) } ?: "sem prompt"}; " +
+                "19 02 FF: ${brutoUds?.let { ObdParser.erroElm(it) ?: RegistroComunicacao.visivel(it) } ?: "sem prompt"})",
+        )
+        return null
+    }
+
+    /** CAN de 11 bits pela descrição do `ATDP` (o TCM `7E1` só existe nele). */
+    private fun protocoloCan11Bits(descricao: String?): Boolean {
+        val d = descricao?.uppercase() ?: return false
+        return ("CAN" in d || "15765" in d) && "29" !in d
     }
 
     override suspend fun lerCodigosPendentes(): Result<List<DtcLido>> {
@@ -832,9 +902,16 @@ class Elm327BluetoothClient(
         )
     }
 
-    /** Filtro do [cabecalho]: o do catálogo, mais `7E9` explícito para o câmbio `7E1` no modo 21 (o A750F responde nele). */
+    /**
+     * Filtro do [cabecalho]: o do catálogo, mais `7E9` explícito para o câmbio `7E1` no modo 21 (o A750F
+     * responde nele) e, no OBD2 padrão, com o [filtroCambioPadrao] (TCM GM do Cruze, falhas do TCM).
+     */
     private fun filtroRecepcaoPara(cabecalho: String?): String? =
-        if (cabecalho == CABECALHO_CAMBIO && modoServico != null) FILTRO_CAMBIO else RequisicaoEstendida.filtroRecepcao(cabecalho)
+        if (cabecalho == CABECALHO_CAMBIO && (modoServico != null || filtroCambioPadrao)) {
+            FILTRO_CAMBIO
+        } else {
+            RequisicaoEstendida.filtroRecepcao(cabecalho)
+        }
 
     /**
      * Ajusta o `ATCRA` ao [cabecalho] recém-fixado (só se mudar): `ATCRA 7B8` para o ABS/VSC,
@@ -1051,6 +1128,7 @@ class Elm327BluetoothClient(
             val comando = COMANDO_BUSCA + if (usaSufixoRespostaUnica) SUFIXO_RESPOSTA_UNICA else ""
             ObdParser.parsePidsSuportados(enviar(comando), 0x00, comando) is RespostaObd.Ok
         }
+        testarLoteMultiPid(suportados, protocolo)
         // Só o que o app sabe interpretar: PIDs do catálogo presentes no bitmask + comandos AT do adaptador.
         val doCatalogo = catalogo.pids.filter { it.ehComandoAt || it.pid in suportados }
         _pidsSuportados.value = doCatalogo.mapTo(linkedSetOf()) { it.comando }
@@ -1267,7 +1345,86 @@ class Elm327BluetoothClient(
     private fun descreverOtimizacoes(): String {
         fun simNao(b: Boolean) = if (b) "sim" else "não"
         return "sufixo de resposta única: ${simNao(usaSufixoRespostaUnica)}; " +
-            "ATAT2: ${simNao(usaTimingAdaptativoAgressivo)}; ATST 0C: ${simNao(usaTimeoutCurto)}"
+            "ATAT2: ${simNao(usaTimingAdaptativoAgressivo)}; ATST 0C: ${simNao(usaTimeoutCurto)}" +
+            if (modoServico == null) "; Multi-PID em lote: ${simNao(usaLoteMultiPid)}" else ""
+    }
+
+    // ---------------------------------------------------------------- Multi-PID em lote (v2.2.9)
+
+    /**
+     * Handshake do lote: só no OBD2 padrão sobre CAN (ISO 15765-4) e com ao menos 2 dos PIDs de
+     * [PIDS_TESTE_LOTE] no bitmask. Um único pedido conservador (`010C0D0B`, resposta de 2 quadros) liga
+     * o lote se vierem **todos** os PIDs pedidos; `?`, `ERROR`, `BUFFER FULL`, `NO DATA`, `7F`, resposta
+     * truncada ou sem prompt deixam o polling em 1 PID por vez, com o motivo no registro.
+     */
+    private suspend fun testarLoteMultiPid(suportados: Set<Int>, protocolo: String?) {
+        usaLoteMultiPid = false
+        falhasLoteSeguidas = 0
+        if (modoServico != null) return
+        if (!protocoloCan(protocolo)) {
+            registro.evento("Multi-PID em lote desligado: o protocolo (${protocolo ?: "não informado"}) não é CAN ISO 15765-4")
+            return
+        }
+        val candidatos = PIDS_TESTE_LOTE.mapNotNull { catalogo[it] }.filter { it.ehModo01 && it.pid in suportados }
+        if (candidatos.size < 2) {
+            registro.evento("Multi-PID em lote desligado: a ECU não suporta PIDs rápidos suficientes (${candidatos.size})")
+            return
+        }
+        val comando = ObdParser.comandoLote(candidatos)
+        val bruto = sondar(comando, null)
+        val resultados = bruto?.let { ObdParser.parseLote(it, candidatos, comando) }
+        usaLoteMultiPid = resultados != null && resultados.values.all { it is RespostaObd.Ok }
+        registro.evento(
+            if (usaLoteMultiPid) {
+                "Multi-PID em lote ativo: $comando respondeu com todos os PIDs; os PIDs rápidos do painel saem num só comando"
+            } else {
+                "Multi-PID em lote desligado: $comando → ${motivoFalhaLote(bruto, resultados)}; polling segue 1 PID por vez"
+            },
+        )
+    }
+
+    /** "NO DATA", "?", "BUFFER FULL", "7F 01 12", "resposta truncada" ou "sem prompt (timeout)", para o registro. */
+    private fun motivoFalhaLote(bruto: String?, resultados: Map<DefinicaoPid, RespostaObd<Double>>?): String {
+        if (bruto == null) return "sem prompt (timeout)"
+        ObdParser.erroElm(bruto)?.let { return it }
+        ObdParser.respostaNegativa(bruto, "01")?.let { return "7F 01 $it (${ObdParser.descricaoNrc(it)})" }
+        val faltaram = resultados.orEmpty().filterValues { it !is RespostaObd.Ok }.keys.joinToString { it.comando }
+        return "resposta truncada ou incompleta (sem $faltaram: \"${RegistroComunicacao.visivel(bruto)}\")"
+    }
+
+    /** O protocolo do `ATDP` é CAN (ISO 15765-4, 11 ou 29 bits)? Desconhecido = não (o lote fica desligado). */
+    private fun protocoloCan(descricao: String?): Boolean {
+        val d = descricao?.uppercase() ?: return false
+        return "CAN" in d || "15765" in d
+    }
+
+    /** Uma falha do lote no polling: na [MAX_FALHAS_LOTE_SEGUIDAS]ª seguida o lote é desligado na sessão. */
+    private fun registrarFalhaLote(comando: String, motivo: String) {
+        falhasLoteSeguidas++
+        if (falhasLoteSeguidas < MAX_FALHAS_LOTE_SEGUIDAS || !usaLoteMultiPid) return
+        usaLoteMultiPid = false
+        registro.evento(
+            "Multi-PID em lote desligado após $falhasLoteSeguidas falhas seguidas ($comando → $motivo); " +
+                "polling volta a 1 PID por vez",
+        )
+    }
+
+    /**
+     * Divide os PIDs do modo 01 do ciclo em lotes que caibam em 2 quadros CAN (o tamanho que o
+     * handshake validou: até [MAX_BYTES_RESPOSTA_LOTE] bytes e [MAX_PIDS_LOTE] PIDs). Lote de 1 PID não
+     * é lote: vai pela leitura normal.
+     */
+    private fun montarLotes(definicoes: List<DefinicaoPid>): List<List<DefinicaoPid>> {
+        val lotes = mutableListOf<MutableList<DefinicaoPid>>()
+        for (d in definicoes) {
+            val atual = lotes.lastOrNull()
+            if (atual != null && atual.size < MAX_PIDS_LOTE && ObdParser.bytesRespostaLote(atual + d) <= MAX_BYTES_RESPOSTA_LOTE) {
+                atual += d
+            } else {
+                lotes += mutableListOf(d)
+            }
+        }
+        return lotes.filter { it.size >= 2 }
     }
 
     // ---------------------------------------------------------------- protocolo ELM327
@@ -1477,6 +1634,34 @@ class Elm327BluetoothClient(
             if (algum) respostasEcu++ else ObdParser.erroElm(bruto)?.let { ultimoErro = it }
         }
 
+        /**
+         * Lê os PIDs do modo 01 de um [lote] num único comando (`010C0B0D10`). Devolve null se todos
+         * vieram; senão, o motivo da falha (os que faltaram ficam para a leitura individual do ciclo).
+         */
+        suspend fun lerLote(lote: List<DefinicaoPid>): String? {
+            consultados += lote.map { it.comando }
+            pedidosEcu++
+            val comando = ObdParser.comandoLote(lote)
+            val bruto = try {
+                enviar(comando, registrar = false)
+            } catch (e: ObdTimeoutException) {
+                ultimoErro = "TIMEOUT"
+                verificarTimeouts()
+                null
+            }
+            val resultados = bruto?.let { ObdParser.parseLote(it, lote, comando) }
+            resultados?.let { registrarDecodificados(comando, it) }
+            var algum = false
+            resultados?.forEach { (d, r) ->
+                if (r is RespostaObd.Ok) {
+                    lidos[d.comando] = r.valor
+                    algum = true
+                }
+            }
+            if (algum) respostasEcu++ else bruto?.let(ObdParser::erroElm)?.let { ultimoErro = it }
+            return if (resultados != null && resultados.values.all { it is RespostaObd.Ok }) null else motivoFalhaLote(bruto, resultados)
+        }
+
         fun ciclo() = Ciclo(consultados, lidos, pedidosEcu > 0 && respostasEcu == 0, ultimoErro)
     }
 
@@ -1534,17 +1719,53 @@ class Elm327BluetoothClient(
     private suspend fun lerChaves(chaves: List<String>, estendidas: Map<String, DefinicaoPid> = definicoesEstendidas): Ciclo {
         val coletor = Coletor()
         val lidas = mutableSetOf<RequisicaoEstendida>()
-        for (chave in ordenarPorCabecalho(chaves, estendidas)) {
+        val ordenadas = ordenarPorCabecalho(chaves, estendidas)
+        val lotePorChave = lotesDoCiclo(ordenadas, estendidas)
+        val lotesLidos = mutableSetOf<List<DefinicaoPid>>()
+        for (chave in ordenadas) {
             val definicao = estendidas[chave] ?: catalogo[chave] ?: continue
             val requisicao = definicao.estendida
-            if (requisicao == null) {
+            val lote = lotePorChave[chave]
+            if (lote != null) {
+                if (lotesLidos.add(lote)) lerLoteComFallback(coletor, lote)
+            } else if (requisicao == null) {
                 coletor.lerPadrao(chave, definicao)
             } else if (lidas.add(requisicao)) {
                 coletor.lerEstendido(requisicao, estendidas.values.filter { it.estendida == requisicao })
             }
         }
-        if (cambioAtivo) restaurarCabecalhoServico()
+        if (cambioAtivo) {
+            restaurarCabecalhoServico()
+        } else if (filtroCambioPadrao && modoServico == null && cabecalhoAtivo == CABECALHO_CAMBIO) {
+            // GM/Cruze: ao sair do bloco do TCM 7E1, volta ao funcional (ATSH 7DF) e ao ATCRA padrão.
+            restaurarCabecalho(null)
+        }
         return coletor.ciclo()
+    }
+
+    /**
+     * Lotes do ciclo (v2.2.9): com o [usaLoteMultiPid], os PIDs de [CHAVES_LOTE] do modo 01 (fila
+     * rápida: RPM, MAP, velocidade, MAF e pedal) agrupados por [montarLotes]. Vazio nos modos 21/22.
+     */
+    private fun lotesDoCiclo(chaves: List<String>, estendidas: Map<String, DefinicaoPid>): Map<String, List<DefinicaoPid>> {
+        if (!usaLoteMultiPid || modoServico != null) return emptyMap()
+        val loteaveis = chaves.filter { it in CHAVES_LOTE && it !in estendidas }
+            .mapNotNull { catalogo[it]?.takeIf { d -> d.ehModo01 } }
+        return montarLotes(loteaveis).flatMap { lote -> lote.map { it.comando to lote } }.toMap()
+    }
+
+    /**
+     * Um lote no polling; se não vierem todos os PIDs, os que faltaram são lidos 1 a 1 no mesmo ciclo
+     * (o painel não perde a leitura) e a falha conta para o fallback ([registrarFalhaLote]).
+     */
+    private suspend fun lerLoteComFallback(coletor: Coletor, lote: List<DefinicaoPid>) {
+        val falha = coletor.lerLote(lote)
+        if (falha == null) {
+            falhasLoteSeguidas = 0
+            return
+        }
+        registrarFalhaLote(ObdParser.comandoLote(lote), falha)
+        for (d in lote) if (d.comando !in coletor.lidos) coletor.lerPadrao(d.comando, d)
     }
 
     /**
@@ -1858,6 +2079,9 @@ class Elm327BluetoothClient(
         modoServico = null
         cabecalhoServico = null
         cambioAtivo = false
+        usaLoteMultiPid = false
+        falhasLoteSeguidas = 0
+        filtroCambioPadrao = false
         usaSufixoRespostaUnica = false
         requisicoesSemSufixo = emptySet()
         requisicoesConferidas = emptySet()
@@ -1888,6 +2112,12 @@ class Elm327BluetoothClient(
         private val CABECALHOS_TCM = listOf("7E1", "7E2")
         private const val FILTRO_CAMBIO = "7E9"
 
+        /** Perfil de montadora que lê o TCM `7E1` com filtro explícito no OBD2 padrão (Cruze). */
+        private const val MARCA_GM = "gm"
+
+        /** Fallback UDS das falhas do TCM: *reportDTCByStatusMask* com todas as máscaras. */
+        private const val COMANDO_DTC_UDS = "1902FF"
+
         /** Filtro de recepção desconhecido (a volta ao padrão falhou): difere de qualquer alvo, então o próximo comando insiste. */
         private const val FILTRO_INDEFINIDO = "?"
 
@@ -1909,8 +2139,26 @@ class Elm327BluetoothClient(
         internal fun filtrarAlavancaRedundante(ativos: List<DefinicaoPid>): List<DefinicaoPid> =
             if (ativos.any { it.comando == CHAVE_ALAVANCA_CAMBIO }) ativos.filter { it.comando != CHAVE_ALAVANCA_ECM } else ativos
 
-        /** Sensores do câmbio lidos em cadência leve (ver [EscalonadorPolling]). */
-        private val CHAVES_CAMBIO = setOf("TOYOTA_ALAVANCA", "TOYOTA_ATF_CAMBIO", "TOYOTA_MARCHA")
+        /**
+         * Sensores do câmbio lidos em cadência leve (ver [EscalonadorPolling]): A750F no modo 21 e, desde a
+         * v2.2.9, o ATF do TCM GM (`22 1940` no `7E1`/`7E2`) no OBD2 padrão do Cruze.
+         */
+        private val CHAVES_CAMBIO = setOf("TOYOTA_ALAVANCA", "TOYOTA_ATF_CAMBIO", "TOYOTA_MARCHA", "GM_ATF", "GM_ATF_7E2")
+
+        /** Handshake do lote: RPM + velocidade + MAP (`010C0D0B`, 8 bytes de resposta = 2 quadros CAN). */
+        private val PIDS_TESTE_LOTE = listOf(Pids.RPM, Pids.VELOCIDADE, Pids.PRESSAO_COLETOR)
+
+        /** PIDs do modo 01 lidos em lote quando ele está ativo: os da fila rápida e o pedal (arco PED do HUD). */
+        val CHAVES_LOTE: Set<String> = (Pids.candidatosFilaRapida(consumoPorMaf = true) + Pids.PEDAL_ACELERADOR).toSet()
+
+        /** ISO 15765-4: até 6 PIDs por pedido do modo 01. */
+        const val MAX_PIDS_LOTE = 6
+
+        /** Resposta de até 2 quadros CAN (6 + 7 bytes), como a do pedido de teste do handshake. */
+        const val MAX_BYTES_RESPOSTA_LOTE = 13
+
+        /** Falhas seguidas do lote no polling até voltar a 1 PID por vez. */
+        const val MAX_FALHAS_LOTE_SEGUIDAS = 2
 
         /** Marcador de "qualquer cabeçalho" (comandos AT) em [ordenarPorCabecalho]. */
         private const val NEUTRO = "*"

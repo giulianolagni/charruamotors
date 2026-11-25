@@ -1,5 +1,6 @@
 package com.charruamotors.obd.pid
 
+import com.charruamotors.domain.calculo.AlavancaGmTcm
 import com.charruamotors.domain.calculo.CambioA750f
 import org.json.JSONException
 import org.json.JSONObject
@@ -135,6 +136,21 @@ data class DefinicaoPid(
                 min = 0.0,
                 max = 255.0,
                 rotulos = CambioA750f.ROTULOS_MARCHA,
+                doAparelho = true,
+            )
+        }
+
+        /** Coluna de log da posição da alavanca do TCM GM ([AlavancaGmTcm.CHAVE_POSICAO]). */
+        val ALAVANCA_GM: DefinicaoPid by lazy {
+            DefinicaoPid(
+                comando = AlavancaGmTcm.CHAVE_POSICAO,
+                nome = "Alavanca / marcha (TCM GM 7E2)",
+                unidade = "",
+                bytes = 0,
+                formula = Formula.compilar("0"),
+                min = 0.0,
+                max = 255.0,
+                rotulos = AlavancaGmTcm.ROTULOS,
                 doAparelho = true,
             )
         }

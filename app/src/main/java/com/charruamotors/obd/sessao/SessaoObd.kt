@@ -1,5 +1,6 @@
 package com.charruamotors.obd.sessao
 
+import com.charruamotors.domain.calculo.AlavancaGmTcm
 import com.charruamotors.carros.PerfilCarro
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
 import com.charruamotors.domain.calculo.CambioA750f
@@ -467,6 +468,7 @@ class SessaoObd(
         else if ((PresetVeiculo.marcaGm(marcaMontadoraAtual) || estimadorPerfil != null) && CambioA750f.CHAVE_MARCHA !in suportados) {
             add(DefinicaoPid.MARCHA_ESTIMADA_A750F)
         }
+        if (AlavancaGmTcm.CHAVES_SELETOR.any { it in suportados }) add(DefinicaoPid.ALAVANCA_GM)
     }
 
     // ------------------------------------------------------------------ execução

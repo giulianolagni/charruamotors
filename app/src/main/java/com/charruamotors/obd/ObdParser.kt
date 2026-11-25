@@ -1,5 +1,7 @@
 package com.charruamotors.obd
 
+import com.charruamotors.obd.pid.Pids
+import com.charruamotors.domain.calculo.AlavancaGmTcm
 import com.charruamotors.obd.pid.DefinicaoPid
 
 /** Resultado da interpretação de uma resposta bruta do ELM327. */
@@ -97,11 +99,29 @@ object ObdParser {
             }
             return classificarErro(linhas, bruto)
         }
+        if (definicao.comando == Pids.TENSAO_ECU) return parseTensaoModulo(bruto, definicao, comando)
         return when (val r = bytesDaResposta(bruto, "41${definicao.pidHex}", definicao.bytes, comando)) {
             is RespostaObd.Ok -> validarFaixa(definicao.converter(r.valor), definicao, bruto)
             else -> r.mapear { 0.0 }
         }
     }
+
+    /**
+     * `0142` no broadcast CAN: vários módulos respondem e um secundário (TCM) pode devolver `0000`.
+     * Vale a primeira resposta com ao menos [TENSAO_MINIMA_MODULO_V]; abaixo disso não é leitura.
+     */
+    private fun parseTensaoModulo(bruto: String, definicao: DefinicaoPid, comando: String?): RespostaObd<Double> {
+        val linhas = linhasLimpas(bruto, comando)
+        val prefixo = "41${definicao.pidHex}"
+        val regex = Regex("$prefixo([0-9A-F]{4})")
+        val volts = linhas.flatMap { regex.findAll(compactar(it)).toList() }
+            .map { definicao.converter(hexParaBytes(it.groupValues[1])) }
+        volts.firstOrNull { it >= TENSAO_MINIMA_MODULO_V }?.let { return validarFaixa(it, definicao, bruto) }
+        if (linhas.any { prefixo in compactar(it) }) return RespostaObd.Invalido(bruto)
+        return classificarErro(linhas, bruto)
+    }
+
+    private const val TENSAO_MINIMA_MODULO_V = 5.0
 
     // ---------------------------------------------------------------- PIDs de montadora (modos 21 / 22)
 
@@ -117,7 +137,11 @@ object ObdParser {
         comando: String? = definicao.estendida?.comando,
     ): RespostaObd<Double> {
         val requisicao = requireNotNull(definicao.estendida) { "${definicao.comando} não é um PID estendido" }
-        val r = bytesDaResposta(bruto, requisicao.prefixoResposta, definicao.bytes, comando)
+        var r = bytesDaResposta(bruto, requisicao.prefixoResposta, definicao.bytes, comando)
+        if (r is RespostaObd.Ok && requisicao.identificador in AlavancaGmTcm.IDS_BYTE_UNICO) {
+            val umByte = Regex(requisicao.prefixoResposta + "[0-9A-F]{2}$")
+            if (linhasLimpas(bruto, comando).none { umByte.containsMatchIn(compactar(it)) }) r = RespostaObd.Invalido(bruto)
+        }
         if (r is RespostaObd.Ok) return validarFaixa(definicao.converter(r.valor), definicao, bruto)
         val negativas = linhasLimpas(bruto, comando).map(::compactar).filter { it.startsWith(requisicao.prefixoNegativa) }
         if (negativas.any { !it.startsWith(requisicao.prefixoNegativa + NRC_RESPOSTA_PENDENTE) }) return RespostaObd.SemDados
@@ -217,11 +241,15 @@ object ObdParser {
         var achou = false
         val suportados = sortedSetOf<Int>()
         for (linha in linhas) {
-            val dados = regex.find(compactar(linha))?.groupValues?.get(1) ?: continue
-            val bytes = hexParaBytes(dados)
-            if (bytes.size < 4) continue
-            achou = true
-            suportados += decodificarBitmask(base, bytes.take(4))
+            // v2.3.7: OR de todas as ECUs, mesmo com duas respostas coladas na mesma linha.
+            var dados = regex.find(compactar(linha))?.groupValues?.get(1)
+            while (dados != null) {
+                val bytes = hexParaBytes(dados.take(8))
+                if (bytes.size < 4) break
+                achou = true
+                suportados += decodificarBitmask(base, bytes)
+                dados = regex.matchAt(dados, 8)?.groupValues?.get(1)
+            }
         }
         if (achou) return RespostaObd.Ok(suportados)
         if (linhas.any { regex.containsMatchIn(compactar(it)) }) return RespostaObd.Invalido(bruto)

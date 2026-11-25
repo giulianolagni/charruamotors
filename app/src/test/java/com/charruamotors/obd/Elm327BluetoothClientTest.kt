@@ -174,7 +174,7 @@ class Elm327BluetoothClientTest {
         t.enviados.clear()
 
         obd.lerDadosEmTempoReal(comandos = null).first()
-        val esperados = obd.pidsSuportados.value.map { if (it.startsWith("AT")) it else it + "1" }.toSet()
+        val esperados = obd.pidsSuportados.value.map { if (it.startsWith("AT") || it == "0142") it else it + "1" }.toSet()
         assertEquals(esperados, t.enviados.toSet())
     }
 

@@ -1,5 +1,6 @@
 package com.charruamotors.obd
 
+import com.charruamotors.domain.calculo.AlavancaGmTcm
 import com.charruamotors.direcao.painel.SensorPainel
 import com.charruamotors.obd.pid.CatalogoTeste
 import com.charruamotors.obd.pid.RequisicaoEstendida
@@ -129,9 +130,10 @@ class SensoresSw4Test {
     @Test
     fun `rotulos dos mostradores batem com os do catalogo`() {
         for (s in SensorPainel.entries.filter { it.ehEstado }) {
-            for (comando in s.comandos) {
+            // A posição da alavanca GM é calculada pelo app (fora do catálogo), com códigos próprios.
+            for (comando in s.comandos - AlavancaGmTcm.CHAVE_POSICAO) {
                 val def = catalogo[comando] ?: error("$comando ausente do catálogo estendido")
-                assertEquals("${s.name} × $comando", def.rotulos, s.rotulos)
+                assertEquals("${s.name} × $comando", def.rotulos, s.rotulos - AlavancaGmTcm.ROTULOS.keys)
             }
         }
         // Todos os comandos dos mostradores Toyota existem no catálogo.

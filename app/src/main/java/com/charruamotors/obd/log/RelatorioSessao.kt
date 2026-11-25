@@ -1,5 +1,6 @@
 package com.charruamotors.obd.log
 
+import com.charruamotors.domain.calculo.AlavancaGmTcm
 import com.charruamotors.sistema.unidades.UnidadeConsumo
 import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.calculo.ComputadorBordo
@@ -172,7 +173,9 @@ class EstatisticasViagem(
     fun registrar(dados: ValoresSensores, instanteMs: Long? = null) {
         amostras++
         for ((comando, valor) in dados.valores) sensores.getOrPut(comando) { ResumoSensor() }.registrar(valor)
-        dados[CambioA750f.CHAVE_MARCHA]?.takeIf { it.isFinite() }?.let { marchas.merge(it.toInt(), 1, Int::plus) }
+        // GM: a posição do TCM substitui a marcha estimada no resumo.
+        (dados[AlavancaGmTcm.CHAVE_POSICAO] ?: dados[CambioA750f.CHAVE_MARCHA])?.takeIf { it.isFinite() }
+            ?.let { marchas.merge(it.toInt(), 1, Int::plus) }
         if (motor != null && instanteMs != null) {
             bordo.registrar(TelemetriaCalculada.consumoInstantaneo(dados, motor), dados[Pids.VELOCIDADE], instanteMs)
         }
@@ -432,7 +435,7 @@ object RelatorioSessaoTxt {
     private fun escreverMarchas(e: EstatisticasViagem, saida: Appendable) {
         if (e.marchas.isEmpty()) return
         val total = e.marchas.values.sum()
-        val rotulos = DefinicaoPid.MARCHA_ESTIMADA_A750F.rotulos
+        val rotulos = DefinicaoPid.MARCHA_ESTIMADA_A750F.rotulos + AlavancaGmTcm.ROTULOS
         fun linha(valor: Int, n: Int) {
             saida.append("  ${(rotulos[valor] ?: valor.toString()).padEnd(8)}: ${numero(n.toDouble(), 0)} amostras (${numero(n * 100.0 / total, 1)} %)\n")
         }

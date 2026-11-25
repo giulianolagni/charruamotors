@@ -1,5 +1,6 @@
 package com.charruamotors.direcao.painel
 
+import com.charruamotors.domain.calculo.AlavancaGmTcm
 import com.charruamotors.domain.calculo.AlertasProtecao
 import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.calculo.LimitesProtecao
@@ -63,6 +64,7 @@ object ClusterPainel {
      * marcha. `0xFF` (parado) e leituras fora das tabelas não contam.
      */
     fun indicadorMarcha(dados: ValoresSensores?): IndicadorMarcha {
+        AlavancaGmTcm.rotulo(dados?.get(AlavancaGmTcm.CHAVE_POSICAO))?.let { return IndicadorMarcha(it) }
         val alavanca = SensorPainel.MARCHA_ALAVANCA.ler(dados)?.let { SensorPainel.MARCHA_ALAVANCA.rotulos[it.toInt()] }
         val numero = SensorPainel.MARCHA_ATUAL.ler(dados)?.toInt()
         val marcha = numero?.takeIf { it in 1..6 || CambioA750f.ehReduzida(it) }?.let { SensorPainel.MARCHA_ATUAL.rotulos[it] }

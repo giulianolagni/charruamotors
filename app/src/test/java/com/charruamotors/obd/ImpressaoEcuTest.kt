@@ -138,6 +138,7 @@ class ImpressaoEcuTest {
         val t = Transporte(
             ecu(
                 mapOf(
+                    "ATDPN" to "A6\r\r",
                     "0151" to "41 51 09\r\r",
                     "0904" to calid,
                     // Só o TCM em 7E1 responde ao 0100 (a ECU do motor não é endereçada).
@@ -155,14 +156,14 @@ class ImpressaoEcuTest {
         assertEquals(true, imp.tcmDetectado)
         assertEquals("7E1", imp.tcmCabecalho)
         val novos = t.enviados.drop(antes)
-        // O 0904 é um comando de prazo longo: o adaptador alterna ATST32/ATST19 em volta dele.
-        assertEquals(listOf("0151", "ATST32", "0904", "ATST19", "ATSH7E1", "0100", "ATSH7DF"), novos)
+        // O 0904 é de prazo longo (ATST32/ATST19) e multi-frame (no CAN, refixa protocolo, cabeçalho e filtro).
+        assertEquals(listOf("0151", "ATST32", "0904", "ATSP6", "ATSH7DF", "ATCRA", "ATST19", "ATSH7E1", "0100", "ATSH7DF"), novos)
         assertEquals(EstadoConexaoObd.Conectado, obd.estado.value)
     }
 
     @Test
     fun `NO DATA em tudo deixa a impressao vazia, tenta 7E1 e 7E2, restaura o cabecalho e mantem a sessao`() = runTest {
-        val t = Transporte(ecu())
+        val t = Transporte(ecu(mapOf("ATDPN" to "A6\r\r")))
         val obd = cliente(t)
         assertTrue(obd.conectar(dispositivo).isSuccess)
         t.respostas["0100"] = "NO DATA\r\r"
@@ -177,7 +178,7 @@ class ImpressaoEcuTest {
         assertEquals(false, imp.tcmDetectado)
         assertNull(imp.tcmCabecalho)
         assertEquals(
-            listOf("0151", "ATST32", "0904", "ATST19", "ATSH7E1", "0100", "ATSH7E2", "0100", "ATSH7DF"),
+            listOf("0151", "ATST32", "0904", "ATSP6", "ATSH7DF", "ATCRA", "ATST19", "ATSH7E1", "0100", "ATSH7E2", "0100", "ATSH7DF"),
             t.enviados.drop(antes),
         )
         // A sessão segue: um PID normal ainda é lido depois da sondagem.
@@ -204,6 +205,21 @@ class ImpressaoEcuTest {
         val imp = cliente(t).sondarEcu(sondarTcm = true)
         assertTrue(imp.vazia)
         assertTrue(t.enviados.isEmpty())
+    }
+
+    @Test
+    fun `em KWP (ATDPN A5) a sondagem nao toca no cabecalho do TCM e nomeia o protocolo`() = runTest {
+        val t = Transporte(ecu(mapOf("ATDP" to "AUTO, \r\r", "ATDPN" to "A5\r\r", "0151" to "41 51 01\r\r")))
+        val obd = cliente(t)
+        assertTrue(obd.conectar(dispositivo).isSuccess)
+        assertEquals("AUTO, ISO 14230-4 (KWP Fast Init)", obd.infoConexao.value.protocolo)
+
+        val imp = obd.sondarEcu(sondarTcm = true)
+
+        assertEquals(0x01, imp.codigoCombustivel)
+        assertNull(imp.tcmDetectado)
+        assertNull(imp.tcmCabecalho)
+        assertFalse(t.enviados.any { it in listOf("ATSH7E1", "ATSH7E2", "ATSH7DF") })
     }
 
     // ---------------------------------------------------------------- simulado

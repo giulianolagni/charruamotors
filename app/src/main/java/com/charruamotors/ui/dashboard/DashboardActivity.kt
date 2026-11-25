@@ -4,10 +4,12 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -16,6 +18,7 @@ import com.charruamotors.CharruaMotorsApp
 import com.charruamotors.R
 import com.charruamotors.databinding.ActivityDashboardBinding
 import com.charruamotors.domain.model.Veiculo
+import com.charruamotors.ui.carros.PerfisCarroUi
 import com.charruamotors.ui.diagnostico.DiagnosticoActivity
 import com.charruamotors.ui.navegacao.MenuLateralGlobal
 import com.charruamotors.ui.util.aplicarInsetsDoSistema
@@ -43,6 +46,7 @@ class DashboardActivity : AppCompatActivity() {
         aoClicar = { resumo -> startActivity(VeiculoFormActivity.intent(this, resumo.veiculo.id)) },
         aoAbrirPainel = { resumo -> abrirPainel(resumo.veiculo) },
         aoFavoritar = { resumo -> marcarFavorito(resumo.veiculo) },
+        aoMaisAcoes = { ancora, resumo -> mostrarAcoes(ancora, resumo.veiculo) },
     )
 
     private val comoRaiz: Boolean get() = intent.getBooleanExtra(EXTRA_RAIZ, false)
@@ -101,10 +105,31 @@ class DashboardActivity : AppCompatActivity() {
         }
     }
 
-    /** Estrela: vira o favorito (veículo padrão da caixa-preta e o da abertura direta). */
+    /**
+     * Estrela / "Selecionar": vira o carro ativo (v2.3.0) — o perfil isolado em uso no Painel, HUD e
+     * Cluster, o veículo padrão da caixa-preta e o da abertura direta.
+     */
     private fun marcarFavorito(veiculo: Veiculo) {
-        app.preferenciasAutoConexao.vincularVeiculo(veiculo.id, veiculo.descricao)
+        app.ativarVeiculo(veiculo.id, veiculo.descricao)
         Snackbar.make(binding.root, getString(R.string.veiculos_favorito_definido, veiculo.descricao), Snackbar.LENGTH_LONG).show()
+    }
+
+    /** Ações do carro (v2.3.0): selecionar, editar, perfil técnico, duplicar e Sessão de Mapeamento. */
+    private fun mostrarAcoes(ancora: View, veiculo: Veiculo) {
+        PopupMenu(this, ancora).apply {
+            menuInflater.inflate(R.menu.menu_acoes_carro, menu)
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    R.id.acao_carro_selecionar -> marcarFavorito(veiculo)
+                    R.id.acao_carro_editar -> startActivity(VeiculoFormActivity.intent(this@DashboardActivity, veiculo.id))
+                    R.id.acao_carro_perfil -> PerfisCarroUi.editarPerfilTecnico(this@DashboardActivity, veiculo)
+                    R.id.acao_carro_duplicar -> startActivity(VeiculoFormActivity.intentDuplicar(this@DashboardActivity, veiculo.id))
+                    R.id.acao_carro_mapeamento -> PerfisCarroUi.iniciarMapeamento(this@DashboardActivity, veiculo)
+                    else -> return@setOnMenuItemClickListener false
+                }
+                true
+            }
+        }.show()
     }
 
     /**

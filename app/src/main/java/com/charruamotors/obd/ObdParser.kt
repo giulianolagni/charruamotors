@@ -1,5 +1,7 @@
 package com.charruamotors.obd
 
+import com.charruamotors.obd.pid.Pids
+import com.charruamotors.domain.calculo.AlavancaGmTcm
 import com.charruamotors.obd.pid.DefinicaoPid
 
 /** Resultado da interpretação de uma resposta bruta do ELM327. */
@@ -39,6 +41,7 @@ object ObdParser {
     /** 17 caracteres; o padrão ISO 3779 exclui I, O e Q (confundíveis com 1 e 0). */
     private val regexVin = Regex("^[A-HJ-NPR-Z0-9]{17}$")
     private const val TAMANHO_VIN = 17
+    private const val TAMANHO_CALID = 16
 
     // ---------------------------------------------------------------- PIDs do modo 01
 
@@ -58,11 +61,14 @@ object ObdParser {
     fun parseCargaMotor(bruto: String, comando: String? = "0104"): RespostaObd<Double> =
         bytesDoPid(bruto, "04", 1, comando).mapear { it[0] * 100.0 / 255.0 }
 
-    /** `ATRV`: tensão da bateria em volts, ex.: `12.6V`. */
+    /**
+     * `ATRV`: tensão da bateria em volts, ex.: `12.6V`. Corrige o bug do ELM327 v2.1 (clones) na
+     * virada de 9,9 V para 10,0 V, que imprime a dezena como `:` (`":.0V"` = 10,0 V): ver [corrigirDezenaAtrv].
+     */
     fun parseTensao(bruto: String, comando: String? = "ATRV"): RespostaObd<Double> {
         val linhas = linhasLimpas(bruto, comando)
         for (linha in linhas) {
-            val numero = regexTensao.matchEntire(compactar(linha))?.groupValues?.get(1) ?: continue
+            val numero = regexTensao.matchEntire(corrigirDezenaAtrv(compactar(linha)))?.groupValues?.get(1) ?: continue
             val volts = numero.replace(',', '.').toDoubleOrNull() ?: continue
             if (volts <= 0.0 || volts > 40.0) return RespostaObd.Invalido(bruto)
             return RespostaObd.Ok(volts)
@@ -86,17 +92,36 @@ object ObdParser {
         if (definicao.ehComandoAt) {
             val linhas = linhasLimpas(bruto, comando)
             for (linha in linhas) {
-                val numero = regexNumeroAt.matchEntire(compactar(linha))?.groupValues?.get(1) ?: continue
+                val texto = compactar(linha).let { if (definicao.comando == "ATRV") corrigirDezenaAtrv(it) else it }
+                val numero = regexNumeroAt.matchEntire(texto)?.groupValues?.get(1) ?: continue
                 val x = numero.replace(',', '.').toDoubleOrNull() ?: continue
                 return validarFaixa(definicao.converter(x = x), definicao, bruto)
             }
             return classificarErro(linhas, bruto)
         }
+        if (definicao.comando == Pids.TENSAO_ECU) return parseTensaoModulo(bruto, definicao, comando)
         return when (val r = bytesDaResposta(bruto, "41${definicao.pidHex}", definicao.bytes, comando)) {
             is RespostaObd.Ok -> validarFaixa(definicao.converter(r.valor), definicao, bruto)
             else -> r.mapear { 0.0 }
         }
     }
+
+    /**
+     * `0142` no broadcast CAN: vários módulos respondem e um secundário (TCM) pode devolver `0000`.
+     * Vale a primeira resposta com ao menos [TENSAO_MINIMA_MODULO_V]; abaixo disso não é leitura.
+     */
+    private fun parseTensaoModulo(bruto: String, definicao: DefinicaoPid, comando: String?): RespostaObd<Double> {
+        val linhas = linhasLimpas(bruto, comando)
+        val prefixo = "41${definicao.pidHex}"
+        val regex = Regex("$prefixo([0-9A-F]{4})")
+        val volts = linhas.flatMap { regex.findAll(compactar(it)).toList() }
+            .map { definicao.converter(hexParaBytes(it.groupValues[1])) }
+        volts.firstOrNull { it >= TENSAO_MINIMA_MODULO_V }?.let { return validarFaixa(it, definicao, bruto) }
+        if (linhas.any { prefixo in compactar(it) }) return RespostaObd.Invalido(bruto)
+        return classificarErro(linhas, bruto)
+    }
+
+    private const val TENSAO_MINIMA_MODULO_V = 5.0
 
     // ---------------------------------------------------------------- PIDs de montadora (modos 21 / 22)
 
@@ -112,7 +137,11 @@ object ObdParser {
         comando: String? = definicao.estendida?.comando,
     ): RespostaObd<Double> {
         val requisicao = requireNotNull(definicao.estendida) { "${definicao.comando} não é um PID estendido" }
-        val r = bytesDaResposta(bruto, requisicao.prefixoResposta, definicao.bytes, comando)
+        var r = bytesDaResposta(bruto, requisicao.prefixoResposta, definicao.bytes, comando)
+        if (r is RespostaObd.Ok && requisicao.identificador in AlavancaGmTcm.IDS_BYTE_UNICO) {
+            val umByte = Regex(requisicao.prefixoResposta + "[0-9A-F]{2}$")
+            if (linhasLimpas(bruto, comando).none { umByte.containsMatchIn(compactar(it)) }) r = RespostaObd.Invalido(bruto)
+        }
         if (r is RespostaObd.Ok) return validarFaixa(definicao.converter(r.valor), definicao, bruto)
         val negativas = linhasLimpas(bruto, comando).map(::compactar).filter { it.startsWith(requisicao.prefixoNegativa) }
         if (negativas.any { !it.startsWith(requisicao.prefixoNegativa + NRC_RESPOSTA_PENDENTE) }) return RespostaObd.SemDados
@@ -127,6 +156,13 @@ object ObdParser {
         linhasLimpas(bruto, comando)
             .map(::compactar)
             .firstNotNullOfOrNull { Regex("^A?([0-9A-C])$").matchEntire(it)?.groupValues?.get(1)?.toInt(16) }
+
+    /** `ATDPN` com a marca de automático (`A6`): o protocolo em uso, para reconhecer e fixar o CAN. */
+    fun parseProtocoloAtivo(bruto: String, comando: String? = "ATDPN"): ProtocoloAtivo? =
+        linhasLimpas(bruto, comando)
+            .map(::compactar)
+            .firstNotNullOfOrNull { Regex("^(A?)([0-9A-C])$").matchEntire(it) }
+            ?.let { ProtocoloAtivo(it.groupValues[2].toInt(16), automatico = it.groupValues[1].isNotEmpty()) }
 
     /** Protocolos CAN de 11 bits, os únicos em que o app usa cabeçalhos físicos (`ATSH 7E0`). */
     val PROTOCOLOS_CAN_11_BITS: Set<Int> = setOf(6, 8)
@@ -205,11 +241,15 @@ object ObdParser {
         var achou = false
         val suportados = sortedSetOf<Int>()
         for (linha in linhas) {
-            val dados = regex.find(compactar(linha))?.groupValues?.get(1) ?: continue
-            val bytes = hexParaBytes(dados)
-            if (bytes.size < 4) continue
-            achou = true
-            suportados += decodificarBitmask(base, bytes.take(4))
+            // v2.3.7: OR de todas as ECUs, mesmo com duas respostas coladas na mesma linha.
+            var dados = regex.find(compactar(linha))?.groupValues?.get(1)
+            while (dados != null) {
+                val bytes = hexParaBytes(dados.take(8))
+                if (bytes.size < 4) break
+                achou = true
+                suportados += decodificarBitmask(base, bytes)
+                dados = regex.matchAt(dados, 8)?.groupValues?.get(1)
+            }
         }
         if (achou) return RespostaObd.Ok(suportados)
         if (linhas.any { regex.containsMatchIn(compactar(it)) }) return RespostaObd.Invalido(bruto)
@@ -285,6 +325,168 @@ object ObdParser {
         val vin = texto.take(TAMANHO_VIN)
         return if (regexVin.matches(vin)) RespostaObd.Ok(vin) else RespostaObd.Invalido(bruto)
     }
+
+    // ---------------------------------------------------------------- Impressão digital da ECU (0151, 0904)
+
+    /**
+     * `0151`: tipo de combustível (SAE J1979), resposta `41 51 XX`. Devolve o byte `XX` cru; quem
+     * decodifica é o [com.charruamotors.domain.perfis.CombustivelEcu]. `NO DATA`/`7F` viram erro tipado.
+     */
+    fun parseCombustivelEcu(bruto: String, comando: String? = "0151"): RespostaObd<Int> {
+        val linhas = linhasLimpas(bruto, comando)
+        for (linha in linhas) {
+            val compacta = compactar(linha)
+            val i = compacta.indexOf("4151")
+            if (i < 0) continue
+            hexParaBytes(compacta.substring(i + 4)).firstOrNull()?.let { return RespostaObd.Ok(it) }
+        }
+        return classificarErro(linhas, bruto)
+    }
+
+    /**
+     * `0904`: ID de Calibração (CALID). Resposta `49 04 NN` + `NN` blocos de 16 bytes ASCII (preenchidos
+     * com `00`): em CAN vem multi-frame ISO-TP (`0:`, `1:`...), em KWP/ISO 9141 uma linha `49 04 <seq> ...`
+     * por trecho. Devolve o texto limpo (sem nulos nem controles); vários CALIDs saem unidos por ` / `.
+     */
+    fun parseCalid(bruto: String, comando: String? = "0904"): RespostaObd<String> {
+        val linhas = linhasLimpas(bruto, comando)
+        val partes = linhas.mapNotNull { linha ->
+            val compacta = compactar(linha)
+            val i = compacta.indexOf("4904")
+            if (i < 0) null else hexParaBytes(compacta.substring(i + 4))
+        }.filter { it.isNotEmpty() }
+        if (partes.isEmpty()) return classificarErro(linhas, bruto)
+
+        // O 1º byte de cada parte é a quantidade de CALIDs (CAN) ou a sequência (KWP): ordena e descarta.
+        val ids = partes.sortedBy { it.first() }
+            .flatMap { it.drop(1) }
+            .chunked(TAMANHO_CALID)
+            .map { bloco -> bloco.filter { it in 0x20..0x7E }.map { it.toChar() }.joinToString("").trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+        return if (ids.isEmpty()) RespostaObd.Invalido(bruto) else RespostaObd.Ok(ids.joinToString(" / "))
+    }
+
+    /**
+     * `0906`: CVN (*Calibration Verification Number*, checksum da calibração). Resposta `49 06 NN` +
+     * `NN` blocos de 4 bytes (um por calibração), em quadro único ou multi-frame. Devolve cada CVN em
+     * hexadecimal (`1A2B3C4D`); vários saem unidos por ` / `.
+     */
+    fun parseCvn(bruto: String, comando: String? = "0906"): RespostaObd<String> {
+        val linhas = linhasLimpas(bruto, comando)
+        val partes = linhas.mapNotNull { linha ->
+            val compacta = compactar(linha)
+            val i = compacta.indexOf("4906")
+            if (i < 0) null else hexParaBytes(compacta.substring(i + 4))
+        }.filter { it.isNotEmpty() }
+        if (partes.isEmpty()) return classificarErro(linhas, bruto)
+        val cvns = partes.flatMap { parte ->
+            val quantidade = parte.first().coerceAtLeast(1)
+            parte.drop(1).chunked(TAMANHO_CVN).filter { it.size == TAMANHO_CVN }.take(quantidade)
+        }.map { bloco -> bloco.joinToString("") { "%02X".format(it) } }.distinct()
+        return if (cvns.isEmpty()) RespostaObd.Invalido(bruto) else RespostaObd.Ok(cvns.joinToString(" / "))
+    }
+
+    private const val TAMANHO_CVN = 4
+
+    // ---------------------------------------------------------------- Multi-PID em lote (modo 01, CAN)
+
+    /** Comando de uma leitura em lote do modo 01: `010C0D0B` (RPM + velocidade + MAP). */
+    fun comandoLote(definicoes: List<DefinicaoPid>): String {
+        require(definicoes.isNotEmpty() && definicoes.all { it.ehModo01 }) { "O lote só aceita PIDs do modo 01" }
+        return "01" + definicoes.joinToString("") { it.pidHex!! }
+    }
+
+    /** Bytes da resposta a um lote: `41` + (PID + dados) de cada um. Acima de 7, a resposta vira multi-frame CAN. */
+    fun bytesRespostaLote(definicoes: List<DefinicaoPid>): Int = 1 + definicoes.sumOf { 1 + it.bytes }
+
+    /**
+     * Resposta a um pedido Multi-PID em lote (ISO 15765-4, até 6 PIDs): `41 0C A B 0D A 0B A`, em
+     * quadro único ou multi-frame (`0:`/`1:`, já unidos). Cada PID é lido em sequência pelo tamanho do
+     * catálogo; o preenchimento do último quadro (`00`/`AA`) e a resposta de outra ECU que chegue depois
+     * são ignorados. Devolve o resultado de cada definição pedida: `Ok`, ou o erro do adaptador (`NO
+     * DATA`, `?`, `BUFFER FULL`, `7F 01 xx`...) e [RespostaObd.Invalido] para o PID que não veio na
+     * resposta (truncada ou que a ECU não atendeu no lote).
+     */
+    fun parseLote(
+        bruto: String,
+        definicoes: List<DefinicaoPid>,
+        comando: String? = comandoLote(definicoes),
+    ): Map<DefinicaoPid, RespostaObd<Double>> {
+        val linhas = linhasLimpas(bruto, comando)
+        val porPid = definicoes.associateBy { it.pid!! }
+        val achados = HashMap<Int, List<Int>>()
+        var algumaResposta = false
+        for (linha in linhas) {
+            val bytes = hexParaBytes(compactar(linha))
+            var i = bytes.indexOf(0x41)
+            while (i >= 0 && i < bytes.size) {
+                algumaResposta = true
+                i++ // depois do 41: PID, dados, PID, dados...
+                while (i < bytes.size) {
+                    val definicao = porPid[bytes[i]] ?: break
+                    val fim = i + 1 + definicao.bytes
+                    if (fim > bytes.size) {
+                        i = bytes.size // truncada no meio do PID
+                        break
+                    }
+                    achados.putIfAbsent(bytes[i], bytes.subList(i + 1, fim))
+                    i = fim
+                }
+                // Outra mensagem `41` na mesma linha (outra ECU depois do preenchimento): segue nela.
+                i = if (i < bytes.size) bytes.subList(i, bytes.size).indexOf(0x41).let { if (it < 0) -1 else i + it } else -1
+            }
+        }
+        val erro: RespostaObd<Nothing> = if (algumaResposta) RespostaObd.Invalido(bruto) else classificarErro(linhas, bruto)
+        return definicoes.associateWith { d ->
+            achados[d.pid!!]?.let { validarFaixa(d.converter(it), d, bruto) } ?: erro
+        }
+    }
+
+    // ---------------------------------------------------------------- Prontidão (0101) e contadores do modo 01
+
+    /**
+     * `0101`: luz de injeção (MIL), quantidade de DTCs e os monitores de prontidão (SAE J1979):
+     * `41 01 A B C D`. Ver [StatusProntidao.decodificar].
+     */
+    fun parseProntidao(bruto: String, comando: String? = "0101"): RespostaObd<StatusProntidao> =
+        bytesDoPid(bruto, "01", 4, comando).mapear { (a, b, c, d) -> StatusProntidao.decodificar(a, b, c, d) }
+
+    /**
+     * Contador de 1 ou 2 bytes do modo 01 (`0121`, `0130`, `0131`, `014D`, `014E`): `256·A + B` (ou `A`).
+     * [pid] é o byte hexadecimal (`"31"`).
+     */
+    fun parseContador(bruto: String, pid: String, bytes: Int, comando: String? = "01$pid"): RespostaObd<Int> {
+        require(bytes in 1..2) { "Contadores do modo 01 têm 1 ou 2 bytes" }
+        return bytesDoPid(bruto, pid.uppercase(), bytes, comando).mapear { if (bytes == 1) it[0] else it[0] * 256 + it[1] }
+    }
+
+    // ---------------------------------------------------------------- Modo 06 (resultados de testes de bordo, CAN)
+
+    /**
+     * `06 <MID>` no CAN (ISO 15765-4): `46` seguido de registros de 9 bytes — MID, TID, UASID (unidade e
+     * escala), valor, mínimo e máximo (2 bytes cada), com o MID repetido em cada teste. Ex.: `46 A2 0B 24
+     * 00 03 00 00 FF FF A2 0C 24 00 01 00 00 FF FF` (cilindro 1: EWMA = 3, ciclo atual = 1). Registro
+     * cortado (resposta parcial) é descartado. Negativa `7F 06 xx` = [RespostaObd.SemDados].
+     */
+    fun parseModo06(bruto: String, mid: Int, comando: String? = "06%02X".format(mid)): RespostaObd<List<TesteModo06>> {
+        val linhas = linhasLimpas(bruto, comando)
+        val prefixo = "46%02X".format(mid)
+        for (linha in linhas) {
+            val compacta = compactar(linha)
+            val i = compacta.indexOf(prefixo)
+            if (i < 0) continue
+            val registros = hexParaBytes(compacta.substring(i + 2))
+                .chunked(TAMANHO_TESTE_MODO_06)
+                .filter { it.size == TAMANHO_TESTE_MODO_06 && it[0] == mid }
+                .map { b -> TesteModo06(mid, b[1], b[2], b[3] * 256 + b[4], b[5] * 256 + b[6], b[7] * 256 + b[8]) }
+            return if (registros.isEmpty()) RespostaObd.Invalido(bruto) else RespostaObd.Ok(registros)
+        }
+        if (respostaNegativa(bruto, "06", comando) != null) return RespostaObd.SemDados
+        return classificarErro(linhas, bruto)
+    }
+
+    private const val TAMANHO_TESTE_MODO_06 = 9
 
     // ---------------------------------------------------------------- DTCs (modos 03 e 04)
 
@@ -556,6 +758,17 @@ object ObdParser {
     }
 
     private fun compactar(texto: String) = texto.filter { !it.isWhitespace() }
+
+    /**
+     * Bug do ELM327 v2.1 (clones) no `ATRV`: o dígito da unidade estoura de `9` para o caractere
+     * ASCII seguinte (`:` = 10, `;` = 11...) em vez de virar `10`, então `":.0V"` é 10,0 V e
+     * `";.2V"` seria 11,2 V. Só troca o primeiro caractere quando ele está em `:`..`?` e vem
+     * seguido do ponto decimal; o resto da resposta segue igual.
+     */
+    internal fun corrigirDezenaAtrv(texto: String): String {
+        if (texto.length < 2 || texto[0] !in ':'..'?' || (texto[1] != '.' && texto[1] != ',')) return texto
+        return (texto[0] - '0').toString() + texto.substring(1)
+    }
 
     /** Converte "1AF8" em [0x1A, 0xF8]; ignora um nibble sobrando e para no primeiro caractere não hexadecimal. */
     private fun hexParaBytes(hex: String): List<Int> {

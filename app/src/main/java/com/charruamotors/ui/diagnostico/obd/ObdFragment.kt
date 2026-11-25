@@ -1,5 +1,10 @@
 package com.charruamotors.ui.diagnostico.obd
 
+import com.charruamotors.sistema.StatusElmEcu
+import com.charruamotors.sistema.ResumoTecnicoConexao
+import com.charruamotors.sistema.EstadoElm
+import com.charruamotors.sistema.EstadoEcu
+import android.content.res.ColorStateList
 import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
@@ -52,6 +57,9 @@ import com.charruamotors.ui.componentes.GaugeView
 import com.charruamotors.ui.painel.ClusterPainelActivity
 import com.charruamotors.ui.painel.EditorConfigHud
 import com.charruamotors.ui.painel.MontadorMostradores
+import com.charruamotors.domain.perfis.DecodificadorVin
+import com.charruamotors.domain.perfis.PerfilCambio
+import com.charruamotors.domain.perfis.PerfilIdentificado
 import com.charruamotors.domain.calculo.AlertaProtecao
 import com.charruamotors.domain.calculo.EstadoCronometro
 import com.charruamotors.domain.calculo.EstequiometriaFlex
@@ -74,6 +82,7 @@ import com.charruamotors.ui.util.ArquivoExportado
 import com.charruamotors.ui.util.ExportadorCsv
 import com.charruamotors.ui.util.PermissoesBluetooth
 import com.charruamotors.ui.util.comoNumero
+import com.charruamotors.obd.aprendizado.FonteSimulacao
 import com.charruamotors.ui.util.definirTexto
 import com.charruamotors.ui.util.rotulo
 import com.charruamotors.ui.componentes.PontoTelemetria
@@ -121,7 +130,7 @@ class ObdFragment : Fragment() {
     private var configPainel: ConfigPainel = ConfigPainel()
 
     /** Mostradores desenhados agora (sensores + estilos + unidades), para não recriar a cada mudança. */
-    private var assinaturaMostradores: Pair<List<Mostrador>, ConversorUnidades>? = null
+    private var assinaturaMostradores: Triple<List<Mostrador>, ConversorUnidades, PerfilCambio?>? = null
 
     /** "Ver todos": ignora a lista rápida e mostra todos os sensores suportados. */
     private var mostrarTodosSensores = false
@@ -186,6 +195,20 @@ class ObdFragment : Fragment() {
         configurarAcoes()
         configurarDirecao()
         observarViewModel()
+        if (savedInstanceState == null) iniciarMapeamentoSePedido()
+    }
+
+    /**
+     * v2.3.0: "Sessão de Mapeamento (Log Bruto)" de um carro novo — a tela chega com o extra e
+     * conecta sozinha no scanner salvo (os logs e o Log Bruto já foram ligados). Consome o extra.
+     */
+    private fun iniciarMapeamentoSePedido() {
+        val intent = requireActivity().intent
+        if (!intent.getBooleanExtra(DiagnosticoActivity.EXTRA_MAPEAMENTO, false)) return
+        intent.removeExtra(DiagnosticoActivity.EXTRA_MAPEAMENTO)
+        if (viewModel.estadoSessao.value.ativa) return
+        mostrarMensagem(getString(R.string.mapeamento_iniciada))
+        garantirBluetooth(real = true) { viewModel.conectarNoModo(ModoObd.BLUETOOTH) }
     }
 
     private fun configurarAcoes() = with(binding) {
@@ -197,6 +220,8 @@ class ObdFragment : Fragment() {
         switchSimularFalha.setOnCheckedChangeListener { _, marcado -> viewModel.definirSimularFalha(marcado) }
         botaoCancelarConexao.setOnClickListener { viewModel.desconectar() }
         botaoDesconectar.setOnClickListener { viewModel.desconectar() }
+        botaoManterPerfil.setOnClickListener { viewModel.manterPerfilAutomatico() }
+        botaoIgnorarPerfil.setOnClickListener { viewModel.ignorarPerfilAutomatico() }
         botaoSalvarLeitura.setOnClickListener { viewModel.salvarLeitura() }
         botaoGravarLog.setOnClickListener { viewModel.alternarLog() }
         botaoArmarCronometro.setOnClickListener { viewModel.alternarCronometro() }
@@ -474,6 +499,7 @@ class ObdFragment : Fragment() {
                 launch { viewModel.dados.collect { mostrarDados(it) } }
                 launch { viewModel.sensores.collect { mostrarSensores(it) } }
                 launch { viewModel.infoEcu.collect { mostrarInfoEcu(it) } }
+                launch { viewModel.perfilAutomatico.collect { mostrarPerfilAutomatico(it) } }
                 launch { viewModel.estadoLog.collect { mostrarEstadoLog(it) } }
                 launch {
                     viewModel.computador.collect {
@@ -493,6 +519,14 @@ class ObdFragment : Fragment() {
                 launch { app.preferenciasApp.config.collect { aplicarConversor(it.conversor) } }
                 launch { app.preferenciasPainel.config.collect { aplicarConfigPainel(it) } }
                 launch { viewModel.estadoSessao.collect { mostrarEstadoSessao(it) } }
+                launch { app.sessaoObd.fonteSimulacao.collect { mostrarFonteSimulacao(it) } }
+                launch {
+                    app.sessaoObd.cambioAtivo.collect {
+                        configurarMostradores()
+                        mostrarStatusElmEcu()
+                    }
+                }
+                launch { app.sessaoObd.impressaoEcu.collect { mostrarStatusElmEcu() } }
                 launch {
                     viewModel.simularFalha.collect { ativa ->
                         if (binding.switchSimularFalha.isChecked != ativa) binding.switchSimularFalha.isChecked = ativa
@@ -529,6 +563,43 @@ class ObdFragment : Fragment() {
             else -> getString(R.string.conexao_dica)
         })
         atualizarBotoes()
+        mostrarStatusElmEcu()
+    }
+
+    /**
+     * v2.3.0: dois indicadores (Adaptador ELM327 e ECU do veículo) e, conectado, o resumo técnico
+     * (Protocolo, VIN, CALID e TCM, se detectado).
+     */
+    private fun mostrarStatusElmEcu() {
+        val b = _binding ?: return
+        val estado = viewModel.estado.value
+        val info = viewModel.infoEcu.value
+        val status = StatusElmEcu.de(estado, viewModel.estadoSessao.value, info.conexao)
+        b.textoStatusElm.definirTexto(status.textoElm)
+        b.textoStatusEcu.definirTexto(status.textoEcu)
+        val ctx = requireContext()
+        val corElm = when (status.elm) {
+            EstadoElm.CONECTADO -> R.color.status_ok
+            EstadoElm.CONECTANDO -> R.color.favorito
+            EstadoElm.DESCONECTADO -> R.color.status_espera
+        }
+        val corEcu = when (status.ecu) {
+            EstadoEcu.CONECTADA -> R.color.status_ok
+            EstadoEcu.AGUARDANDO -> R.color.status_espera
+            EstadoEcu.SEM_RESPOSTA -> R.color.status_pendente
+        }
+        b.pontoElm.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(ctx, corElm))
+        b.pontoEcu.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(ctx, corEcu))
+        b.cardStatusElmEcu.contentDescription = getString(R.string.status_elm_ecu_descricao, status.textoElm, status.textoEcu)
+        val linhas = ResumoTecnicoConexao.linhas(
+            conectado = estado is EstadoConexaoObd.Conectado,
+            info = info.conexao,
+            vin = info.vin,
+            impressao = app.sessaoObd.impressaoEcu.value,
+            tcmPerfil = app.sessaoObd.cambioAtivo.value?.cabecalhos?.firstOrNull(),
+        )
+        b.textoResumoTecnico.isVisible = linhas.isNotEmpty()
+        b.textoResumoTecnico.definirTexto(linhas.joinToString("\n") { "${it.rotulo.padEnd(10)} ${it.valor}" })
     }
 
     /**
@@ -574,9 +645,27 @@ class ObdFragment : Fragment() {
         configPainel.mostradores.forEachIndexed { i, m ->
             val gauge = gauges.getOrNull(i) ?: return@forEachIndexed
             gauge.emAlerta = m.sensor.emAlerta(alertas) || app.centralAlertas.foraDaFaixa(m.sensor.comandos, dados)
-            gauge.definirValor(m.sensor.ler(dados, consumoKmL)?.let { m.sensor.exibir(it, conversor).valor })
+            gauge.definirValor(m.sensor.ler(dados, consumoKmL)?.let { m.sensor.exibir(it, conversor).valor }?.takeIf { it.isFinite() })
         }
         atualizarBotoes()
+    }
+
+    /** Modo Simulado: indicador discreto de onde vêm os dados (logs reais deste veículo ou simulação sintética). */
+    private fun mostrarFonteSimulacao(fonte: FonteSimulacao?) = with(binding.textoFonteSimulacao) {
+        isVisible = fonte != null
+        text = when (fonte) {
+            is FonteSimulacao.LogsReais -> resources.getQuantityString(R.plurals.simulado_fonte_logs_reais, fonte.quantidade, fonte.quantidade)
+            FonteSimulacao.Sintetica -> getString(R.string.simulado_fonte_sintetica)
+            null -> ""
+        }
+    }
+
+    /** Aviso discreto do perfil escolhido pela sessão (VDS do VIN / sondagem da ECU), com Manter / Ignorar. */
+    private fun mostrarPerfilAutomatico(perfil: PerfilIdentificado?) = with(binding) {
+        cardPerfilAutomatico.isVisible = perfil != null
+        if (perfil != null) {
+            textoPerfilAutomatico.text = getString(R.string.obd_perfil_automatico, perfil.preset.titulo, perfil.origem.rotulo)
+        }
     }
 
     /** Faixa vermelha no topo dos blocos enquanto algum limite do veículo (água, ATF, alternador) está ultrapassado. */
@@ -646,14 +735,15 @@ class ObdFragment : Fragment() {
 
     /** Remonta a grade (2 colunas; Fita em largura total) só quando os relógios ou as unidades mudam. */
     private fun configurarMostradores() {
-        val assinatura = configPainel.mostradores to conversor
+        val cambio = app.sessaoObd.cambioAtivo.value
+        val assinatura = Triple(configPainel.mostradores, conversor, cambio)
         if (assinatura == assinaturaMostradores) return
         assinaturaMostradores = assinatura
-        gauges = MontadorMostradores.montar(binding.grupoMostradores, configPainel.mostradores, conversor)
+        gauges = MontadorMostradores.montar(binding.grupoMostradores, configPainel.mostradores, conversor, cambio)
         val dados = viewModel.dados.value
         val consumoKmL = viewModel.computador.value.consumo?.kmPorLitro
         configPainel.mostradores.forEachIndexed { i, m ->
-            gauges.getOrNull(i)?.definirValor(m.sensor.ler(dados, consumoKmL)?.let { m.sensor.exibir(it, conversor).valor }, animar = false)
+            gauges.getOrNull(i)?.definirValor(m.sensor.ler(dados, consumoKmL)?.let { m.sensor.exibir(it, conversor).valor }?.takeIf { it.isFinite() }, animar = false)
         }
     }
 
@@ -689,12 +779,19 @@ class ObdFragment : Fragment() {
         })
     }
 
+    /** v2.2: VIN com a montadora (WMI) e o ano-modelo (10º caractere), ex.: `9BG... · Chevrolet 2018`. */
+    private fun vinComMontadora(vin: String): String {
+        val d = DecodificadorVin.decodificar(vin) ?: return vin
+        val extra = listOfNotNull(d.montadora, d.anoModelo?.toString()).joinToString(" ")
+        return if (extra.isEmpty()) vin else "$vin · $extra"
+    }
+
     private fun mostrarInfoEcu(info: InfoEcu) = with(binding) {
         val conectado = viewModel.estado.value is EstadoConexaoObd.Conectado
         textoVin.definirTexto(when {
             !conectado -> getString(R.string.obd_ecu_desconectado)
             !info.vinLido -> getString(R.string.obd_ecu_vin_lendo)
-            else -> info.vin ?: getString(R.string.obd_ecu_vin_indisponivel)
+            else -> info.vin?.let(::vinComMontadora) ?: getString(R.string.obd_ecu_vin_indisponivel)
         })
         textoPidsSuportados.definirTexto(if (conectado) {
             getString(R.string.obd_ecu_pids_qtd, info.quantidadePids, viewModel.totalPidsCatalogo)
@@ -717,6 +814,7 @@ class ObdFragment : Fragment() {
         textoPerfilObservacao.text = observacao
         // O cabeçalho da ECU (7E0) e o protocolo chegam depois do "Conectado".
         if (conectado) mostrarStatusCompacto()
+        mostrarStatusElmEcu()
     }
 
     /**
@@ -782,8 +880,11 @@ class ObdFragment : Fragment() {
     }
 
     /** km/L ou MPG, com uma casa. */
-    private fun consumoTexto(kmPorLitro: Double): String =
-        getString(R.string.obd_valor_unidade, conversor.consumo(kmPorLitro).comoNumero(1), conversor.simboloConsumo)
+    private fun consumoTexto(kmPorLitro: Double): String {
+        val valor = conversor.consumo(kmPorLitro)
+        val numero = if (valor.isFinite()) valor.comoNumero(1) else getString(R.string.valor_indisponivel)
+        return getString(R.string.obd_valor_unidade, numero, conversor.simboloConsumo)
+    }
 
     /** Cronômetro 0–100: tempo (ao vivo ou final), instrução do estado e melhor tempo. */
     private fun mostrarCronometro(ui: CronometroUi) = with(binding) {

@@ -183,4 +183,15 @@ class EscalonadorPollingTest {
         assertThrows(IllegalArgumentException::class.java) { EscalonadorPolling(lentosPorVez = 0) }
         assertThrows(IllegalArgumentException::class.java) { EscalonadorPolling(ciclosPorLento = 0) }
     }
+
+    @Test
+    fun `invalidar tira o valor do instantaneo ate a proxima leitura`() {
+        val e = EscalonadorPolling()
+        e.atualizarSuportados(listOf("010C", "ATRV"))
+        assertEquals(mapOf("010C" to 800.0, "ATRV" to 12.6), e.consolidar(listOf("010C", "ATRV"), mapOf("010C" to 800.0, "ATRV" to 12.6)))
+        e.invalidar("ATRV")
+        // Ciclo sem o ATRV: o valor velho não volta (v2.2.6, retomada da sessão manual).
+        assertEquals(mapOf("010C" to 820.0), e.consolidar(listOf("010C"), mapOf("010C" to 820.0)))
+        assertEquals(14.1, e.consolidar(listOf("010C", "ATRV"), mapOf("010C" to 820.0, "ATRV" to 14.1))["ATRV"]!!, 0.0)
+    }
 }

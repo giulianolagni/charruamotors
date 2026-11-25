@@ -8,11 +8,14 @@ import com.charruamotors.obd.pid.Pids
 import java.text.NumberFormat
 import java.util.Locale
 
-/** Quando uma faixa vale: o RPM de marcha lenta só faz sentido parado, a tensão só com o motor girando. */
+/**
+ * Quando uma faixa vale: o RPM de marcha lenta só faz sentido parado e com o motor aquecido, a
+ * tensão, o rail, o MAP e o MAF só com o motor girando (v2.2.6: `RPM ≥ 400`).
+ */
 enum class CondicaoFaixa(val descricao: String) {
     SEMPRE("sempre"),
     MOTOR_LIGADO("motor ligado"),
-    MARCHA_LENTA("marcha lenta (parado, sem acelerar)"),
+    MARCHA_LENTA("marcha lenta (parado, sem acelerar, motor aquecido)"),
 }
 
 /**
@@ -132,22 +135,36 @@ data class FaixasVeiculo(val perfil: String, val faixas: List<FaixaEsperada>) {
     fun linhasFicha(): List<String> = faixas.map { "${it.parametro.titulo}: ${it.texto}" }
 
     companion object {
-        /** RPM a partir do qual o motor é considerado ligado (abaixo: partida/desligado). */
-        const val RPM_MOTOR_LIGADO = 500.0
+        /**
+         * RPM a partir do qual o motor é considerado ligado (abaixo: desligado ou girando no motor de
+         * partida). v2.2.6: inclusivo (`≥`) e igual ao do alerta de alternador ([LimitesProtecao.RPM_MINIMO_TENSAO]).
+         */
+        const val RPM_MOTOR_LIGADO = LimitesProtecao.RPM_MINIMO_TENSAO
+
+        /**
+         * Temperatura da água a partir da qual o motor conta como aquecido (v2.2.6): a marcha lenta
+         * fria fica acelerada de propósito (e o rail mais alto), então as faixas de lenta só valem acima disso.
+         */
+        const val TEMP_MOTOR_AQUECIDO_C = 65.0
         private val FAIXA_RPM_LENTA = 400.0..1_100.0
         private const val VELOCIDADE_PARADO_KMH = 3.0
         private const val PEDAL_SOLTO_PCT = 5.0
         private val COMANDOS_PEDAL = listOf("0149", "TOYOTA_PEDAL_D")
 
+        /** Motor girando por conta própria (`RPM ≥ 400`); sem leitura de RPM, não. */
+        fun motorLigado(rpm: Double?): Boolean = rpm != null && rpm.isFinite() && rpm >= RPM_MOTOR_LIGADO
+
         fun condicaoAtendida(condicao: CondicaoFaixa, dados: ValoresSensores): Boolean {
             val rpm = dados[Pids.RPM]
             return when (condicao) {
                 CondicaoFaixa.SEMPRE -> true
-                CondicaoFaixa.MOTOR_LIGADO -> rpm != null && rpm > RPM_MOTOR_LIGADO
+                CondicaoFaixa.MOTOR_LIGADO -> motorLigado(rpm)
                 CondicaoFaixa.MARCHA_LENTA -> {
                     val velocidade = dados[Pids.VELOCIDADE]
                     val pedal = COMANDOS_PEDAL.firstNotNullOfOrNull { dados[it] }
+                    val agua = dados[Pids.TEMPERATURA_MOTOR]
                     rpm != null && rpm in FAIXA_RPM_LENTA &&
+                        agua != null && agua.isFinite() && agua >= TEMP_MOTOR_AQUECIDO_C &&
                         (velocidade == null || velocidade < VELOCIDADE_PARADO_KMH) &&
                         (pedal == null || pedal < PEDAL_SOLTO_PCT)
                 }
@@ -172,13 +189,41 @@ data class FaixasVeiculo(val perfil: String, val faixas: List<FaixaEsperada>) {
         }
 
         const val PERFIL_GENERICO = "Genérico (limites do cadastro)"
+        const val SUFIXO_LIMITES_CADASTRO = "(limites do cadastro)"
         private const val TENSAO_MAX_GENERICA = 14.8
+        private const val AGUA_MIN_GENERICA = 75.0
+        private const val ATF_MIN_GENERICA = 50.0
 
-        /** Preset do veículo, se reconhecido; senão, as genéricas pelos limites do cadastro. */
+        /**
+         * Faixas de um perfil genérico do catálogo ([generico]) com os limites do cadastro por cima:
+         * água e ATF máximos e a tensão mínima do alternador são os que o usuário configurou (o ATF
+         * entra sempre, como nas [genericas], porque o genérico não conhece o câmbio).
+         */
+        fun comLimitesDoCadastro(generico: PresetVeiculo, limites: LimitesProtecao): FaixasVeiculo {
+            val base = generico.faixas.faixas.associateBy { it.parametro }.toMutableMap()
+            base[ParametroFaixa.TEMP_AGUA] = faixaSegura(
+                ParametroFaixa.TEMP_AGUA, base[ParametroFaixa.TEMP_AGUA]?.min ?: AGUA_MIN_GENERICA, limites.aguaMaxC,
+            )
+            base[ParametroFaixa.TEMP_ATF] = faixaSegura(
+                ParametroFaixa.TEMP_ATF, base[ParametroFaixa.TEMP_ATF]?.min ?: ATF_MIN_GENERICA, limites.atfMaxC,
+            )
+            base[ParametroFaixa.TENSAO] = faixaSegura(
+                ParametroFaixa.TENSAO, limites.tensaoMinV, base[ParametroFaixa.TENSAO]?.max ?: TENSAO_MAX_GENERICA,
+            )
+            return FaixasVeiculo("${generico.titulo} $SUFIXO_LIMITES_CADASTRO", base.values.sortedBy { it.parametro.ordinal })
+        }
+
+        /** Faixa que nunca fica inválida: se o limite do cadastro cruzar o outro lado, só ele vale. */
+        private fun faixaSegura(p: ParametroFaixa, min: Double, max: Double): FaixaEsperada =
+            if (min < max) FaixaEsperada(p, min, max) else if (p == ParametroFaixa.TENSAO) FaixaEsperada(p, min, null) else FaixaEsperada(p, null, max)
+
+        /**
+         * Cascata de fallback: perfil exato do catálogo → perfil genérico pela motorização com os
+         * limites do cadastro → [genericas] (OBD2 modo 01 padrão). Ver [ResolucaoPerfil.resolver].
+         */
         fun paraVeiculo(v: Veiculo?): FaixasVeiculo {
             if (v == null) return genericas(null)
-            return PresetVeiculo.detectar(v.marca, v.modelo, v.ano)?.faixas
-                ?: genericas(v.tipoCombustivel, LimitesProtecao.deVeiculo(v))
+            return ResolucaoPerfil.deVeiculo(v).faixas
         }
     }
 }

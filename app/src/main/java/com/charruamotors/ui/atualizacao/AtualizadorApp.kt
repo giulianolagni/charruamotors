@@ -1,6 +1,7 @@
 package com.charruamotors.ui.atualizacao
 
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -16,6 +17,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.withStarted
 import com.charruamotors.BuildConfig
 import com.charruamotors.R
+import com.charruamotors.sistema.atualizacao.CacheVerificacao
+import com.charruamotors.sistema.preferencias.ArmazenamentoChaveValor
 import com.charruamotors.sistema.atualizacao.InterpretadorReleaseGithub
 import com.charruamotors.sistema.atualizacao.OrigemInstalacao
 import com.charruamotors.sistema.atualizacao.ReleaseGithub
@@ -45,7 +48,13 @@ import java.io.IOException
  */
 class AtualizadorApp(private val activity: AppCompatActivity) {
 
-    private val verificador = VerificadorAtualizacao(BuildConfig.VERSION_NAME)
+    private val verificador by lazy {
+        val preferencias = activity.applicationContext.getSharedPreferences(CacheVerificacao.ARQUIVO, Context.MODE_PRIVATE)
+        VerificadorAtualizacao(
+            BuildConfig.VERSION_NAME,
+            cache = CacheVerificacao(ArmazenamentoChaveValor.deSharedPreferences(preferencias)),
+        )
+    }
     private var download: Job? = null
 
     /** APK baixado esperando a permissão de instalar apps desconhecidos. */
@@ -67,7 +76,7 @@ class AtualizadorApp(private val activity: AppCompatActivity) {
         // Regra da Play Store: app instalado por ela só se atualiza por ela.
         if (!OrigemInstalacao.deveVerificarAtualizacao(activity)) return
         activity.lifecycleScope.launch {
-            val resultado = verificador.verificar()
+            val resultado = verificador.verificar(forcar = false)
             if (resultado !is ResultadoVerificacao.NovaVersao) return@launch
             activity.lifecycle.withStarted {
                 if (!SessaoAtualizacao.adiadaNestaSessao && !SessaoAtualizacao.dialogoAberto) mostrarNovaVersao(resultado)

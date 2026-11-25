@@ -10,10 +10,11 @@
 
     <!-- Dashboard -->
     <string name="dashboard_boas_vindas">Olá, %1$s</string>
-    <string name="dashboard_lista_vazia">Nenhum veículo cadastrado.\nToque em “Novo veículo” para começar.</string>
+    <string name="dashboard_lista_vazia">Nenhum carro cadastrado.
+Toque em “Novo veículo” para começar.</string>
     <string name="botao_novo_veiculo">Novo veículo</string>
     <string name="item_veiculo_detalhes">%1$s km • %2$s</string>
-    <string name="item_veiculo_consumo">Consumo médio: %1$s km/l</string>
+    <string name="item_veiculo_consumo">Consumo médio: %1$s</string>
     <string name="item_veiculo_sem_consumo">Sem dados de consumo</string>
     <string name="item_veiculo_proxima_manutencao">Próxima manutenção: %1$s</string>
     <string name="item_veiculo_sem_previsao">Sem manutenção prevista</string>
@@ -58,9 +59,7 @@
     <string name="combustivel_gnv">GNV</string>
 
     <!-- Diagnóstico (Activity com abas) -->
-    <string name="aba_obd">Diagnóstico OBD2</string>
     <string name="aba_manutencoes">Manutenções</string>
-    <string name="aba_abastecimentos">Abastecimentos</string>
     <string name="seletor_data_titulo">Selecione a data</string>
     <string name="valor_indisponivel">—</string>
     <string name="prefixo_reais">R$</string>
@@ -68,6 +67,9 @@
 
     <!-- Aba OBD2 -->
     <string name="obd_desconectar">Desconectar</string>
+    <string name="obd_perfil_automatico">Perfil identificado: %1$s (%2$s)</string>
+    <string name="obd_perfil_manter">Manter</string>
+    <string name="obd_perfil_ignorar">Ignorar</string>
     <string name="obd_estado_conectando">Conectando…</string>
     <string name="obd_estado_conectado">Conectado</string>
     <string name="obd_estado_erro">Erro: %1$s</string>
@@ -98,17 +100,12 @@
     </plurals>
     <string name="obd_erro_sem_leitura">Ainda não há leitura para salvar</string>
     <string name="obd_leitura_salva">Leitura salva no histórico</string>
-    <string name="obd_tempo_real">Dados em tempo real</string>
     <string name="obd_rpm">Rotação (RPM)</string>
     <string name="obd_velocidade">Velocidade</string>
     <string name="obd_temperatura">Temperatura do motor</string>
     <string name="obd_carga">Carga do motor</string>
-    <string name="obd_bateria">Tensão da bateria</string>
     <string name="obd_valor_rpm">%1$s rpm</string>
-    <string name="obd_valor_velocidade">%1$d km/h</string>
-    <string name="obd_valor_temperatura">%1$d °C</string>
     <string name="obd_valor_carga">%1$s %%</string>
-    <string name="obd_valor_bateria">%1$s V</string>
     <string name="obd_historico_titulo">Leituras salvas</string>
     <string name="obd_historico_vazio">Nenhuma leitura salva ainda.</string>
     <string name="obd_historico_valores">%1$s • %2$s • %3$s</string>
@@ -125,11 +122,6 @@
     <string name="obd_limpar_confirmar">Limpar</string>
 
     <!-- Painel de telemetria -->
-    <string name="obd_map">Pressão do coletor / turbo</string>
-    <string name="unidade_rpm">rpm</string>
-    <string name="unidade_kmh">km/h</string>
-    <string name="unidade_kpa">kPa</string>
-    <string name="unidade_celsius">°C</string>
     <string name="obd_sensor_extremos">Mín %1$s · Máx %2$s</string>
     <string name="obd_sensores_titulo">Sensores suportados pela ECU</string>
     <string name="obd_sensores_titulo_qtd">Sensores suportados pela ECU (%1$d)</string>
@@ -149,7 +141,6 @@
     <string name="obd_log_compartilhar_titulo">Compartilhar log OBD2</string>
 
     <!-- Diagnóstico avançado -->
-    <string name="obd_diagnostico_titulo">Diagnóstico</string>
     <string name="obd_ecu_titulo">Informações da ECU</string>
     <string name="obd_ecu_vin">Número do chassi (VIN)</string>
     <string name="obd_ecu_pids">PIDs suportados detectados</string>
@@ -163,6 +154,19 @@
     <string name="dtc_badge_confirmado">Confirmada · 03</string>
     <string name="dtc_badge_pendente">Pendente · 07</string>
     <string name="dtc_badge_permanente">Permanente · 0A</string>
+    <string name="dtc_tipo_cambio">Câmbio (TCM)</string>
+    <!-- v2.2.9: Checkup OBD2 / Prontidão e Falhas de Ignição (Modo 06), aba Oficina -->
+    <string name="oficina_card_checkup">Checkup OBD2 / Prontidão</string>
+    <string name="oficina_card_checkup_desc">Pré-compra em 1 clique: luz de injeção, monitores, km desde a limpeza de falhas, VIN, CALID e CVN</string>
+    <string name="oficina_card_misfire">Falhas de Ignição (Modo 06)</string>
+    <string name="oficina_card_misfire_desc">Contagem de falhas de ignição por cilindro (1 a 4): ciclo atual e média, em carros CAN</string>
+    <string name="checkup_titulo">Checkup OBD2 / Prontidão</string>
+    <string name="checkup_descricao">Lê, com o polling pausado, o status da luz de injeção, os monitores de prontidão (pronto / pendente / não aplicável), a distância e os ciclos desde a última limpeza de falhas e a identificação da ECU (VIN, CALID e CVN). Ignição ligada; o motor pode estar ligado.</string>
+    <string name="checkup_ler">Fazer checkup</string>
+    <string name="misfire_titulo">Falhas de Ignição (Modo 06)</string>
+    <string name="misfire_descricao">Consulta os resultados de bordo do Modo 06 (MIDs A2–A5) e mostra, por cilindro, as falhas de ignição do ciclo atual (TID 0C) e a média EWMA (TID 0B). Disponível em carros CAN no OBD2 padrão.</string>
+    <string name="misfire_ler">Ler falhas de ignição</string>
+    <string name="dtc_badge_cambio">Câmbio · TCM 7E1</string>
     <string name="dtc_categoria_qtd">%1$s · %2$d</string>
     <string name="dtc_categoria_vazia">Nenhuma falha nesta categoria.</string>
     <string name="dtc_categoria_nao_suportada">Não suportado por esta ECU.</string>
@@ -186,8 +190,6 @@
     <string name="obd_bordo_titulo">Computador de bordo</string>
     <string name="obd_bordo_instantaneo">Consumo instantâneo</string>
     <string name="obd_bordo_media">Média da viagem</string>
-    <string name="obd_bordo_km_l">%1$s km/L</string>
-    <string name="obd_bordo_l_h">%1$s L/h</string>
     <string name="obd_bordo_parado">Parado</string>
     <string name="obd_bordo_totais">%1$s %2$s · %3$s %4$s</string>
     <string name="obd_bordo_zerar">Zerar viagem</string>
@@ -296,7 +298,6 @@ Toque em “Novo abastecimento” para começar.</string>
     <string name="erro_litros_acima_do_tanque">Os litros excedem a capacidade do tanque</string>
 
     <!-- Card de direção: mini-player (Spotify / YouTube Music) e atalhos do Waze -->
-    <string name="direcao_titulo">Direção</string>
     <string name="midia_servico_nome">Controle de música do Charrua OBD Pro</string>
     <string name="midia_ativar">Ativar controle de música</string>
     <string name="midia_ativar_dica">Libere o Charrua OBD Pro em “Acesso a notificações”. Se o Android bloquear (configuração restrita), abra Informações do app › ⋮ › Permitir configurações restritas.</string>
@@ -329,10 +330,47 @@ Toque em “Novo abastecimento” para começar.</string>
     <string name="hud_status_ao_vivo">● OBD AO VIVO</string>
     <string name="hud_status_desconectado">○ SEM CONEXÃO OBD</string>
     <string name="hud_status_alerta">▲ MOTOR QUENTE</string>
-    <string name="hud_rotulo_rpm">RPM</string>
-    <string name="hud_rotulo_map">TURBO/MAP %1$s</string>
-    <string name="hud_rotulo_map_padrao">TURBO/MAP kPa</string>
-    <string name="hud_rotulo_temperatura">MOTOR °C</string>
-    <string name="hud_rotulo_rail">RAIL bar</string>
-    <string name="hud_rotulo_tensao">BATERIA V</string>
+
+    <!-- v2.2.4: indicador do Modo Simulado -->
+    <plurals name="simulado_fonte_logs_reais">
+        <item quantity="one">Baseado em %d log real deste veículo</item>
+        <item quantity="other">Baseado em %d logs reais deste veículo</item>
+    </plurals>
+    <string name="simulado_fonte_sintetica">Simulação sintética (sem logs reais)</string>
+
+    <!-- v2.3.1: Pacote de Oficina -->
+    <string name="oficina_card_sensores">Todos os Sensores</string>
+    <string name="oficina_card_sensores_desc">Inspeção rápida: tudo o que a ECU responde, com mínimo/máximo, busca e o atalho + Painel</string>
+    <string name="oficina_card_graficos">Gráficos em Tempo Real</string>
+    <string name="oficina_card_graficos_desc">Osciloscópio ao vivo de 1 a 4 sensores, com pausa e cursor de leitura</string>
+    <string name="sensores_titulo">Todos os Sensores</string>
+    <string name="sensores_busca">Buscar por nome ou PID</string>
+    <string name="sensores_so_ativos">Só ativos</string>
+    <string name="sensores_todos">Todos do perfil</string>
+    <string name="sensores_resumo">%1$d na lista · %2$d responderam nesta sessão</string>
+    <string name="sensores_vazio">Nenhum sensor para mostrar. Ajuste a busca ou aguarde as primeiras leituras.</string>
+    <string name="sensores_extremos">Mín %1$s · Máx %2$s</string>
+    <string name="sensores_fixar_no_painel">Fixar %1$s no Painel</string>
+    <string name="sensores_tirar_do_painel">Tirar %1$s do Painel</string>
+    <string name="sensores_mostrador_adicionado">Mostrador adicionado ao Painel deste veículo</string>
+    <string name="sensores_mostrador_removido">Mostrador removido do Painel</string>
+    <string name="sensores_lista_adicionado">Fixado na lista rápida do Painel (ela passa a mostrar só os fixados)</string>
+    <string name="sensores_lista_removido">Removido da lista rápida do Painel</string>
+    <string name="sensores_ultimo_mostrador">O Painel precisa de pelo menos um mostrador</string>
+    <string name="graficos_titulo">Gráficos em Tempo Real</string>
+    <string name="graficos_30s">30 s</string>
+    <string name="graficos_60s">60 s</string>
+    <string name="graficos_120s">120 s</string>
+    <string name="graficos_pausar">Pausar</string>
+    <string name="graficos_retomar">Retomar</string>
+    <string name="graficos_zerar">Zerar</string>
+    <string name="graficos_sensores">Sensores</string>
+    <string name="graficos_aplicar">Aplicar</string>
+    <string name="graficos_escolher">Sensores do gráfico (até %1$d)</string>
+    <string name="graficos_limite">O gráfico mostra até %1$d sensores</string>
+    <string name="graficos_sem_dados">Aguardando leituras desta sessão…</string>
+    <string name="graficos_dica_cursor">Arraste o dedo no gráfico para ler os valores</string>
+    <string name="graficos_cursor">Cursor: %1$s s antes do fim da janela</string>
+    <string name="graficos_legenda">● %1$s: %2$s %3$s · pico %4$s</string>
+    <string name="graficos_legenda_cursor">● %1$s: %2$s %3$s</string>
 </resources>

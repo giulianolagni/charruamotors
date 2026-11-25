@@ -1,6 +1,7 @@
 package com.charruamotors.obd
 
 import com.charruamotors.domain.model.EstadoConexaoObd
+import com.charruamotors.domain.perfis.ImpressaoEcu
 import com.charruamotors.obd.log.EntradaRegistro
 import com.charruamotors.obd.pid.Pids
 import kotlinx.coroutines.flow.Flow
@@ -36,6 +37,13 @@ interface ObdClient {
      * (a ordem dos modos 21/22 da cascata); null = marca desconhecida.
      */
     suspend fun conectar(dispositivo: DispositivoObd, marcaVeiculo: String? = null): Result<Unit>
+
+    /**
+     * v2.3.0: camada preferida do perfil do carro — o serviço (`21`) que a camada 3 da cascata tenta
+     * primeiro na próxima [conectar], antes da ordem da marca. Null = só a marca decide. Clientes
+     * sem cascata (o simulado) ignoram.
+     */
+    fun definirServicoPreferido(servico: String?) = Unit
 
     /**
      * Fluxo frio de leituras em tempo real, emitindo um [DadosObd] a cada [intervaloMs] com os
@@ -74,6 +82,13 @@ interface ObdClient {
     /** Lê os códigos de falha armazenados/confirmados (modo 03). Lista vazia = nenhum código. */
     suspend fun lerCodigosFalha(): Result<List<DtcLido>>
 
+    /**
+     * Falhas do câmbio automático no TCM `7E1` (v2.2.9, OBD2 padrão em CAN 11 bits): `03` e o fallback
+     * UDS `19 02 FF`, com o cabeçalho e o filtro de recepção sempre restaurados. `success(null)` = sem
+     * TCM legível ou indisponível nesta conexão (modo 21/22 da SW4, linha K); lista vazia = TCM sem falhas.
+     */
+    suspend fun lerCodigosFalhaCambio(): Result<List<DtcLido>?> = Result.success(null)
+
     /** Lê os códigos pendentes, ainda não confirmados pela ECU (modo 07). */
     suspend fun lerCodigosPendentes(): Result<List<DtcLido>>
 
@@ -85,6 +100,14 @@ interface ObdClient {
 
     /** Lê o VIN / número do chassi (modo 09, PID 02). */
     suspend fun lerVin(): Result<String>
+
+    /**
+     * Impressão digital leve da ECU na conexão: combustível (`0151`), CALID (`0904`) e, com
+     * [sondarTcm], a presença do TCM em `7E1`/`7E2` (restaurando sempre o cabeçalho e o filtro de
+     * recepção anteriores). Nunca lança nem derruba a sessão: `NO DATA`, `7F` ou timeout deixam o
+     * campo correspondente nulo. O padrão é uma sondagem vazia (clientes sem suporte).
+     */
+    suspend fun sondarEcu(sondarTcm: Boolean): ImpressaoEcu = ImpressaoEcu.VAZIA
 
     /** Limpa os códigos de falha (modo 04). A UI deve sempre pedir confirmação antes. */
     suspend fun limparCodigosFalha(): Result<Unit>

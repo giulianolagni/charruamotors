@@ -16,8 +16,8 @@ class InterpretadorReleaseGithubTest {
     /** Trecho real (reduzido) de `GET /repos/{dono}/{repo}/releases/latest`. */
     private fun json(tag: String = "v1.6", assets: String = APK_ASSET, body: String = "\"## Novidades\\n\\n- Atualizador automático\\n- Sensores SW4\"") = """
         {
-          "url": "https://api.github.com/repos/giulianolagni/charruamotors-pro/releases/1",
-          "html_url": "https://github.com/giulianolagni/charruamotors-pro/releases/tag/$tag",
+          "url": "https://api.github.com/repos/giulianolagni/charruamotors/releases/1",
+          "html_url": "https://github.com/giulianolagni/charruamotors/releases/tag/$tag",
           "tag_name": "$tag",
           "name": "Charrua OBD Pro $tag",
           "draft": false,
@@ -37,11 +37,11 @@ class InterpretadorReleaseGithubTest {
         assertEquals("v1.6", release.versaoTexto)
         assertEquals("Charrua OBD Pro v1.6", release.titulo)
         assertTrue(release.notas.contains("Sensores SW4"))
-        assertEquals("https://github.com/giulianolagni/charruamotors-pro/releases/tag/v1.6", release.urlPagina)
+        assertEquals("https://github.com/giulianolagni/charruamotors/releases/tag/v1.6", release.urlPagina)
         val apk = release.apk!!
         assertEquals("CharruaOBDPro-1.6-release.apk", apk.nome)
         assertEquals(
-            "https://github.com/giulianolagni/charruamotors-pro/releases/download/v1.6/CharruaOBDPro-1.6-release.apk",
+            "https://github.com/giulianolagni/charruamotors/releases/download/v1.6/CharruaOBDPro-1.6-release.apk",
             apk.url,
         )
         assertEquals(7_340_032L, apk.tamanhoBytes)
@@ -66,11 +66,11 @@ class InterpretadorReleaseGithubTest {
         val r401 = InterpretadorReleaseGithub.interpretar(401, """{"message":"Bad credentials"}""", "1.5")
         assertEquals(ResultadoVerificacao.Indisponivel(401), r401)
         assertEquals(
-            "https://github.com/giulianolagni/charruamotors-pro/releases",
+            "https://github.com/giulianolagni/charruamotors/releases",
             InterpretadorReleaseGithub.URL_RELEASES,
         )
         assertEquals(
-            "https://api.github.com/repos/giulianolagni/charruamotors-pro/releases/latest",
+            "https://api.github.com/repos/giulianolagni/charruamotors/releases/latest",
             InterpretadorReleaseGithub.URL_API_ULTIMA,
         )
     }
@@ -125,14 +125,14 @@ class InterpretadorReleaseGithubTest {
     // ---------------------------------------------------------------- verificador (rede injetada)
 
     @Test
-    fun `verificador consulta a URL da API e interpreta a resposta`() = runTest {
+    fun `sem o redirect da pagina o verificador cai na API e interpreta a resposta`() = runTest {
         val urls = mutableListOf<String>()
         val verificador = VerificadorAtualizacao("1.5", dispatcher = StandardTestDispatcher(testScheduler)) { url ->
             urls += url
-            RespostaHttp(200, json("v1.6"))
+            if (url == InterpretadorReleaseGithub.URL_API_ULTIMA) RespostaHttp(200, json("v1.6")) else RespostaHttp(200, null)
         }
         assertTrue(verificador.verificar() is ResultadoVerificacao.NovaVersao)
-        assertEquals(listOf(InterpretadorReleaseGithub.URL_API_ULTIMA), urls)
+        assertEquals(listOf(InterpretadorReleaseGithub.URL_PAGINA_ULTIMA, InterpretadorReleaseGithub.URL_API_ULTIMA), urls)
     }
 
     @Test
@@ -151,7 +151,7 @@ class InterpretadorReleaseGithubTest {
             "name": "CharruaOBDPro-1.6-release.apk",
             "content_type": "application/vnd.android.package-archive",
             "size": 7340032,
-            "browser_download_url": "https://github.com/giulianolagni/charruamotors-pro/releases/download/v1.6/CharruaOBDPro-1.6-release.apk"
+            "browser_download_url": "https://github.com/giulianolagni/charruamotors/releases/download/v1.6/CharruaOBDPro-1.6-release.apk"
         }"""
     }
 }

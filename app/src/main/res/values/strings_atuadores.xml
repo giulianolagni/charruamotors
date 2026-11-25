@@ -8,6 +8,14 @@
     <string name="veiculo_preset_aplicado">Preset aplicado: %1$s. Confira placa e km e salve.</string>
     <string name="veiculo_faixas_titulo">Ficha técnica · Faixas esperadas</string>
     <string name="veiculo_faixas_generico">Sem preset reconhecido: faixas genéricas a partir dos limites de alerta acima.</string>
+    <!-- v2.2: catálogo modular de perfis (assets/perfis/) -->
+    <string name="veiculo_faixas_generico_perfil">Sem perfil exato: %1$s (genérico pela motorização), com os limites de alerta acima.</string>
+    <string name="veiculo_preset_selo_validado">VALIDADO</string>
+    <string name="veiculo_preset_selo_base">BASE</string>
+    <string name="veiculo_preset_indisponivel">Catálogo de perfis indisponível: use os limites manuais.</string>
+    <string name="veiculo_ficha_layout">Layout sugerido do painel: %1$s</string>
+    <string name="veiculo_layout_padrao">Padrão</string>
+    <string name="veiculo_layout_turbo_flex">Turbo Flex</string>
 
     <!-- Aba Oficina -->
     <string name="oficina_card_atuadores">⚙️ Teste de Atuadores</string>

@@ -33,6 +33,27 @@ class ResultadoDiagnosticoTest {
     }
 
     @Test
+    fun `falhas do TCM do Cruze aparecem separadas como Cambio so quando ha codigos`() {
+        val base = ResultadoDiagnostico(
+            confirmados = listOf(dtc(TipoDtc.CONFIRMADO, "P0300")),
+            pendentes = emptyList(),
+            permanentes = emptyList(),
+            freezeFrame = null,
+        )
+        val comCambio = base.copy(cambio = listOf(dtc(TipoDtc.CAMBIO, "P0700"), dtc(TipoDtc.CAMBIO, "P0300")))
+        assertEquals(
+            listOf(ItemDiagnostico.Cabecalho(TipoDtc.CAMBIO, 2), ItemDiagnostico.Codigo(dtc(TipoDtc.CAMBIO, "P0700")), ItemDiagnostico.Codigo(dtc(TipoDtc.CAMBIO, "P0300"))),
+            comCambio.itens().takeLast(3),
+        )
+        assertEquals(3, comCambio.total)
+        // O mesmo código no motor e no câmbio não colide na lista.
+        assertEquals(comCambio.itens().size, comCambio.itens().map { it.chave }.toSet().size)
+        // TCM sem falhas ou não lido (SW4, modo 21): nenhuma linha a mais.
+        assertEquals(base.itens(), base.copy(cambio = emptyList()).itens())
+        assertEquals(base.itens(), base.copy(cambio = null).itens())
+    }
+
+    @Test
     fun `mesmo codigo em categorias diferentes tem chaves distintas`() {
         val r = ResultadoDiagnostico(
             confirmados = listOf(dtc(TipoDtc.CONFIRMADO, "P0420")),

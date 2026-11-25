@@ -94,6 +94,16 @@ class CatalogoCascata(
     /** Ordem de tentativa da camada 3: os modos que preferem a [marca] primeiro, depois a ordem do JSON. */
     fun modosPara(marca: String?): List<ModoServico> = modosServico.sortedBy { if (it.preferidoPor(marca)) 0 else 1 }
 
+    /**
+     * v2.3.0: com a camada preferida do perfil do carro ([servico] `21`), esse serviço vai para a
+     * frente; os demais seguem na ordem da [marca]. Null = só a ordem da marca.
+     */
+    fun modosPara(marca: String?, servico: String?): List<ModoServico> {
+        val porMarca = modosPara(marca)
+        if (servico == null) return porMarca
+        return porMarca.sortedBy { if (it.servico.equals(servico, ignoreCase = true)) 0 else 1 }
+    }
+
     companion object {
         const val ARQUIVO_PADRAO = "cascata_conexao.json"
 

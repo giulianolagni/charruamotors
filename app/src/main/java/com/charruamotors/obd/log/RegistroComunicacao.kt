@@ -120,6 +120,34 @@ class RegistroComunicacao(
             }
         }
 
+        /**
+         * Linha do **log bruto** (v2.2.5, opção desligada por padrão): sem corte nenhum, com o
+         * instante do envio (TX) e da resposta (RX) em milissegundos, o comando exato, a resposta
+         * inteira (eco, headers, `NO DATA`, `7F`, `\r` visíveis), o tamanho e os bytes em hexadecimal.
+         *
+         * ```
+         * 14:02:07.932  TX 14:02:07.120 > ATSH7E1 < "OK\r" [3 B: 4F 4B 0D] (812 ms)
+         * ```
+         */
+        fun formatarLinhaBruta(e: EntradaRegistro, hora: SimpleDateFormat): String {
+            val rx = hora.format(Date(e.instanteMs))
+            return when (e) {
+                is EntradaRegistro.Evento -> "$rx  ● ${e.texto}"
+                is EntradaRegistro.Comando -> {
+                    val tx = hora.format(Date(e.instanteMs - e.duracaoMs))
+                    val resposta = e.resposta
+                    val corpo = when {
+                        e.falha != null -> "${e.falha}" + (resposta?.let { " · parcial \"${visivel(it)}\"" }.orEmpty())
+                        else -> "\"${visivel(resposta.orEmpty())}\" [${resposta.orEmpty().length} B: ${hexadecimal(resposta.orEmpty())}]"
+                    }
+                    "$rx  TX $tx > ${e.comando} < $corpo (${e.duracaoMs} ms)"
+                }
+            }
+        }
+
+        /** Bytes do texto recebido do adaptador (cada caractere é um byte, como em `CanalElm327`) em hexadecimal. */
+        fun hexadecimal(texto: String): String = texto.map { "%02X".format(it.code and 0xFF) }.joinToString(" ")
+
         /** Torna caracteres de controle visíveis (`\r`, `\n`, `\x00`). */
         fun visivel(texto: String): String = buildString {
             for (c in texto) {

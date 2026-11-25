@@ -1,5 +1,7 @@
 package com.charruamotors.obd.pid
 
+import com.charruamotors.domain.calculo.AlavancaGmTcm
+import com.charruamotors.domain.calculo.CambioA750f
 import org.json.JSONException
 import org.json.JSONObject
 import kotlin.math.abs
@@ -133,7 +135,22 @@ data class DefinicaoPid(
                 formula = Formula.compilar("0"),
                 min = 0.0,
                 max = 255.0,
-                rotulos = mapOf(0 to "N", 1 to "1ª", 2 to "2ª", 3 to "3ª", 4 to "4ª", 5 to "5ª", 6 to "6ª", 254 to "R", 255 to "Parado"),
+                rotulos = CambioA750f.ROTULOS_MARCHA,
+                doAparelho = true,
+            )
+        }
+
+        /** Coluna de log da posição da alavanca do TCM GM ([AlavancaGmTcm.CHAVE_POSICAO]). */
+        val ALAVANCA_GM: DefinicaoPid by lazy {
+            DefinicaoPid(
+                comando = AlavancaGmTcm.CHAVE_POSICAO,
+                nome = "Alavanca / marcha (TCM GM 7E2)",
+                unidade = "",
+                bytes = 0,
+                formula = Formula.compilar("0"),
+                min = 0.0,
+                max = 255.0,
+                rotulos = AlavancaGmTcm.ROTULOS,
                 doAparelho = true,
             )
         }
@@ -274,6 +291,7 @@ object Pids {
     const val LAMBDA_BANDA_LARGA_CORRENTE = "0134"
     const val TENSAO_ECU = "0142"
     const val LAMBDA_COMANDADO = "0144"
+    const val PEDAL_ACELERADOR = "0149"
     const val PERCENTUAL_ETANOL = "0152"
     const val CONSUMO_ECU = "015E"
     const val TENSAO_BATERIA = "ATRV"

@@ -111,13 +111,18 @@ internal class SimuladorCruze(private val random: Random) {
             Pids.PRESSAO_RAIL to (railBar * 100.0).roundToInt().toDouble(), // kPa
             Pids.LAMBDA_BANDA_LARGA to arred(lambdaMedido, 3),
             "012F" to arred(nivelCombustivel, 1),
+            "0130" to ObdClientFake.CICLOS_AQUECIMENTO_SIMULADOS,
             "0131" to kmDesdeLimpeza.roundToInt().toDouble(),
             "0133" to BAROMETRO_KPA,
+            "013C" to (temperaturaMotor * 4.0 + carga * 3.0).roundToInt().toDouble(),
             Pids.TENSAO_ECU to arred(tensao - 0.15, 2),
             Pids.LAMBDA_COMANDADO to arred(lambdaComandado, 3),
             "0145" to arred((borboleta - 6.0).coerceAtLeast(0.0), 1),
             "0146" to 24.0,
             "0149" to arred(pedal, 1),
+            "014A" to arred(pedal / 2 + ObdClientFake.DESVIO_PEDAL_E, 1),
+            "014D" to 0.0,
+            "014E" to (ObdClientFake.MINUTOS_DESDE_LIMPEZA_INICIAIS + segundosMotorLigado / 60).roundToInt().toDouble(),
             Pids.PERCENTUAL_ETANOL to percentualEtanol.roundToInt().toDouble(),
             "015C" to temperaturaOleo.roundToInt().toDouble(),
             Pids.TENSAO_BATERIA to arred(tensao, 1),
@@ -179,8 +184,8 @@ internal class SimuladorCruze(private val random: Random) {
         /** PIDs que a ECU simulada do Cruze suporta (sem 010A, 0134 e 015E, como num LE2). */
         val COMANDOS: Set<String> = setOf(
             "0104", "0105", "0106", "0107", "010B", "010C", "010D", "010E", "010F", "0110", "0111", "0114",
-            "011F", "0121", "0123", "0124", "012F", "0131", "0133", "0142", "0144", "0145", "0146", "0149",
-            "0152", "015C", "ATRV",
+            "011F", "0121", "0123", "0124", "012F", "0130", "0131", "0133", "013C", "0142", "0144", "0145",
+            "0146", "0149", "014A", "014D", "014E", "0152", "015C", "ATRV",
         )
     }
 }

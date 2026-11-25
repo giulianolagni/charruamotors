@@ -1,13 +1,26 @@
 package com.charruamotors.obd.sessao
 
+import com.charruamotors.domain.calculo.AlavancaGmTcm
+import com.charruamotors.carros.PerfilCarro
 import com.charruamotors.direcao.hud.TelemetriaCompartilhada
 import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.calculo.EstequiometriaFlex
 import com.charruamotors.domain.calculo.EstimadorCambioA750f
 import com.charruamotors.domain.calculo.EstimadorCambioGm6T
+import com.charruamotors.domain.calculo.EstimadorMarchaPerfil
 import com.charruamotors.domain.calculo.ParametrosMotor
+import com.charruamotors.domain.calculo.LimitesProtecao
 import com.charruamotors.domain.faixas.FaixasVeiculo
 import com.charruamotors.domain.faixas.PresetVeiculo
+import com.charruamotors.domain.faixas.ResolucaoPerfil
+import com.charruamotors.domain.perfis.CarregadorPerfis
+import com.charruamotors.domain.perfis.DecodificadorVin
+import com.charruamotors.domain.perfis.IdentificadorPerfil
+import com.charruamotors.domain.perfis.ImpressaoEcu
+import com.charruamotors.domain.perfis.OrigemPerfil
+import com.charruamotors.domain.perfis.PerfilIdentificado
+import com.charruamotors.domain.perfis.PerfilCambio
+import com.charruamotors.domain.perfis.VinDecodificado
 import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.domain.model.TipoCombustivel
 import com.charruamotors.domain.model.Veiculo
@@ -17,8 +30,12 @@ import com.charruamotors.obd.DtcLido
 import com.charruamotors.obd.InfoConexao
 import com.charruamotors.obd.ModoObd
 import com.charruamotors.obd.ObdClient
+import com.charruamotors.obd.ObdClientFake
+import com.charruamotors.obd.aprendizado.FonteSimulacao
+import com.charruamotors.obd.aprendizado.ModeloAprendido
 import com.charruamotors.obd.ResultadoPerfil
 import com.charruamotors.obd.dtc.CatalogoDtc
+import com.charruamotors.obd.log.ArquivoLogSalvo
 import com.charruamotors.obd.log.CabecalhoSessao
 import com.charruamotors.obd.log.DestinoLogs
 import com.charruamotors.obd.log.DtcsSessao
@@ -27,6 +44,7 @@ import com.charruamotors.obd.log.LogsSessaoSalvos
 import com.charruamotors.obd.pid.CatalogoPids
 import com.charruamotors.obd.pid.DefinicaoPid
 import com.charruamotors.obd.pid.Pids
+import com.charruamotors.oficina.sensores.HistoricoSessao
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,21 +89,49 @@ data class VeiculoSessao(
     /** Modelo (a cilindrada vem dele) e a calibração do consumo, para o resumo da viagem. */
     val modelo: String? = null,
     val calibracaoConsumo: Double = 1.0,
-    /** Faixas mínimas/máximas esperadas (preset SW4/Cruze ou genéricas do cadastro), para o relatório. */
+    /** Faixas mínimas/máximas esperadas (perfil do catálogo ou genéricas do cadastro), para o relatório. */
     val faixas: FaixasVeiculo? = null,
+    val ano: Int? = null,
+    /** Onde o cadastro caiu na cascata de perfis (exato → genérico → OBD2 padrão); null = não resolvido. */
+    val resolucao: ResolucaoPerfil? = null,
+    /** Limites do cadastro (água, ATF, alternador), reaplicados se a sessão trocar o perfil genérico (v2.2.2). */
+    val limites: LimitesProtecao? = null,
+    /**
+     * v2.3.0: marca usada nos recursos da montadora (fallback 21/22 pela marca, PIDs estendidos,
+     * estimador de marcha GM); null no perfil OBD2 Genérico/padrão — o carro não herda nada da SW4 nem do Cruze.
+     */
+    val marcaMontadora: String? = marca,
+    /** v2.3.0: serviço que a camada 3 tenta primeiro (`21` com a camada Modo 21 do perfil). */
+    val servicoPreferido: String? = null,
+    /** v2.3.0: câmbio escolhido no perfil técnico do carro (vale sobre o do perfil exato). */
+    private val cambioEscolhido: PerfilCambio? = null,
 ) {
+    /** Câmbio do perfil exato (estima a marcha dos automáticos sem regra própria); null nos genéricos. */
+    val cambio: PerfilCambio?
+        get() = cambioEscolhido ?: resolucao?.takeIf { !it.generico }?.preset?.perfilCambio
+
     companion object {
-        fun de(v: Veiculo) = VeiculoSessao(
-            id = v.id,
-            descricao = v.descricao,
-            nomeCurto = "${v.marca} ${v.modelo}".trim(),
-            marca = v.marca,
-            placa = v.placaFormatada,
-            combustivel = v.tipoCombustivel,
-            modelo = v.modelo,
-            calibracaoConsumo = v.calibracaoConsumo,
-            faixas = FaixasVeiculo.paraVeiculo(v),
-        )
+        /** Veículo do cadastro com o [perfil] isolado dele (v2.3.0: faixas, câmbio e camada escolhidos). */
+        fun de(v: Veiculo, perfil: PerfilCarro = PerfilCarro(v.id)): VeiculoSessao {
+            val resolucao = perfil.resolver(v)
+            return VeiculoSessao(
+                id = v.id,
+                descricao = v.descricao,
+                nomeCurto = "${v.marca} ${v.modelo}".trim(),
+                marca = v.marca,
+                placa = v.placaFormatada,
+                combustivel = v.tipoCombustivel,
+                modelo = v.modelo,
+                calibracaoConsumo = v.calibracaoConsumo,
+                faixas = resolucao.faixas,
+                ano = v.ano,
+                resolucao = resolucao,
+                limites = LimitesProtecao.deVeiculo(v),
+                marcaMontadora = perfil.marcaMontadora(v.marca),
+                servicoPreferido = perfil.servicoPreferido,
+                cambioEscolhido = perfil.perfilCambioId?.let { perfil.cambio(resolucao) },
+            )
+        }
     }
 }
 
@@ -118,6 +164,8 @@ data class EstadoSessao(
      * encerrá-la — só o botão Desconectar ou a ECU muda (ignição desligada). Zera com a sessão.
      */
     val assumidaPeloUsuario: Boolean = false,
+    /** v2.3.0: id do veículo da sessão (recordes e perfil isolado); 0 = sem veículo vinculado. */
+    val veiculoId: Long = 0,
 ) {
     val ativa: Boolean get() = fase != FaseSessao.Inativa
     val automatica: Boolean get() = ativa && origem == OrigemSessao.AUTOMATICA
@@ -137,6 +185,8 @@ data class TemposSessao(
     val intervaloTentativasMs: Long = 5_000,
     /** Prazo do perfil de montadora antes de abrir o CSV só com os PIDs padrão. */
     val prazoPerfilMs: Long = 30_000,
+    /** Prazo da identificação (VIN + sondagem da ECU) antes de seguir com o perfil do cadastro. */
+    val prazoIdentificacaoMs: Long = 20_000,
 )
 
 /**
@@ -176,6 +226,13 @@ class SessaoObd(
     private val gpsAtivo: () -> Boolean = { false },
     /** Velocidade GPS atual em km/h, já filtrada (null = sem fix confiável: a chave fica ausente). */
     private val velocidadeGps: () -> Double? = { null },
+    /**
+     * v2.2.4: modelo aprendido dos CSVs reais **deste** `veiculoId` (null = sem logs reais), usado só
+     * no Modo Simulado. Roda na [io]; nunca recebe nem devolve dados de outro veículo.
+     */
+    private val modeloAprendidoDe: suspend (Long) -> ModeloAprendido? = { null },
+    /** v2.2.4: CSV de uma sessão **real** (nunca simulada) fechado para o `veiculoId`; alimenta o aprendizado. */
+    private val aoSalvarLogReal: suspend (veiculoId: Long, csv: ArquivoLogSalvo) -> Unit = { _, _ -> },
 ) {
     private val _modo = MutableStateFlow(modoInicial)
     val modo: StateFlow<ModoObd> = _modo.asStateFlow()
@@ -213,11 +270,22 @@ class SessaoObd(
     private val _vinLido = MutableStateFlow(false)
     val vinLido: StateFlow<Boolean> = _vinLido.asStateFlow()
 
+    private val _fonteSimulacao = MutableStateFlow<FonteSimulacao?>(null)
+
+    /** Modo Simulado conectado: logs reais do veículo ou simulador sintético; null = fora do Modo Simulado/desconectado. */
+    val fonteSimulacao: StateFlow<FonteSimulacao?> = _fonteSimulacao.asStateFlow()
+
     private val _sessao = MutableStateFlow(EstadoSessao())
     val estadoSessao: StateFlow<EstadoSessao> = _sessao.asStateFlow()
 
     private val _eventos = MutableSharedFlow<EventoSessao>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val eventos: SharedFlow<EventoSessao> = _eventos.asSharedFlow()
+
+    /** v2.3.1: amostras recentes e mínimo/máximo da sessão (Todos os Sensores e Gráficos). Zera a cada sessão. */
+    val historico = HistoricoSessao()
+
+    /** Marca usada nos recursos da montadora na sessão em curso (ou na última); null no OBD2 Genérico. */
+    val marcaMontadora: String? get() = marcaMontadoraAtual
 
     private var sessaoJob: Job? = null
     @Volatile private var clienteDaSessao: ObdClient? = null
@@ -225,14 +293,64 @@ class SessaoObd(
     @Volatile private var motivoPedido: String? = null
     @Volatile private var marcaAtual: String? = null
 
+    /** v2.3.0: marca para os recursos da montadora (null no OBD2 Genérico); ver [VeiculoSessao.marcaMontadora]. */
+    @Volatile private var marcaMontadoraAtual: String? = null
+
+    /** Veículo e modo da sessão em curso, para o aprendizado de logs reais no encerramento. */
+    @Volatile private var veiculoIdSessao: Long = 0
+    @Volatile private var sessaoSimulada: Boolean = false
+
     /** Combustível do veículo da sessão (Auto Flex por padrão): decide a estequiometria da A/F real. */
     @Volatile private var combustivelAtual: TipoCombustivel? = null
 
-    /** Alavanca P/N → P ou N e marcha estimada da A750F (SW4), com a memória do último movimento. */
-    private val estimadorCambio = EstimadorCambioA750f()
+    /**
+     * Marcha estimada da A750F (SW4) e, v2.2.6, a reduzida (4L) detectada pela razão rpm/velocidade
+     * com o `fatorReduzida` do câmbio em uso (relido a cada amostra).
+     */
+    private val estimadorCambio = EstimadorCambioA750f { _cambioAtivo.value }
 
     /** Marcha 1ª–6ª estimada do câmbio GM 6T35/6T40 (Cruze) pela razão rpm/velocidade. */
     private val estimadorCambioGm = EstimadorCambioGm6T()
+
+    /** v2.2: marcha pelas razões do perfil de câmbio do catálogo (ex.: Aisin 6 marchas dos VW TSI). */
+    @Volatile private var estimadorPerfil: EstimadorMarchaPerfil? = null
+
+    private val _vinDecodificado = MutableStateFlow<VinDecodificado?>(null)
+    /** Montadora (WMI) e ano-modelo do VIN desta conexão; null = não lido ou formato inválido. */
+    val vinDecodificado: StateFlow<VinDecodificado?> = _vinDecodificado.asStateFlow()
+
+    private val _perfilAutomatico = MutableStateFlow<PerfilIdentificado?>(null)
+
+    /**
+     * Perfil que a sessão aplicou sozinho (VDS do VIN ou sondagem da ECU) e o usuário ainda não
+     * respondeu: a aba OBD mostra o aviso com [manterPerfilAutomatico] / [ignorarPerfilAutomatico].
+     */
+    val perfilAutomatico: StateFlow<PerfilIdentificado?> = _perfilAutomatico.asStateFlow()
+
+    private val _impressaoEcu = MutableStateFlow<ImpressaoEcu?>(null)
+
+    /** Impressão digital da ECU desta conexão (`0151`, `0904`, TCM); null = ainda não sondada. */
+    val impressaoEcu: StateFlow<ImpressaoEcu?> = _impressaoEcu.asStateFlow()
+
+    private val _cambioAtivo = MutableStateFlow<PerfilCambio?>(null)
+
+    /** Câmbio do perfil exato em uso (o automático ou o do cadastro); null = genérico/sem sessão (v2.2.3, rótulo da marcha). */
+    val cambioAtivo: StateFlow<PerfilCambio?> = _cambioAtivo.asStateFlow()
+
+    private val travaPerfil = Any()
+    @Volatile private var veiculoAtual: VeiculoSessao? = null
+
+    /** Perfil aplicado automaticamente em uso (null = vale o do cadastro). */
+    @Volatile private var perfilAplicado: PerfilIdentificado? = null
+
+    /** A identificação já terminou (o refino tardio por MAP só vale depois dela). */
+    @Volatile private var identificacaoConcluida = false
+
+    /** O usuário ignorou o perfil automático: a sessão não tenta de novo. */
+    @Volatile private var perfilIgnorado = false
+
+    /** Maior MAP lido na sessão (kPa), para distinguir turbo de aspirado. */
+    @Volatile private var mapPicoKpa: Double? = null
 
     // ------------------------------------------------------------------ modo
 
@@ -347,7 +465,10 @@ class SessaoObd(
         val temLambda = (Pids.COMANDOS_LAMBDA_MEDIDO + Pids.LAMBDA_COMANDADO).any { it in suportados }
         if (temLambda && combustivelAtual != TipoCombustivel.DIESEL) add(DefinicaoPid.RELACAO_AF_REAL)
         if (CambioA750f.CHAVE_ALAVANCA in suportados && CambioA750f.CHAVE_MARCHA !in suportados) add(DefinicaoPid.MARCHA_ESTIMADA_A750F)
-        else if (PresetVeiculo.marcaGm(marcaAtual) && CambioA750f.CHAVE_MARCHA !in suportados) add(DefinicaoPid.MARCHA_ESTIMADA_A750F)
+        else if ((PresetVeiculo.marcaGm(marcaMontadoraAtual) || estimadorPerfil != null) && CambioA750f.CHAVE_MARCHA !in suportados) {
+            add(DefinicaoPid.MARCHA_ESTIMADA_A750F)
+        }
+        if (AlavancaGmTcm.CHAVES_SELETOR.any { it in suportados }) add(DefinicaoPid.ALAVANCA_GM)
     }
 
     // ------------------------------------------------------------------ execução
@@ -361,20 +482,36 @@ class SessaoObd(
         tentativas: Int,
     ) {
         val inicioMs = relogio()
+        veiculoIdSessao = veiculoId
+        historico.limpar()
+        sessaoSimulada = _modo.value == ModoObd.SIMULADO
         var conectou = false
         var motivoFim = "Sessão encerrada"
         var g: GravadorLogsSessao? = null
         try {
             val veiculo = if (veiculoId > 0) runCatching { buscarVeiculo(veiculoId) }.getOrNull() else null
             marcaAtual = veiculo?.marca
+            marcaMontadoraAtual = veiculo?.marcaMontadora
+            veiculoAtual = veiculo
+            _cambioAtivo.value = veiculo?.cambio
+            estimadorCambio.reiniciar()
             combustivelAtual = veiculo?.combustivel
-            if (config().gravarLogsAutomaticos) {
-                g = withContext(io) { criarGravador(dispositivo, veiculo, origem, gatilho, inicioMs) }
+            // A750F (alavanca no 7E1) e GM têm estimador próprio; os demais automáticos usam as razões do perfil.
+            estimadorPerfil = veiculo?.cambio?.takeIf { it.estimaMarcha && it.mapaAlavanca == null }?.let(::EstimadorMarchaPerfil)
+            if (sessaoSimulada && cli is ObdClientFake) {
+                // Só o modelo deste veículo; sem veículo ou sem logs reais, segue o simulador sintético.
+                val modelo = if (veiculoId > 0) runCatching { withContext(io) { modeloAprendidoDe(veiculoId) } }.getOrNull() else null
+                cli.definirModeloAprendido(modelo?.takeIf { it.veiculoId == veiculoId })
+            }
+            // v2.2.5: sessão simulada nunca grava .csv/.txt (nem entra no índice de aprendizado).
+            if (config().gravarLogsAutomaticos && !sessaoSimulada) {
+                val logBruto = config().logCompletoTrafego
+                g = withContext(io) { criarGravador(dispositivo, veiculo, origem, gatilho, inicioMs, logBruto) }
                 gravador = g
-                cli.definirLogCompleto(config().logCompletoTrafego)
+                cli.definirLogCompleto(logBruto)
                 cli.observarRegistro(g::registrarEntrada)
             }
-            _sessao.update { it.copy(veiculo = veiculo?.nomeCurto, gravandoLogs = g != null) }
+            _sessao.update { it.copy(veiculo = veiculo?.nomeCurto, gravandoLogs = g != null, veiculoId = if (veiculo != null) veiculoId else 0) }
             g?.evento("Iniciada (${descreverOrigem(origem, gatilho)}) com ${dispositivo.nome} (${dispositivo.endereco})", relogio())
 
             if (origem == OrigemSessao.AUTOMATICA && tempos.esperaEcuMs > 0) {
@@ -385,7 +522,8 @@ class SessaoObd(
             for (tentativa in 1..tentativas) {
                 _sessao.update { it.copy(fase = FaseSessao.Conectando(tentativa, tentativas)) }
                 if (tentativas > 1) g?.evento("Tentativa de conexão $tentativa/$tentativas", relogio())
-                val resultado = cli.conectar(dispositivo, veiculo?.marca)
+                cli.definirServicoPreferido(veiculo?.servicoPreferido)
+                val resultado = cli.conectar(dispositivo, veiculo?.marcaMontadora)
                 if (resultado.isSuccess) {
                     conectou = true
                     break
@@ -399,6 +537,17 @@ class SessaoObd(
                 return
             }
             _sessao.update { it.copy(fase = FaseSessao.Conectada) }
+            if (sessaoSimulada && cli is ObdClientFake) {
+                val fonte = cli.fonteSimulacao.value
+                _fonteSimulacao.value = fonte
+                g?.evento(
+                    when (fonte) {
+                        is FonteSimulacao.LogsReais -> "Modo Simulado baseado em ${fonte.quantidade} log(s) real(is) deste veículo"
+                        FonteSimulacao.Sintetica -> "Modo Simulado sintético (sem logs reais deste veículo)"
+                    },
+                    relogio(),
+                )
+            }
             g?.conexaoEstabelecida(cli.infoConexao.value)
             motivoFim = acompanharConexao(cli, veiculo, g)
         } finally {
@@ -414,14 +563,15 @@ class SessaoObd(
                 .catch { e -> g?.evento("Telemetria interrompida: ${e.message}", relogio()) }
                 .collect { dados -> receberAmostra(dados, g) }
         }
-        launch {
-            _vinLido.value = false
-            _vin.value = cli.lerVin().getOrNull()
-            _vinLido.value = true
+        if (g != null && config().logCompletoTrafego) {
+            // Log bruto: cada mudança de estado do Bluetooth/ELM327 fica registrada com o instante.
+            launch { cli.estado.collect { g.evento("Estado da conexão Bluetooth/ELM327: ${descreverEstado(it)}", relogio()) } }
         }
+        launch { identificarVeiculo(cli, veiculo, g) }
         launch {
             _perfil.value = null
-            val perfil = withTimeoutOrNull(tempos.prazoPerfilMs) { cli.ativarPerfilFabricante(veiculo?.marca) }
+            // v2.3.0: no OBD2 Genérico/padrão a marca não vai (nenhum PID proprietário da montadora).
+            val perfil = withTimeoutOrNull(tempos.prazoPerfilMs) { cli.ativarPerfilFabricante(veiculo?.marcaMontadora) }
                 ?: ResultadoPerfil.Indisponivel(veiculo?.marca ?: "montadora", "a ECU não respondeu no prazo")
             _perfil.value = perfil
             if (perfil is ResultadoPerfil.Ativo) {
@@ -441,12 +591,146 @@ class SessaoObd(
     }
 
     private fun receberAmostra(daEcu: DadosObd, g: GravadorLogsSessao?) {
+        acompanharMap(daEcu[Pids.PRESSAO_COLETOR], g)
         val base = comCalculados(comVelocidadeGps(daEcu), combustivelAtual)
-        val dados = if (PresetVeiculo.marcaGm(marcaAtual)) estimadorCambioGm.aplicar(base) else estimadorCambio.aplicar(base)
+        val porPerfil = estimadorPerfil
+        val dados = when {
+            PresetVeiculo.marcaGm(marcaMontadoraAtual) -> estimadorCambioGm.aplicar(base)
+            porPerfil != null -> porPerfil.aplicar(base)
+            else -> estimadorCambio.aplicar(base)
+        }
+        historico.registrar(dados.valores, relogio())
         _dados.value = dados
         _amostras.tryEmit(dados)
         telemetria.publicar(dados, conectado = true)
         g?.registrar(dados, relogio())
+    }
+
+    // ------------------------------------------------------------------ identificação automática (v2.2.2)
+
+    /** O cadastro está num perfil genérico (ou não há veículo vinculado): vale tentar identificar o carro. */
+    private fun cadastroGenerico(veiculo: VeiculoSessao?): Boolean = veiculo?.resolucao?.generico != false
+
+    /**
+     * Identificação na conexão, em paralelo à telemetria e sem nunca derrubar a sessão: lê o VIN,
+     * tenta o match exato por WMI+VDS (`padroesVin`), faz a sondagem leve da ECU (`0151`, `0904`,
+     * TCM) e, sem match, refina o perfil genérico pela impressão. `NO DATA`/`7F`/timeout só deixam o
+     * campo vazio; perfil exato do cadastro nunca é trocado ([OrigemPerfil.MANUAL]).
+     */
+    private suspend fun identificarVeiculo(cli: ObdClient, veiculo: VeiculoSessao?, g: GravadorLogsSessao?) {
+        _vinLido.value = false
+        val vin = cli.lerVin().getOrNull()
+        _vin.value = vin
+        val info = DecodificadorVin.decodificar(vin)
+        _vinDecodificado.value = info
+        val generico = cadastroGenerico(veiculo)
+        val catalogo = CarregadorPerfis.catalogo
+        val porVds = if (generico) IdentificadorPerfil.porVds(catalogo, info) else null
+        if (porVds != null) aplicarPerfilAutomatico(porVds, g)
+        registrarVin(vin, veiculo, g, sugerir = porVds == null)
+        _vinLido.value = true
+
+        val impressao = withTimeoutOrNull(tempos.prazoIdentificacaoMs) {
+            runCatching { cli.sondarEcu(sondarTcm = generico && porVds == null) }.getOrNull()
+        } ?: ImpressaoEcu.VAZIA
+        _impressaoEcu.value = impressao
+        g?.registrarImpressao(impressao)
+        g?.evento(
+            "Impressão da ECU: combustível ${impressao.descricaoCombustivel ?: "sem resposta"}, " +
+                "CALID ${impressao.calid ?: if (impressao.calidNaoSondado) "não sondado" else "sem resposta"}, TCM " +
+                (impressao.tcmDetectado?.let { if (it) "detectado (${impressao.tcmCabecalho})" else "não detectado" } ?: "não sondado"),
+            relogio(),
+        )
+        if (porVds == null && generico) {
+            IdentificadorPerfil.porSondagem(catalogo, impressao, cli.pidsSuportados.value, mapPicoKpa)
+                ?.let { aplicarPerfilAutomatico(it, g) }
+        }
+        identificacaoConcluida = true
+        acompanharMap(null, g)
+    }
+
+    /**
+     * Aplica [novo] à sessão: faixas do relatório, estimador de marcha e combustível do cálculo de A/F.
+     * O aviso da aba OBD só aparece quando o perfil muda de fato em relação ao que já valia.
+     */
+    private fun aplicarPerfilAutomatico(novo: PerfilIdentificado, g: GravadorLogsSessao?): Unit = synchronized(travaPerfil) {
+        if (perfilIgnorado) return
+        val veiculo = veiculoAtual
+        val anterior = perfilAplicado?.preset ?: veiculo?.resolucao?.preset
+        perfilAplicado = novo
+        val preset = novo.preset
+        _cambioAtivo.value = preset.perfilCambio.takeIf { !preset.generico }
+        val limites = veiculo?.limites
+        val faixas = if (preset.generico && limites != null) FaixasVeiculo.comLimitesDoCadastro(preset, limites) else preset.faixas
+        estimadorPerfil = preset.perfilCambio.takeIf { !preset.generico && it.estimaMarcha && it.mapaAlavanca == null }?.let(::EstimadorMarchaPerfil)
+        combustivelAtual = combustivelPara(preset.combustivel, veiculo?.combustivel)
+        g?.registrarPerfil(novo.origem, "${preset.titulo} (${novo.motivo})", faixas)
+        g?.evento("Perfil automático (${novo.origem.rotulo}): ${preset.titulo} - ${novo.motivo}", relogio())
+        if (anterior?.id != preset.id) _perfilAutomatico.value = novo
+    }
+
+    /** Combustível para o cálculo de A/F: o do cadastro, salvo se faltar ou divergir de diesel x ciclo Otto do perfil. */
+    private fun combustivelPara(doPerfil: TipoCombustivel, cadastro: TipoCombustivel?): TipoCombustivel =
+        if (cadastro == null || (cadastro == TipoCombustivel.DIESEL) != (doPerfil == TipoCombustivel.DIESEL)) doPerfil else cadastro
+
+    /** O usuário aceitou o aviso: o perfil automático segue valendo até o fim da sessão. */
+    fun manterPerfilAutomatico() {
+        _perfilAutomatico.value?.let { registrarEvento("Perfil automático mantido pelo usuário: ${it.preset.titulo}") }
+        _perfilAutomatico.value = null
+    }
+
+    /** O usuário recusou o aviso: volta ao perfil do cadastro e a sessão não tenta identificar de novo. */
+    fun ignorarPerfilAutomatico(): Unit = synchronized(travaPerfil) {
+        val aplicado = perfilAplicado ?: return
+        perfilIgnorado = true
+        perfilAplicado = null
+        _perfilAutomatico.value = null
+        val veiculo = veiculoAtual
+        _cambioAtivo.value = veiculo?.cambio
+        estimadorPerfil = veiculo?.cambio?.takeIf { it.estimaMarcha && it.mapaAlavanca == null }?.let(::EstimadorMarchaPerfil)
+        combustivelAtual = veiculo?.combustivel
+        gravador?.registrarPerfil(OrigemPerfil.MANUAL, null, veiculo?.faixas)
+        registrarEvento("Perfil automático ignorado pelo usuário (${aplicado.preset.titulo}): vale o do cadastro")
+    }
+
+    /**
+     * Pico de MAP da sessão. Passada a identificação, um genérico aspirado cujo MAP ultrapassa a
+     * atmosférica (> 115 kPa) é promovido a Flex Turbo (só vale para cadastro genérico).
+     */
+    private fun acompanharMap(map: Double?, g: GravadorLogsSessao?) {
+        if (map != null && map.isFinite()) mapPicoKpa = maxOf(mapPicoKpa ?: map, map)
+        if (!identificacaoConcluida || perfilIgnorado || !cadastroGenerico(veiculoAtual)) return
+        val pico = mapPicoKpa ?: return
+        if (pico <= IdentificadorPerfil.MAP_TURBO_KPA) return
+        val atual = perfilAplicado?.preset ?: veiculoAtual?.resolucao?.preset
+        IdentificadorPerfil.refinarPorMap(CarregadorPerfis.catalogo, atual, pico)?.let { aplicarPerfilAutomatico(it, g) }
+    }
+
+    /**
+     * VIN lido (`0902`): montadora pelo WMI e ano-modelo vão para o cabeçalho do relatório. Se o
+     * veículo cadastrado ainda estiver num perfil genérico e o catálogo tiver perfis da montadora
+     * do VIN para aquele ano, sugere (discretamente) aplicar um deles em Presets.
+     */
+    private fun registrarVin(vin: String?, veiculo: VeiculoSessao?, g: GravadorLogsSessao?, sugerir: Boolean = true) {
+        val info = DecodificadorVin.decodificar(vin)
+        val sugestao = if (sugerir) sugestaoPorVin(info, veiculo) else null
+        g?.registrarVin(vin, info, sugestao)
+        if (info != null) g?.evento("VIN $vin: ${info.descricao}", relogio())
+        if (sugestao != null) {
+            g?.evento("Sugestão: $sugestao", relogio())
+            _eventos.tryEmit(EventoSessao.Mensagem(sugestao))
+        }
+    }
+
+    /** Texto da sugestão de perfil pelo VIN (só para cadastro em perfil genérico); null = nada a sugerir. */
+    private fun sugestaoPorVin(info: VinDecodificado?, veiculo: VeiculoSessao?): String? {
+        if (info?.montadora == null || veiculo == null) return null
+        if (veiculo.resolucao?.generico != true) return null
+        val perfis = CarregadorPerfis.catalogo.sugestoesPara(info.montadora, info.anoModelo ?: veiculo.ano)
+        if (perfis.isEmpty()) return null
+        val nomes = perfis.take(3).joinToString(" / ") { it.titulo }
+        val ano = info.anoModelo?.let { " $it" }.orEmpty()
+        return "VIN indica ${info.montadora}$ano: perfil disponível em Presets ($nomes)"
     }
 
     /** Mescla a velocidade GPS ([Pids.VELOCIDADE_GPS]) ao instantâneo da ECU; sem fix (ou desativada), ele segue igual. */
@@ -478,7 +762,17 @@ class SessaoObd(
         _dados.value = null
         _perfil.value = null
         _vin.value = null
+        _vinDecodificado.value = null
         _vinLido.value = false
+        estimadorPerfil = null
+        _perfilAutomatico.value = null
+        _impressaoEcu.value = null
+        perfilAplicado = null
+        veiculoAtual = null
+        _cambioAtivo.value = null
+        identificacaoConcluida = false
+        perfilIgnorado = false
+        mapPicoKpa = null
         telemetria.publicar(null, conectado = false)
         if (g != null) {
             g.evento("Encerrada: $motivo", relogio())
@@ -486,7 +780,13 @@ class SessaoObd(
             cli.definirLogCompleto(false)
             val logs = withContext(io) { g.finalizar(relogio(), conectou, motivo) }
             _eventos.tryEmit(EventoSessao.LogsSalvos(logs))
+            // Só sessão real (nunca a simulada) alimenta o aprendizado do veículo.
+            val csv = logs.csv
+            if (conectou && !sessaoSimulada && veiculoIdSessao > 0 && csv != null) {
+                runCatching { withContext(io) { aoSalvarLogReal(veiculoIdSessao, csv) } }
+            }
         }
+        _fonteSimulacao.value = null
         gravador = null
         clienteDaSessao = null
         sessaoJob = null
@@ -499,6 +799,7 @@ class SessaoObd(
         origem: OrigemSessao,
         gatilho: String?,
         inicioMs: Long,
+        logBruto: Boolean = false,
     ): GravadorLogsSessao {
         val simulado = _modo.value == ModoObd.SIMULADO
         val cabecalho = CabecalhoSessao(
@@ -512,7 +813,12 @@ class SessaoObd(
             motor = veiculo?.let { ParametrosMotor.deVeiculo(it.modelo, it.combustivel, it.calibracaoConsumo) },
             faixas = veiculo?.faixas,
         )
-        return GravadorLogsSessao(destinoLogs, cabecalho, pastaTemporaria, zona)
+        return GravadorLogsSessao(destinoLogs, cabecalho, pastaTemporaria, zona, logBruto = logBruto)
+    }
+
+    private fun descreverEstado(e: EstadoConexaoObd): String = when (e) {
+        is EstadoConexaoObd.Erro -> "Erro (${e.mensagem})"
+        else -> e.toString()
     }
 
     private fun descreverOrigem(origem: OrigemSessao, gatilho: String?): String = when (origem) {

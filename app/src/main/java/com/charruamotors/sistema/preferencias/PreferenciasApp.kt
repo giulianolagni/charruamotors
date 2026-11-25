@@ -7,6 +7,7 @@ import androidx.core.content.edit
 import com.charruamotors.direcao.desempenho.FonteVelocidade
 import com.charruamotors.sistema.unidades.ConversorUnidades
 import com.charruamotors.sistema.unidades.SistemaUnidades
+import com.charruamotors.sistema.unidades.UnidadeConsumo
 import com.charruamotors.sistema.unidades.UnidadePressao
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,13 +39,15 @@ data class ConfigApp(
     val velocidadeGps: Boolean = false,
     /** Fonte da velocidade do cronômetro 0–60/0–100; GPS só vale com [velocidadeGps] ligada. */
     val fonteCronometro: FonteVelocidade = FonteVelocidade.PADRAO,
+    /** v2.3.0: consumo em km/L ou L/100km no métrico (Painel, HUD e relatórios). */
+    val unidadeConsumo: UnidadeConsumo = UnidadeConsumo.PADRAO,
 ) {
     /** Fonte que o cronômetro realmente usa: sem a velocidade GPS ligada, sempre a ECU. */
     val fonteCronometroEfetiva: FonteVelocidade
         get() = if (velocidadeGps) fonteCronometro else FonteVelocidade.OBD
 
     /** Conversor de exibição: no imperial a pressão é sempre psi; no métrico, a [unidadePressao]. */
-    val conversor: ConversorUnidades get() = ConversorUnidades(sistemaUnidades, unidadePressao)
+    val conversor: ConversorUnidades get() = ConversorUnidades(sistemaUnidades, unidadePressao, unidadeConsumo)
 }
 
 /**
@@ -91,6 +94,7 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
     val tema: TemaApp get() = _config.value.tema
     val unidadePressao: UnidadePressao get() = _config.value.unidadePressao
     val sistemaUnidades: SistemaUnidades get() = _config.value.sistemaUnidades
+    val unidadeConsumo: UnidadeConsumo get() = _config.value.unidadeConsumo
 
     /** O assistente deve abrir sozinho (primeira abertura após o login)? */
     val deveMostrarAssistente: Boolean get() = !_config.value.assistenteConcluido
@@ -100,6 +104,8 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
     fun definirUnidadePressao(unidade: UnidadePressao) = atualizar { it.copy(unidadePressao = unidade) }
 
     fun definirSistemaUnidades(sistema: SistemaUnidades) = atualizar { it.copy(sistemaUnidades = sistema) }
+
+    fun definirUnidadeConsumo(unidade: UnidadeConsumo) = atualizar { it.copy(unidadeConsumo = unidade) }
 
     fun marcarAssistenteConcluido() = atualizar { it.copy(assistenteConcluido = true) }
 
@@ -111,8 +117,12 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
     fun reiniciarAssistente() = atualizar { it.copy(assistenteConcluido = false) }
 
     /** Restauração do backup: tema e unidades vêm do arquivo; a flag do assistente fica como está. */
-    fun restaurar(tema: TemaApp, unidade: UnidadePressao, sistema: SistemaUnidades = SistemaUnidades.PADRAO) =
-        atualizar { it.copy(tema = tema, unidadePressao = unidade, sistemaUnidades = sistema) }
+    fun restaurar(
+        tema: TemaApp,
+        unidade: UnidadePressao,
+        sistema: SistemaUnidades = SistemaUnidades.PADRAO,
+        consumo: UnidadeConsumo = UnidadeConsumo.PADRAO,
+    ) = atualizar { it.copy(tema = tema, unidadePressao = unidade, sistemaUnidades = sistema, unidadeConsumo = consumo) }
 
     @Synchronized
     private fun atualizar(transformar: (ConfigApp) -> ConfigApp) {
@@ -126,6 +136,7 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
                 ASSISTENTE_CONCLUIDO to nova.assistenteConcluido,
                 VELOCIDADE_GPS to nova.velocidadeGps,
                 FONTE_CRONOMETRO to nova.fonteCronometro.name,
+                UNIDADE_CONSUMO to nova.unidadeConsumo.name,
             ),
         )
         _config.value = nova
@@ -138,6 +149,7 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
         assistenteConcluido = armazenamento.lerBooleano(ASSISTENTE_CONCLUIDO, false),
         velocidadeGps = armazenamento.lerBooleano(VELOCIDADE_GPS, false),
         fonteCronometro = FonteVelocidade.deCodigo(armazenamento.lerTexto(FONTE_CRONOMETRO)),
+        unidadeConsumo = UnidadeConsumo.deCodigo(armazenamento.lerTexto(UNIDADE_CONSUMO)),
     )
 
     companion object {
@@ -148,5 +160,6 @@ class PreferenciasApp(private val armazenamento: ArmazenamentoChaveValor) {
         const val ASSISTENTE_CONCLUIDO = "assistente_concluido"
         const val VELOCIDADE_GPS = "velocidade_gps"
         const val FONTE_CRONOMETRO = "fonte_cronometro"
+        const val UNIDADE_CONSUMO = "unidade_consumo"
     }
 }

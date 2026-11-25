@@ -28,6 +28,17 @@ enum class BotaoNavegacao(val titulo: String) {
     HUD("Modo HUD"),
 }
 
+/** O que o "+ Painel" da tela Todos os Sensores fez. */
+enum class ResultadoFixar {
+    MOSTRADOR_ADICIONADO,
+    MOSTRADOR_REMOVIDO,
+    LISTA_ADICIONADO,
+    LISTA_REMOVIDO,
+
+    /** O Painel nunca fica sem nenhum mostrador. */
+    ULTIMO_MOSTRADOR,
+}
+
 /** Estilo de desenho de cada mostrador do Painel (escolhido relógio a relógio). */
 enum class EstiloMostrador(val titulo: String, val descricao: String) {
     ESPORTIVO("Relógio Esportivo", "Ponteiro em arco com escala e zona vermelha"),
@@ -47,11 +58,34 @@ enum class TamanhoHud(val titulo: String, val descricao: String) {
     EXPANDIDO("Expandido", "Até 4 sensores à sua escolha"),
 }
 
+/**
+ * Tamanho do HUD Esportivo (v2.2.8): largura em dp; a altura segue a proporção fixa do Canvas.
+ * Médio é o padrão; Pequeno é o tamanho da v2.2.7.
+ */
+enum class TamanhoHudEsportivo(val titulo: String, val larguraDp: Int) {
+    PEQUENO("P", 230),
+    MEDIO("M", 285),
+    GRANDE("G", 330),
+}
+
 /** Estilo de texto/gráficos das células do HUD. */
 enum class EstiloHud(val titulo: String) {
     NUMEROS("Números"),
     NUMEROS_GRANDES("Números grandes"),
     BARRAS("Números com barra"),
+}
+
+/**
+ * Visual do HUD flutuante (v2.2.7): o painel de células de sempre ou o conta-giros esportivo
+ * (RPM + turbo acoplados, marcha, velocidade e pedal), desenhado em Canvas.
+ */
+enum class PresetHud(val titulo: String) {
+    PADRAO("Padrão (Atual)"),
+    ESPORTIVO("Esportivo (Conta-giros)"),
+    ;
+
+    /** O outro preset (atalho de dois toques no HUD). */
+    val alternado: PresetHud get() = if (this == PADRAO) ESPORTIVO else PADRAO
 }
 
 /** Preferências do HUD flutuante (escolhidas na tela de ativação). */
@@ -60,6 +94,10 @@ data class ConfigHud(
     /** Sensores fixados no modo expandido (1 a [MAX_SENSORES]), na ordem em que aparecem. */
     val sensores: List<SensorPainel> = PADRAO_EXPANDIDO,
     val estilo: EstiloHud = EstiloHud.NUMEROS,
+    /** Visual do HUD (v2.2.7); sensores, estilo e o tamanho Minimizado/Expandido só valem no [PresetHud.PADRAO]. */
+    val preset: PresetHud = PresetHud.PADRAO,
+    /** Tamanho P/M/G do visual [PresetHud.ESPORTIVO] (v2.2.8). */
+    val tamanhoEsportivo: TamanhoHudEsportivo = TamanhoHudEsportivo.MEDIO,
 ) {
     /** O que o HUD desenha: RPM e Turbo no minimizado; os escolhidos (sem repetir, até 4) no expandido. */
     val sensoresVisiveis: List<SensorPainel>
@@ -199,6 +237,38 @@ data class ConfigPainel(
 
     /** "Aplicar estilo a todos". */
     fun aplicarEstiloATodos(estilo: EstiloMostrador): ConfigPainel = copy(mostradores = mostradores.map { it.copy(estilo = estilo) })
+
+    // ---------------------------------------------------------------- "+ Painel" (Todos os Sensores)
+
+    /** O sensor do PID [comando] está no Painel (num mostrador ou na lista rápida)? */
+    fun fixadoNoPainel(comando: String): Boolean {
+        val sensor = SensorPainel.doComando(comando)
+        return if (sensor != null) mostradores.any { it.sensor == sensor } else comando.uppercase() in listaRapida
+    }
+
+    /**
+     * Fixa ou tira do Painel o sensor do PID [comando] (v2.3.1): os que têm mostrador próprio
+     * ([SensorPainel]) viram um relógio; os demais entram na lista rápida. O bloco removido volta.
+     */
+    fun alternarNoPainel(comando: String): Pair<ConfigPainel, ResultadoFixar> {
+        val sensor = SensorPainel.doComando(comando)
+        if (sensor == null) {
+            val novo = alternarListaRapida(comando)
+            return if (comando.uppercase() in novo.listaRapida) {
+                novo.restaurar(SecaoPainel.LISTA_SENSORES) to ResultadoFixar.LISTA_ADICIONADO
+            } else {
+                novo to ResultadoFixar.LISTA_REMOVIDO
+            }
+        }
+        val posicao = mostradores.indexOfFirst { it.sensor == sensor }
+        if (posicao >= 0) {
+            if (!podeRemoverMostrador) return this to ResultadoFixar.ULTIMO_MOSTRADOR
+            return removerMostrador(posicao) to ResultadoFixar.MOSTRADOR_REMOVIDO
+        }
+        val estilo = mostradores.lastOrNull()?.estilo ?: EstiloMostrador.ESPORTIVO
+        return copy(mostradores = mostradores + Mostrador(sensor, estilo)).restaurar(SecaoPainel.MARCADORES) to
+            ResultadoFixar.MOSTRADOR_ADICIONADO
+    }
 
     // ---------------------------------------------------------------- lista rápida
 

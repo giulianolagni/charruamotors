@@ -1,5 +1,8 @@
 package com.charruamotors.obd.log
 
+import com.charruamotors.domain.calculo.AlavancaGmTcm
+import com.charruamotors.sistema.unidades.UnidadeConsumo
+import com.charruamotors.domain.calculo.CambioA750f
 import com.charruamotors.domain.calculo.ComputadorBordo
 import com.charruamotors.domain.calculo.EstequiometriaFlex
 import com.charruamotors.domain.calculo.ParametrosMotor
@@ -8,8 +11,12 @@ import com.charruamotors.domain.calculo.TelemetriaCalculada
 import com.charruamotors.domain.faixas.FaixaEsperada
 import com.charruamotors.domain.faixas.FaixasVeiculo
 import com.charruamotors.domain.faixas.SituacaoFaixa
+import com.charruamotors.domain.perfis.ImpressaoEcu
+import com.charruamotors.domain.perfis.OrigemPerfil
+import com.charruamotors.domain.perfis.VinDecodificado
 import com.charruamotors.obd.DtcLido
 import com.charruamotors.obd.ValoresSensores
+import com.charruamotors.obd.pid.DefinicaoPid
 import com.charruamotors.obd.pid.Pids
 import java.text.Normalizer
 import java.text.NumberFormat
@@ -29,6 +36,40 @@ class Extremos {
         if (valor == null || !valor.isFinite()) return
         minimo = minimo?.coerceAtMost(valor) ?: valor
         maximo = maximo?.coerceAtLeast(valor) ?: valor
+    }
+}
+
+/** Mínimo, máximo e média de um sensor ao longo da sessão (v2.2.5): só valores finitos entram. */
+class ResumoSensor {
+    var amostras: Int = 0
+        private set
+    var minimo: Double = Double.NaN
+        private set
+    var maximo: Double = Double.NaN
+        private set
+    private var soma = 0.0
+    private val _estados = LinkedHashSet<Int>()
+
+    val media: Double get() = if (amostras == 0) Double.NaN else soma / amostras
+
+    /**
+     * Valores inteiros distintos lidos, na ordem em que apareceram (v2.2.6): o resumo dos sensores
+     * discretos (alavanca, marcha). Para de crescer em [MAX_ESTADOS] (sensores contínuos não enchem a memória).
+     */
+    val estados: List<Int> get() = _estados.toList()
+
+    fun registrar(valor: Double) {
+        if (!valor.isFinite()) return
+        amostras++
+        soma += valor
+        if (minimo.isNaN() || valor < minimo) minimo = valor
+        if (maximo.isNaN() || valor > maximo) maximo = valor
+        val inteiro = Math.round(valor)
+        if (_estados.size < MAX_ESTADOS && kotlin.math.abs(valor - inteiro) < 0.01) _estados.add(inteiro.toInt())
+    }
+
+    companion object {
+        const val MAX_ESTADOS = 32
     }
 }
 
@@ -77,8 +118,12 @@ class EstatisticasViagem(
     /** Combustível e calibração do veículo para o consumo via MAF; null = sem resumo de consumo. */
     private val motor: ParametrosMotor? = null,
     /** Faixas mínimas/máximas esperadas do veículo (v2.1); null = sem resumo de faixas. */
-    val faixas: FaixasVeiculo? = null,
+    faixas: FaixasVeiculo? = null,
 ) {
+    /** Faixas em acompanhamento; troca em [trocarFaixas] quando a sessão identifica um perfil melhor (v2.2.2). */
+    var faixas: FaixasVeiculo? = faixas
+        private set
+
     var amostras: Int = 0
         private set
 
@@ -94,21 +139,55 @@ class EstatisticasViagem(
     val tensao = Extremos()
     val temperaturaAtf = Extremos()
 
+    /** Pressão barométrica lida (`2133` Toyota ou `0133` padrão), em kPa (v2.2.6, boost real). */
+    val barometro = Extremos()
+
+    /** Barômetro mais recente quando o MAP bateu o pico (null = nenhum lido até ali). */
+    var barometroNoPicoMap: Double? = null
+        private set
+    private var ultimoBarometro: Double? = null
+
+    /** Barômetro para o boost do resumo: o do pico do MAP, senão o último lido; null = usar 101 kPa. */
+    val barometroBoost: Double? get() = barometroNoPicoMap ?: ultimoBarometro
+
     /** Teor de etanol (`0152`) e relação A/F real calculada (v2.1, Modo Flex). */
     val etanol = Extremos()
     val relacaoAf = Extremos()
 
+    /** Mín/máx/média de **todo** sensor lido na sessão, por comando (ordem de primeira leitura). */
+    val sensores: MutableMap<String, ResumoSensor> = LinkedHashMap()
+
+    /** Amostras por marcha (valor de `TOYOTA_MARCHA` arredondado), para o resumo de marchas. */
+    val marchas: MutableMap<Int, Int> = java.util.TreeMap()
+
     /** Uma por faixa esperada do veículo, na ordem do preset. */
-    val acompanhamentoFaixas: List<AcompanhamentoFaixa> = faixas?.faixas.orEmpty().map(::AcompanhamentoFaixa)
+    var acompanhamentoFaixas: List<AcompanhamentoFaixa> = faixas?.faixas.orEmpty().map(::AcompanhamentoFaixa)
+        private set
+
+    /** Passa a acompanhar as faixas de [novas] (a contagem das faixas recomeça; os extremos da viagem seguem). */
+    fun trocarFaixas(novas: FaixasVeiculo?) {
+        faixas = novas
+        acompanhamentoFaixas = novas?.faixas.orEmpty().map(::AcompanhamentoFaixa)
+    }
 
     fun registrar(dados: ValoresSensores, instanteMs: Long? = null) {
         amostras++
+        for ((comando, valor) in dados.valores) sensores.getOrPut(comando) { ResumoSensor() }.registrar(valor)
+        // GM: a posição do TCM substitui a marcha estimada no resumo.
+        (dados[AlavancaGmTcm.CHAVE_POSICAO] ?: dados[CambioA750f.CHAVE_MARCHA])?.takeIf { it.isFinite() }
+            ?.let { marchas.merge(it.toInt(), 1, Int::plus) }
         if (motor != null && instanteMs != null) {
             bordo.registrar(TelemetriaCalculada.consumoInstantaneo(dados, motor), dados[Pids.VELOCIDADE], instanteMs)
         }
         rpm.registrar(dados[Pids.RPM])
         velocidade.registrar(dados[Pids.VELOCIDADE])
-        map.registrar(dados[Pids.PRESSAO_COLETOR])
+        COMANDOS_BAROMETRO.firstNotNullOfOrNull { c -> dados[c]?.takeIf { it.isFinite() && it in FAIXA_BAROMETRO_KPA } }?.let {
+            ultimoBarometro = it
+            barometro.registrar(it)
+        }
+        val mapLido = dados[Pids.PRESSAO_COLETOR]?.takeIf { it.isFinite() }
+        if (mapLido != null && (map.maximo == null || mapLido > map.maximo!!)) barometroNoPicoMap = ultimoBarometro
+        map.registrar(mapLido)
         temperaturaMotor.registrar(dados[Pids.TEMPERATURA_MOTOR])
         rail.registrar(dados[Pids.PRESSAO_RAIL])
         tensao.registrar(dados[Pids.TENSAO_BATERIA])
@@ -117,6 +196,14 @@ class EstatisticasViagem(
         relacaoAf.registrar(dados[Pids.RELACAO_AF_REAL])
         val f = faixas ?: return
         acompanhamentoFaixas.forEach { a -> f.leituras(a.faixa, dados).forEach { (_, v) -> a.registrar(v) } }
+    }
+
+    companion object {
+        /** Barômetro Toyota (`7E0 · 2133`) antes do OBD2 padrão (`0133`). */
+        val COMANDOS_BAROMETRO = listOf("TOYOTA_BARO", "0133")
+
+        /** Leituras fora disto (0, 255) são lixo e não entram no boost. */
+        val FAIXA_BAROMETRO_KPA = 50.0..115.0
     }
 }
 
@@ -164,6 +251,24 @@ data class ResumoSessao(
     val amostrasCsv: Int,
     /** Por que o CSV não saiu (ou saiu incompleto), se for o caso. */
     val avisoCsv: String?,
+    /** VIN lido pelo `0902` (null = não lido / não suportado). */
+    val vin: String? = null,
+    /** Montadora pelo WMI e ano-modelo pelo 10º caractere. */
+    val vinDecodificado: VinDecodificado? = null,
+    /** Sugestão de perfil do catálogo quando o veículo cadastrado está num perfil genérico. */
+    val sugestaoPerfil: String? = null,
+    /** Impressão digital da ECU (`0151`, `0904`, TCM); null = a sondagem não rodou nesta sessão. */
+    val impressao: ImpressaoEcu? = null,
+    /** Como o perfil em uso foi escolhido (Manual / VDS do VIN / Sondagem ECU). */
+    val origemPerfil: OrigemPerfil = OrigemPerfil.MANUAL,
+    /** Perfil aplicado automaticamente (título e motivo); null = o do cadastro. */
+    val perfilAutomatico: String? = null,
+    /** Definições dos sensores da sessão (nome, unidade, casas) para a tabela de mín/máx/média. */
+    val colunas: List<DefinicaoPid> = emptyList(),
+    /** Alertas de proteção (água, ATF, alternador) disparados na sessão, na ordem. */
+    val alertas: List<String> = emptyList(),
+    /** O log bruto detalhado foi gravado nesta sessão (opção das Configurações, desligada por padrão). */
+    val logBruto: Boolean = false,
 )
 
 /**
@@ -174,8 +279,11 @@ data class ResumoSessao(
 object RelatorioSessaoTxt {
 
     const val TITULO_LOG_BRUTO = "LOG BRUTO DE COMUNICAÇÃO E EVENTOS"
+    const val TITULO_EVENTOS = "EVENTOS DA SESSÃO (log bruto desligado)"
+    const val TITULO_SENSORES = "SENSORES DA SESSÃO (mínimo / máximo / média)"
     private const val LINHA = "=================================================================="
-    private const val PRESSAO_ATMOSFERICA_KPA = 101.3
+    /** Fallback do boost quando a sessão não leu barômetro nenhum. */
+    const val PRESSAO_ATMOSFERICA_KPA = 101.0
 
     private val localeBr: Locale = Locale.forLanguageTag("pt-BR")
     private val formatoNome = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
@@ -208,6 +316,30 @@ object RelatorioSessaoTxt {
         campo("Modo", if (c.simulado) "SIMULADO" else "REAL")
         campo("Veículo", c.veiculo ?: "não vinculado")
         campo("Placa", c.placa ?: "—")
+        if (r.conectou) {
+            campo("VIN (0902)", r.vin ?: "não lido / não suportado")
+            r.vinDecodificado?.let { d ->
+                campo("Montadora (VIN)", d.montadora?.let { "$it (WMI ${d.wmi}${d.origem?.let { o -> ", $o" }.orEmpty()})" } ?: "desconhecida (WMI ${d.wmi})")
+                campo("Ano-modelo (VIN)", d.anoModelo?.toString() ?: "—")
+            }
+        }
+        if (r.conectou) {
+            val i = r.impressao
+            val semResposta = "sem resposta (NO DATA)"
+            campo("Combustível (0151)", if (i == null) "não sondado" else i.descricaoCombustivel ?: semResposta)
+            campo("CALID (0904)", if (i == null || i.calidNaoSondado) "não sondado" else i.calid ?: semResposta)
+            campo(
+                "TCM detectado",
+                when {
+                    i?.tcmDetectado == true -> "sim (${i.tcmCabecalho})"
+                    i?.tcmDetectado == false -> "não (sem resposta em 7E1/7E2)"
+                    else -> "não sondado"
+                },
+            )
+        }
+        campo("Origem do perfil", r.origemPerfil.rotulo + (r.perfilAutomatico?.let { " — $it" }.orEmpty()))
+        (r.estatisticas.faixas ?: c.faixas)?.perfil?.let { campo("Perfil de faixas", it) }
+        r.sugestaoPerfil?.let { campo("Sugestão de perfil", it) }
         campo("Modo de início", c.modoInicio)
         campo("Scanner", c.scanner ?: "—")
         campo("Início", dataHora(c.inicioMs, zona))
@@ -246,7 +378,7 @@ object RelatorioSessaoTxt {
             campo("Amostras de telemetria", numero(e.amostras.toDouble(), 0))
             campo("RPM máximo", e.rpm.maximo?.let { "${numero(it, 0)} rpm" } ?: "—")
             campo("Velocidade máxima", e.velocidade.maximo?.let { "${numero(it, 0)} km/h" } ?: "—")
-            campo("Pico de MAP/Turbo", e.map.maximo?.let(::descreverMap) ?: "—")
+            campo("Pico de MAP/Turbo", e.map.maximo?.let { descreverMap(it, e.barometroBoost) } ?: "—")
             campo("Temperatura máx. do motor", e.temperaturaMotor.maximo?.let { "${numero(it, 0)} °C" } ?: "—")
             campo("Pressão máx. Common Rail", e.rail.maximo?.let { "${numero(it, 0)} kPa (${numero(it / 100, 0)} bar)" } ?: "—")
             campo("Temp. máx. do câmbio (ATF)", e.temperaturaAtf.maximo?.let { "${numero(it, 0)} °C" } ?: "—")
@@ -255,7 +387,8 @@ object RelatorioSessaoTxt {
             campo("Tensão mín. / máx.", if (tMin != null && tMax != null) "${numero(tMin, 1)} V / ${numero(tMax, 1)} V" else "—")
             val viagem = e.consumo
             campo("Distância percorrida", if (viagem.distanciaKm > 0.0) "${numero(viagem.distanciaKm, 1)} km" else "—")
-            campo("Consumo médio (km/L)", viagem.mediaKmPorLitro?.let { "${numero(it, 1)} km/L" } ?: "—")
+            // v2.3.0: as duas unidades de consumo (km/L e L/100km), qualquer que seja a escolha do app.
+            campo("Consumo médio", viagem.mediaKmPorLitro?.let { "${numero(it, 1)} km/L · ${numero(UnidadeConsumo.L_100KM.deKmPorLitro(it), 1)} L/100km" } ?: "—")
             campo("Combustível estimado (L)", if (viagem.litros > 0.0) "${numero(viagem.litros, 2)} L (via MAF)" else "—")
             e.etanol.maximo?.let { eMax ->
                 val eMin = e.etanol.minimo ?: eMax
@@ -277,9 +410,74 @@ object RelatorioSessaoTxt {
                 saida.append("  • ${p.titulo} (${a.faixa.texto}): $lido · ${a.situacao}\n")
             }
         }
+        escreverAlertas(r.alertas, saida)
+        escreverMarchas(e, saida)
+        escreverSensores(e, r.colunas, saida)
         saida.append('\n').append(LINHA).append('\n')
-        saida.append(TITULO_LOG_BRUTO).append('\n')
+        saida.append(if (r.logBruto) TITULO_LOG_BRUTO else TITULO_EVENTOS).append('\n')
         saida.append(LINHA).append('\n')
+    }
+
+    private fun escreverAlertas(alertas: List<String>, saida: Appendable) {
+        saida.append('\n').append("ALERTAS DA SESSÃO\n")
+        if (alertas.isEmpty()) {
+            saida.append("  Nenhum alerta de proteção.\n")
+        } else {
+            saida.append("  ${alertas.size} alerta(s):\n")
+            alertas.forEach { saida.append("    • $it\n") }
+        }
+    }
+
+    /**
+     * Resumo de marchas: amostras (e % do total com marcha) por posição; só quando a sessão tem marcha.
+     * v2.2.6: as marchas da reduzida (`1ª L`..`5ª L`) vêm separadas, depois das da 4H.
+     */
+    private fun escreverMarchas(e: EstatisticasViagem, saida: Appendable) {
+        if (e.marchas.isEmpty()) return
+        val total = e.marchas.values.sum()
+        val rotulos = DefinicaoPid.MARCHA_ESTIMADA_A750F.rotulos + AlavancaGmTcm.ROTULOS
+        fun linha(valor: Int, n: Int) {
+            saida.append("  ${(rotulos[valor] ?: valor.toString()).padEnd(8)}: ${numero(n.toDouble(), 0)} amostras (${numero(n * 100.0 / total, 1)} %)\n")
+        }
+        val (reduzida, normal) = e.marchas.entries.partition { CambioA750f.ehReduzida(it.key) }
+        saida.append('\n').append("MARCHAS\n")
+        normal.forEach { (valor, n) -> linha(valor, n) }
+        if (reduzida.isNotEmpty()) {
+            saida.append("  Reduzida (4L):\n")
+            reduzida.forEach { (valor, n) -> linha(valor, n) }
+        }
+    }
+
+    /**
+     * Tabela com **todo** sensor lido: mínimo, máximo e média (formato brasileiro). A ordem é a das
+     * colunas do CSV; o que não tiver definição (chave solta) vem depois, pelo próprio comando.
+     */
+    private fun escreverSensores(e: EstatisticasViagem, colunas: List<DefinicaoPid>, saida: Appendable) {
+        saida.append('\n').append(TITULO_SENSORES).append('\n')
+        if (e.sensores.isEmpty()) {
+            saida.append("  Nenhum sensor lido nesta sessão.\n")
+            return
+        }
+        val porComando = colunas.associateBy { it.comando }
+        val ordem = colunas.map { it.comando }.distinct().filter { it in e.sensores } + e.sensores.keys.filter { it !in porComando }
+        for (comando in ordem) {
+            val s = e.sensores[comando]?.takeIf { it.amostras > 0 } ?: continue
+            val def = porComando[comando]
+            val casas = def?.casasDecimais ?: 1
+            val unidade = def?.unidade?.takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty()
+            val nome = def?.nome ?: comando
+            if (def != null && def.rotulos.isNotEmpty()) {
+                // Estado/categoria (alavanca, marcha): média e mín/máx não fazem sentido (o código de D não
+                // fica "entre" P e R); v2.2.6 lista os estados distintos observados, na ordem em que apareceram.
+                val estados = s.estados.joinToString(", ") { def.rotulos[it] ?: it.toString() }.ifEmpty { "—" }
+                saida.append("  • $nome [$comando]: estados observados: $estados (${numero(s.amostras.toDouble(), 0)} leituras)\n")
+                continue
+            }
+            saida.append(
+                "  • $nome [$comando]: mín ${numero(s.minimo, casas)} · máx ${numero(s.maximo, casas)} · " +
+                    "média ${numero(s.media, casas)}$unidade (${numero(s.amostras.toDouble(), 0)} leituras)\n",
+            )
+        }
     }
 
     private fun listaDtcs(rotulo: String, lista: List<DtcLido>?, saida: Appendable) {
@@ -293,11 +491,20 @@ object RelatorioSessaoTxt {
         }
     }
 
-    /** MAP absoluto e, se acima da atmosfera, a pressão positiva aproximada do turbo. */
-    private fun descreverMap(kpa: Double): String {
-        val turbo = (kpa - PRESSAO_ATMOSFERICA_KPA) / 100
-        return if (turbo > 0.05) "${numero(kpa, 0)} kPa (≈ +${numero(turbo, 2)} bar de turbo)" else "${numero(kpa, 0)} kPa"
+    /**
+     * MAP absoluto e, se acima da atmosfera, a pressão positiva do turbo (boost, bar). v2.2.6: desconta
+     * o [barometro] real lido (`2133`/`0133`, importante na serra); sem ele, [PRESSAO_ATMOSFERICA_KPA].
+     */
+    fun descreverMap(kpa: Double, barometro: Double? = null): String {
+        val turbo = boostBar(kpa, barometro)
+        if (turbo <= 0.05) return "${numero(kpa, 0)} kPa"
+        val referencia = barometro?.let { ", barômetro ${numero(it, 0)} kPa" }.orEmpty()
+        return "${numero(kpa, 0)} kPa (≈ +${numero(turbo, 2)} bar de turbo$referencia)"
     }
+
+    /** Boost (bar) = (MAP − barômetro) / 100; sem barômetro lido, 101 kPa. */
+    fun boostBar(mapKpa: Double, barometro: Double? = null): Double =
+        (mapKpa - (barometro ?: PRESSAO_ATMOSFERICA_KPA)) / 100
 
     fun dataHora(ms: Long, zona: ZoneId): String = formatoDataHora.format(Instant.ofEpochMilli(ms).atZone(zona))
 

@@ -2,13 +2,9 @@ package com.charruamotors.ui.navegacao
 
 import android.content.Intent
 import android.content.res.ColorStateList
-import android.net.Uri
-import android.util.Log
 import android.view.View
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.view.GravityCompat
@@ -23,20 +19,16 @@ import com.charruamotors.domain.model.EstadoConexaoObd
 import com.charruamotors.obd.sessao.ConfigAutoConexao
 import com.charruamotors.obd.sessao.EstadoSessao
 import com.charruamotors.sistema.StatusCaixaPreta
-import com.charruamotors.sistema.backup.BackupInvalidoException
-import com.charruamotors.sistema.backup.BackupRepository
-import com.charruamotors.sistema.backup.DadosBackup
-import com.charruamotors.sistema.backup.ResumoBackup
 import com.charruamotors.sistema.navegacao.AcaoMenuLateral
 import com.charruamotors.ui.atualizacao.AtualizadorApp
 import com.charruamotors.ui.configuracoes.ConfiguracoesActivity
+import com.charruamotors.ui.configuracoes.ControladorBackup
 import com.charruamotors.ui.login.LoginActivity
 import com.charruamotors.ui.permissoes.ChecklistPermissoesActivity
 import com.charruamotors.ui.util.definirTexto
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.navigation.NavigationView
-import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -62,13 +54,8 @@ class MenuLateralGlobal(private val activity: AppCompatActivity) {
     /** GitHub Releases: "Verificar atualizações" no Sobre e a verificação silenciosa da abertura. */
     private val atualizador = AtualizadorApp(activity)
 
-    // Backup e Restauração via Storage Access Framework (sem permissão de armazenamento).
-    private val criarBackup = activity.registerForActivityResult(ActivityResultContracts.CreateDocument(BackupRepository.MIME_JSON)) { uri ->
-        uri?.let(::exportarBackup)
-    }
-    private val abrirBackup = activity.registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let(::lerBackup)
-    }
+    /** Backup e Restauração via Storage Access Framework (o mesmo controlador das Configurações). */
+    private val backup = ControladorBackup(activity) { raiz }
 
     private val fecharMenuAoVoltar = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() = gaveta.closeDrawer(GravityCompat.START)
@@ -126,7 +113,7 @@ class MenuLateralGlobal(private val activity: AppCompatActivity) {
             // startActivity simples: a tela entra por cima e o Voltar volta para cá, na mesma aba.
             AcaoMenuLateral.CONFIGURACOES -> activity.startActivity(ConfiguracoesActivity.intent(activity))
             AcaoMenuLateral.CHECKLIST -> activity.startActivity(ChecklistPermissoesActivity.intent(activity))
-            AcaoMenuLateral.BACKUP -> escolherBackup()
+            AcaoMenuLateral.BACKUP -> backup.escolher()
             AcaoMenuLateral.SOBRE -> mostrarSobre()
             AcaoMenuLateral.SAIR -> confirmarSaida()
         }
@@ -144,84 +131,6 @@ class MenuLateralGlobal(private val activity: AppCompatActivity) {
         )
         cabecalho.grupoStatusSessao.contentDescription = activity.getString(R.string.menu_status_descricao, status.texto)
     }
-
-    // ------------------------------------------------------------------ backup e restauração
-
-    private fun escolherBackup() {
-        MaterialAlertDialogBuilder(activity)
-            .setTitle(R.string.backup_titulo)
-            .setMessage(R.string.backup_descricao)
-            .setPositiveButton(R.string.backup_exportar) { _, _ ->
-                runCatching { criarBackup.launch(BackupRepository.nomeSugerido()) }.onFailure(::mostrarErro)
-            }
-            .setNeutralButton(R.string.backup_restaurar) { _, _ ->
-                runCatching { abrirBackup.launch(arrayOf(BackupRepository.MIME_JSON, "text/plain", "application/octet-stream")) }
-                    .onFailure(::mostrarErro)
-            }
-            .setNegativeButton(R.string.botao_cancelar, null)
-            .show()
-    }
-
-    private fun exportarBackup(destino: Uri) {
-        activity.lifecycleScope.launch {
-            runCatching { app.backupRepository.exportar(activity.contentResolver, destino) }
-                .onSuccess { r -> mensagem(activity.getString(R.string.backup_exportado, r.veiculos, r.manutencoes, r.abastecimentos)) }
-                .onFailure { e ->
-                    Log.e(TAG, "Falha ao exportar o backup", e)
-                    mensagem(activity.getString(R.string.backup_erro_exportar, e.message.orEmpty()))
-                }
-        }
-    }
-
-    /** Lê e valida o arquivo; só pede confirmação se ele for um backup válido. */
-    private fun lerBackup(origem: Uri) {
-        activity.lifecycleScope.launch {
-            runCatching { app.backupRepository.ler(activity.contentResolver, origem) }
-                .onSuccess(::confirmarRestauracao)
-                .onFailure { e ->
-                    Log.w(TAG, "Backup recusado", e)
-                    val motivo = (e as? BackupInvalidoException)?.message ?: e.message.orEmpty()
-                    mensagem(activity.getString(R.string.backup_erro_ler, motivo))
-                }
-        }
-    }
-
-    private fun confirmarRestauracao(dados: DadosBackup) {
-        val r = ResumoBackup.de(dados)
-        val sessaoAtiva = app.sessaoObd.estadoSessao.value.ativa
-        val texto = activity.getString(
-            R.string.backup_confirmar_mensagem,
-            r.geradoEm,
-            r.versaoApp ?: activity.getString(R.string.backup_versao_desconhecida),
-            r.veiculos, r.manutencoes, r.abastecimentos, r.leituras, r.codigosFalha,
-        ) + if (sessaoAtiva) activity.getString(R.string.backup_confirmar_sessao) else ""
-        MaterialAlertDialogBuilder(activity)
-            .setTitle(R.string.backup_confirmar_titulo)
-            .setMessage(texto)
-            .setNegativeButton(R.string.botao_cancelar, null)
-            .setPositiveButton(R.string.backup_confirmar_acao) { _, _ -> restaurar(dados) }
-            .show()
-    }
-
-    private fun restaurar(dados: DadosBackup) {
-        // A sessão grava no veículo atual: encerra antes de trocar o banco (os logs são salvos).
-        if (app.sessaoObd.estadoSessao.value.ativa) app.sessaoObd.desconectar("Restauração de backup")
-        activity.lifecycleScope.launch {
-            runCatching { app.backupRepository.restaurar(dados) }
-                .onSuccess {
-                    mensagem(activity.getString(R.string.backup_restaurado, dados.veiculos.size))
-                    AppCompatDelegate.setDefaultNightMode(app.preferenciasApp.tema.modoNoturno)
-                }
-                .onFailure { e ->
-                    Log.e(TAG, "Falha ao restaurar o backup", e)
-                    mensagem(activity.getString(R.string.backup_erro_restaurar, e.message.orEmpty()))
-                }
-        }
-    }
-
-    private fun mostrarErro(e: Throwable) = mensagem(e.message ?: activity.getString(R.string.permissao_erro_abrir))
-
-    private fun mensagem(texto: String) = Snackbar.make(raiz, texto, Snackbar.LENGTH_LONG).show()
 
     /**
      * Abertura da tela principal (cold start, não a recriação por rotação): procura uma versão nova

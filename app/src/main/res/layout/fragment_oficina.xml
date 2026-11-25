@@ -66,11 +66,27 @@
         </com.google.android.material.card.MaterialCardView>
 
         <include
+            android:id="@+id/card_sensores"
+            layout="@layout/item_card_oficina" />
+
+        <include
+            android:id="@+id/card_graficos"
+            layout="@layout/item_card_oficina" />
+
+        <include
             android:id="@+id/card_bateria"
             layout="@layout/item_card_oficina" />
 
         <include
             android:id="@+id/card_falhas"
+            layout="@layout/item_card_oficina" />
+
+        <include
+            android:id="@+id/card_checkup"
+            layout="@layout/item_card_oficina" />
+
+        <include
+            android:id="@+id/card_misfire"
             layout="@layout/item_card_oficina" />
 
         <include

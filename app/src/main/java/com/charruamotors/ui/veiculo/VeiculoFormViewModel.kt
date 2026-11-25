@@ -30,11 +30,7 @@ import java.time.Year
 
 /** Eventos de uso único enviados para a Activity (ex.: fechar a tela após salvar). */
 sealed interface EventoFormVeiculo {
-    /**
-     * [generico] (v2.3.0): carro novo sem perfil específico, iniciado no OBD2 Genérico — a tela
-     * oferece a Sessão de Mapeamento (Log Bruto) antes de fechar.
-     */
-    data class Salvo(val novo: Boolean, val veiculo: Veiculo? = null, val generico: Boolean = false) : EventoFormVeiculo
+    data class Salvo(val novo: Boolean) : EventoFormVeiculo
     data object Excluido : EventoFormVeiculo
 }
 
@@ -115,9 +111,8 @@ class VeiculoFormViewModel(
                     calibracaoConsumo = ValidadorVeiculo.numero(formulario.calibracaoConsumo) ?: Veiculo.CALIBRACAO_PADRAO,
                 )
                 val id = repository.salvar(veiculo)
-                val salvo = veiculo.copy(id = id)
-                val generico = if (!modoEdicao) criarPerfil(salvo) else false
-                _eventos.send(EventoFormVeiculo.Salvo(novo = !modoEdicao, veiculo = salvo, generico = generico))
+                if (!modoEdicao) criarPerfil(veiculo.copy(id = id))
+                _eventos.send(EventoFormVeiculo.Salvo(novo = !modoEdicao))
             } finally {
                 _salvando.value = false
             }
@@ -126,14 +121,17 @@ class VeiculoFormViewModel(
 
     /**
      * Perfil isolado do carro recém-cadastrado: cópia do de origem (duplicar) ou o inicial — com perfil
-     * exato no catálogo, o automático; sem ele, OBD2 Genérico. Devolve true no genérico.
+     * exato no catálogo, o automático; sem ele, OBD2 Genérico.
      */
-    private fun criarPerfil(veiculo: Veiculo): Boolean {
-        val perfis = perfisCarro ?: return false
+    private fun criarPerfil(veiculo: Veiculo) {
+        val perfis = perfisCarro ?: return
         val origem = duplicarDe
-        if (origem != null) return perfis.duplicar(origem, veiculo.id).obd2Generico
+        if (origem != null) {
+            perfis.duplicar(origem, veiculo.id)
+            return
+        }
         val inicial = PerfilCarro.paraCarroNovo(veiculo.id, PerfilCarro(veiculo.id).resolver(veiculo))
-        return perfis.criarSeAusente(veiculo.id) { inicial }.obd2Generico
+        perfis.criarSeAusente(veiculo.id) { inicial }
     }
 
     private suspend fun kmMinimoDoHistorico(id: Long): Int =

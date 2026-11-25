@@ -21,7 +21,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.R
 import com.google.android.material.snackbar.Snackbar
-import com.charruamotors.ui.carros.PerfisCarroUi
 import com.charruamotors.databinding.ActivityVeiculoFormBinding
 import com.charruamotors.domain.calculo.LimitesProtecao
 import com.charruamotors.domain.faixas.NivelPerfil
@@ -296,10 +295,6 @@ class VeiculoFormActivity : AppCompatActivity() {
     }
 
     private fun tratarEvento(evento: EventoFormVeiculo) {
-        if (evento is EventoFormVeiculo.Salvo && evento.novo && evento.generico && evento.veiculo != null) {
-            oferecerMapeamento(evento.veiculo)
-            return
-        }
         val mensagem = when (evento) {
             is EventoFormVeiculo.Salvo ->
                 if (evento.novo) R.string.veiculo_cadastrado else R.string.veiculo_atualizado
@@ -307,24 +302,6 @@ class VeiculoFormActivity : AppCompatActivity() {
         }
         Toast.makeText(this, mensagem, Toast.LENGTH_SHORT).show()
         finish()
-    }
-
-    /**
-     * v2.3.0: carro novo sem perfil específico — começa no OBD2 Genérico; 1 toque abre a Sessão de
-     * Mapeamento (Log Bruto ligado, conectando) para capturar o primeiro log.
-     */
-    private fun oferecerMapeamento(veiculo: Veiculo) {
-        Toast.makeText(this, R.string.veiculo_cadastrado, Toast.LENGTH_SHORT).show()
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.carro_novo_generico_titulo)
-            .setMessage(getString(R.string.carro_novo_generico_mensagem, veiculo.descricao))
-            .setCancelable(false)
-            .setNegativeButton(R.string.carro_novo_depois) { _, _ -> finish() }
-            .setPositiveButton(R.string.carro_novo_mapear) { _, _ ->
-                PerfisCarroUi.iniciarMapeamento(this, veiculo)
-                finish()
-            }
-            .show()
     }
 
     companion object {

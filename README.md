@@ -523,8 +523,9 @@ nem Bluetooth) e *Sessão de Mapeamento*. O Bluetooth do carro de cada perfil ta
 automática.
 
 **Carro novo sem perfil no catálogo** (3º em diante): nasce limpo no **OBD2 Genérico** — a marca não vai para a cascata
-21/22 nem para os PIDs estendidos, sem câmbio nem estimador de marcha herdados da SW4/Cruze — e o app oferece a
-**Sessão de Mapeamento (Log Bruto)**: 1 toque liga os logs e o Log Bruto e conecta no carro para o primeiro log.
+21/22 nem para os PIDs estendidos, sem câmbio nem estimador de marcha herdados da SW4/Cruze. Desde a v2.3.6 nenhum
+diálogo abre no cadastro nem na conexão: ela segue direto para a telemetria e o log da sessão. A **Sessão de
+Mapeamento (Log Bruto)** fica em *Meus Carros*, e o **Checkup** só abre pelo card da aba **Oficina**.
 
 **Status separado `ELM` × `ECU`** (`sistema/StatusElmEcu.kt`). O card de conexão mostra o **Adaptador ELM327**
 (Desconectado / Conectando / Conectado, com a versão do `ATZ`, ex. `v2.1`) e a **ECU do veículo** (Aguardando /

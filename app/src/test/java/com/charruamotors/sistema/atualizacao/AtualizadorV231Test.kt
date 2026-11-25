@@ -21,7 +21,7 @@ class AtualizadorV231Test {
     }
 
     private val pagina = InterpretadorReleaseGithub.URL_PAGINA_ULTIMA
-    private val urlTag = "https://github.com/giulianolagni/charruamotors-pro/releases/tag/v2.4.0"
+    private val urlTag = "https://github.com/giulianolagni/charruamotors/releases/tag/v2.4.0"
     private val urls = mutableListOf<String>()
     private var agora = 1_000_000L
     private val memoria = Memoria()
@@ -45,7 +45,7 @@ class AtualizadorV231Test {
         assertEquals("v2.4.0", r.release.tag)
         assertEquals("CharruaOBDPro-2.4.0-release.apk", r.release.apk!!.nome)
         assertEquals(
-            "https://github.com/giulianolagni/charruamotors-pro/releases/download/v2.4.0/CharruaOBDPro-2.4.0-release.apk",
+            "https://github.com/giulianolagni/charruamotors/releases/download/v2.4.0/CharruaOBDPro-2.4.0-release.apk",
             r.release.apk!!.url,
         )
     }
@@ -64,7 +64,7 @@ class AtualizadorV231Test {
         val api = InterpretadorReleaseGithub.URL_API_ULTIMA
         val semRelease = verificador { url ->
             when (url) {
-                pagina -> redirect("https://github.com/giulianolagni/charruamotors-pro/releases")
+                pagina -> redirect("https://github.com/giulianolagni/charruamotors/releases")
                 api -> RespostaHttp(403, "{}")
                 else -> RespostaHttp(200, null)
             }

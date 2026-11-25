@@ -147,7 +147,7 @@ object InterpretadorReleaseGithub {
     private val REGEX_URL_TAG = Regex("^https://github\\.com/[^/]+/[^/]+/releases/tag/([^/?#]+)")
 
     const val DONO = "giulianolagni"
-    const val REPOSITORIO = "charruamotors-pro"
+    const val REPOSITORIO = "charruamotors"
     const val URL_API_ULTIMA = "https://api.github.com/repos/$DONO/$REPOSITORIO/releases/latest"
     const val URL_RELEASES = "https://github.com/$DONO/$REPOSITORIO/releases"
     const val URL_PAGINA_ULTIMA = "$URL_RELEASES/latest"

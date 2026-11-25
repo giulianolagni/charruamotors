@@ -146,13 +146,15 @@ data class ProtocoloAtivo(val numero: Int, val automatico: Boolean) {
     val cabecalhoFuncional: String get() = if (numero == 7 || numero == 9) "DB33F1" else "7DF"
 
     /**
-     * Descrição para o card e o relatório: a do `ATDP` quando ela já nomeia o CAN (ou o protocolo
-     * não é CAN); senão o nome completo (`AUTO, ISO 15765-4 (CAN 11/500)`).
+     * Descrição para o card e o relatório: a do `ATDP` quando ela já nomeia o protocolo (CAN ou
+     * linha K); senão o nome completo (`AUTO, ISO 15765-4 (CAN 11/500)`). Números sem nome
+     * mapeado ficam com a do `ATDP`.
      */
     fun descrever(atdp: String?): String? {
-        val nome = NOMES_CAN[numero] ?: return atdp
+        val nome = NOMES_CAN[numero] ?: NOMES_LINHA_K[numero] ?: return atdp
         val d = atdp?.uppercase().orEmpty()
-        if ("CAN" in d || "15765" in d) return atdp
+        val marcas = if (ehCan) MARCAS_CAN else MARCAS_LINHA_K
+        if (marcas.any { it in d }) return atdp
         return (if (automatico) "AUTO, " else "") + nome
     }
 
@@ -163,6 +165,13 @@ data class ProtocoloAtivo(val numero: Int, val automatico: Boolean) {
             8 to "ISO 15765-4 (CAN 11/250)",
             9 to "ISO 15765-4 (CAN 29/250)",
         )
+        val NOMES_LINHA_K = mapOf(
+            3 to "ISO 9141-2",
+            4 to "ISO 14230-4 (KWP 5-baud)",
+            5 to "ISO 14230-4 (KWP Fast Init)",
+        )
+        val MARCAS_CAN = listOf("CAN", "15765")
+        val MARCAS_LINHA_K = listOf("9141", "14230", "KWP")
     }
 }
 

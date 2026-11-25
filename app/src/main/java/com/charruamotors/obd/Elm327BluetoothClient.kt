@@ -681,7 +681,7 @@ class Elm327BluetoothClient(
 
     /**
      * Impressão digital da ECU (v2.2.2): `0151` (combustível) e `0904` (CALID; fora no ELM327 v2.1) com o cabeçalho de
-     * diagnóstico e, se pedido, o TCM (`0100` em `ATSH 7E1`, depois `7E2`). Nada aqui derruba a
+     * diagnóstico e, se pedido e só em CAN, o TCM (`0100` em `ATSH 7E1`, depois `7E2`). Nada aqui derruba a
      * sessão: `NO DATA`, `7F` e timeout só deixam o campo nulo (só a queda do adaptador propaga, pelo
      * caminho normal do estado). O cabeçalho/filtro anteriores voltam sempre ao fim da visita ao TCM.
      * No modo 21/22 (sem OBD2 padrão) não há o que sondar.
@@ -699,7 +699,8 @@ class Elm327BluetoothClient(
             if (!calidPulado) {
                 calid = (ObdParser.parseCalid(sondar("0904", cabecalhoDiagnostico, TIMEOUT_DTC_MS).orEmpty()) as? RespostaObd.Ok)?.valor
             }
-            if (sondarTcm) {
+            // Só no CAN (`ATDPN` 6–9): na linha K um `ATSH 7E1`/`7DF` corromperia o cabeçalho KWP2000.
+            if (sondarTcm && protocoloCanAtivo != null) {
                 tcm = false
                 val anterior = cabecalhoAtivo.takeIf { it != CABECALHO_INDEFINIDO }
                 try {
@@ -1260,6 +1261,13 @@ class Elm327BluetoothClient(
         val modos = catalogoCascata.modosPara(marca, servicoPreferido)
         if (modos.isEmpty()) {
             throw ObdException("$motivo. O catálogo da cascata (${CatalogoCascata.ARQUIVO_PADRAO}) não tem modos alternativos (21/22)")
+        }
+        // ATDP de clone devolvendo só "AUTO, ": o ATDPN dá o nome e evita o ATSH de CAN na linha K.
+        @Suppress("NAME_SHADOWING")
+        val protocolo = if (protocolo?.trim()?.removeSuffix(",") == "AUTO") {
+            consultarProtocoloAtivo()?.descrever(protocolo) ?: protocolo
+        } else {
+            protocolo
         }
         val can11 = fisico?.ehCan11Bits ?: protocoloPareceCan11(protocolo)
         registro.evento(

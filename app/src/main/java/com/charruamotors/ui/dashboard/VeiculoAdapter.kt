@@ -1,6 +1,7 @@
 package com.charruamotors.ui.dashboard
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
@@ -10,13 +11,16 @@ import androidx.recyclerview.widget.RecyclerView
 import com.charruamotors.R
 import com.charruamotors.databinding.ItemVeiculoBinding
 import com.charruamotors.domain.calculo.ResumoVeiculo
-import com.charruamotors.ui.util.comoDecimal
+import com.charruamotors.ui.util.comoConsumo
 import com.charruamotors.ui.util.comoMilhar
 import com.charruamotors.ui.util.comoTexto
 import com.charruamotors.ui.util.rotulo
 
-/** Um card de Meus Veículos: o resumo calculado e se ele é o favorito (estrela acesa). */
-data class ItemVeiculo(val resumo: ResumoVeiculo, val favorito: Boolean)
+/**
+ * Um card de Meus Carros: o resumo calculado, se ele é o carro ativo (estrela acesa; v2.3.0 = o
+ * perfil em uso) e a tag do perfil isolado (`Modo 21`, `CAN OBD2`, `OBD2 Genérico`).
+ */
+data class ItemVeiculo(val resumo: ResumoVeiculo, val favorito: Boolean, val tag: String = "")
 
 /**
  * Adapter de Meus Veículos. Apenas exibe o [ResumoVeiculo] já calculado pelo ViewModel/domínio
@@ -26,6 +30,8 @@ class VeiculoAdapter(
     private val aoClicar: (ResumoVeiculo) -> Unit,
     private val aoAbrirPainel: (ResumoVeiculo) -> Unit,
     private val aoFavoritar: (ResumoVeiculo) -> Unit,
+    /** v2.3.0: menu de ações (selecionar, editar, perfil técnico, duplicar, mapeamento). */
+    private val aoMaisAcoes: (View, ResumoVeiculo) -> Unit = { _, _ -> },
 ) : ListAdapter<ItemVeiculo, VeiculoAdapter.ViewHolder>(Diff) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder =
@@ -48,8 +54,9 @@ class VeiculoAdapter(
                 veiculo.tipoCombustivel.rotulo(context),
             )
 
-            textoConsumo.text = resumo.consumoMedio
-                ?.let { context.getString(R.string.item_veiculo_consumo, it.comoDecimal(1)) }
+            val conversor = (context.applicationContext as com.charruamotors.CharruaMotorsApp).preferenciasApp.config.value.conversor
+            textoConsumo.text = resumo.consumoMedio?.comoConsumo(conversor)
+                ?.let { context.getString(R.string.item_veiculo_consumo, it) }
                 ?: context.getString(R.string.item_veiculo_sem_consumo)
 
             val proxima = resumo.proximaManutencao
@@ -70,6 +77,11 @@ class VeiculoAdapter(
                 veiculo.descricao,
             )
             botaoFavorito.setOnClickListener { if (!item.favorito) aoFavoritar(resumo) }
+
+            textoPerfil.text = if (item.favorito) context.getString(R.string.carros_perfil_ativo, item.tag) else item.tag
+            textoPerfil.isVisible = item.tag.isNotEmpty() || item.favorito
+            botaoMaisAcoes.contentDescription = context.getString(R.string.carros_mais_acoes, veiculo.descricao)
+            botaoMaisAcoes.setOnClickListener { aoMaisAcoes(it, resumo) }
 
             root.setOnClickListener { aoClicar(resumo) }
             botaoDiagnostico.setOnClickListener { aoAbrirPainel(resumo) }

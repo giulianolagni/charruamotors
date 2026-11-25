@@ -1,5 +1,8 @@
 package com.charruamotors.sistema.backup
 
+import com.charruamotors.carros.CodecPerfilCarro
+import com.charruamotors.carros.PerfilCarro
+
 import com.charruamotors.domain.model.Abastecimento
 import com.charruamotors.domain.model.CodigoFalha
 import com.charruamotors.domain.model.LeituraObd
@@ -15,6 +18,7 @@ import com.charruamotors.obd.DispositivoObd
 import com.charruamotors.obd.sessao.ConfigAutoConexao
 import com.charruamotors.sistema.preferencias.TemaApp
 import com.charruamotors.sistema.unidades.SistemaUnidades
+import com.charruamotors.sistema.unidades.UnidadeConsumo
 import com.charruamotors.sistema.unidades.UnidadePressao
 import org.json.JSONArray
 import org.json.JSONException
@@ -29,8 +33,13 @@ data class PreferenciasBackup(
     val unidadePressao: UnidadePressao = UnidadePressao.PADRAO,
     /** Unidades globais (v1.5; backups antigos = métrico). */
     val sistemaUnidades: SistemaUnidades = SistemaUnidades.PADRAO,
-    /** Personalização do Painel e do HUD (v1.5); null = backup antigo, a restauração não mexe nela. */
+    /**
+     * Personalização global do Painel e do HUD dos backups v1 (v1.5–v2.2.9); null = sem ela. Desde o
+     * formato 2 o Painel/HUD vai em cada [PerfilCarro]; um v1 restaurado manda este para o veículo padrão.
+     */
     val painel: ConfigPainel? = null,
+    /** v2.3.0 (formato 2): km/L ou L/100km. */
+    val unidadeConsumo: UnidadeConsumo = UnidadeConsumo.PADRAO,
 )
 
 /**
@@ -51,6 +60,10 @@ data class DadosBackup(
     val leituras: List<LeituraObd> = emptyList(),
     val codigosFalha: List<CodigoFalha> = emptyList(),
     val preferencias: PreferenciasBackup = PreferenciasBackup(),
+    /** v2.3.0 (formato 2): o perfil isolado de cada veículo (Painel/HUD, Cluster, perfil técnico, recordes). */
+    val perfisCarros: List<PerfilCarro> = emptyList(),
+    /** v2.3.0 (formato 2): carro selecionado no seletor do topo; 0 = nenhum. */
+    val veiculoAtivoId: Long = 0,
 ) {
     /** Caixa-preta a restaurar: o veículo padrão só vale se existir entre os veículos do backup. */
     fun caixaPretaRestauravel(): ConfigAutoConexao {
@@ -69,7 +82,12 @@ class BackupInvalidoException(mensagem: String, causa: Throwable? = null) : Exce
 object BackupJson {
 
     const val TIPO = "charrua-obd-pro-backup"
-    const val VERSAO_FORMATO = 1
+
+    /** 1 = v1.3–v2.2.9 (Painel global); 2 = v2.3.0 (perfis isolados por veículo). */
+    const val VERSAO_FORMATO = 2
+
+    /** Arquivos maiores que isto nem são lidos (não é um backup do app). */
+    const val TAMANHO_MAXIMO_BYTES = 64L * 1024 * 1024
 
     // ------------------------------------------------------------------ exportação
 
@@ -85,7 +103,17 @@ object BackupJson {
         put("leiturasObd", JSONArray(dados.leituras.map(::leituraJson)))
         put("codigosFalha", JSONArray(dados.codigosFalha.map(::codigoJson)))
         put("preferencias", preferenciasJson(dados.preferencias))
+        put("veiculoAtivoId", dados.veiculoAtivoId)
+        put("perfisCarros", JSONArray(dados.perfisCarros.map(::perfilJson)))
     }.toString(2)
+
+    /** `{veiculoId, schema, painel: {chaves do Painel/HUD}, perfil: {cluster, camada, recordes...}}`. */
+    private fun perfilJson(p: PerfilCarro) = JSONObject().apply {
+        put("veiculoId", p.veiculoId)
+        put("schema", CodecPerfilCarro.VERSAO_SCHEMA)
+        put("painel", JSONObject(CodecPainel.codificar(p.painel)))
+        put("perfil", JSONObject().apply { CodecPerfilCarro.codificarCampos(p).forEach { (k, v) -> if (v != null) put(k, v) } })
+    }
 
     private fun veiculoJson(v: Veiculo) = JSONObject().apply {
         put("id", v.id)
@@ -169,6 +197,7 @@ object BackupJson {
         put("tema", p.tema.name)
         put("unidadePressao", p.unidadePressao.name)
         put("sistemaUnidades", p.sistemaUnidades.name)
+        put("unidadeConsumo", p.unidadeConsumo.name)
         p.painel?.let { put("painel", JSONObject(CodecPainel.codificar(it))) }
     }
 
@@ -198,6 +227,8 @@ object BackupJson {
                 leituras = raiz.lista("leiturasObd", ::leituraDe),
                 codigosFalha = raiz.lista("codigosFalha", ::codigoDe),
                 preferencias = raiz.optJSONObject("preferencias")?.let(::preferenciasDe) ?: PreferenciasBackup(),
+                perfisCarros = raiz.lista("perfisCarros", ::perfilDe),
+                veiculoAtivoId = raiz.optLong("veiculoAtivoId", 0),
             )
         } catch (e: BackupInvalidoException) {
             throw e
@@ -220,6 +251,22 @@ object BackupJson {
             d.codigosFalha.any { it.veiculoId !in veiculos } ||
             d.pecas.any { it.manutencaoId !in manutencoes }
         if (orfao) throw BackupInvalidoException("Backup corrompido: registros sem o veículo ou a manutenção correspondente")
+        val perfis = d.perfisCarros.map { it.veiculoId }
+        if (perfis.size != perfis.toSet().size) throw BackupInvalidoException("Backup corrompido: dois perfis para o mesmo veículo")
+        if (perfis.any { it !in veiculos }) throw BackupInvalidoException("Backup corrompido: perfil de um veículo que não está no arquivo")
+    }
+
+    /** Perfil do formato 2; esquema mais novo que o do app = recusado (não dá para ler sem perder dados). */
+    private fun perfilDe(o: JSONObject): PerfilCarro {
+        val schema = o.optInt("schema", 1)
+        if (schema !in 1..CodecPerfilCarro.VERSAO_SCHEMA) {
+            throw BackupInvalidoException("Perfil de veículo de uma versão mais nova do app (esquema $schema); atualize o app para restaurar")
+        }
+        val id = o.getLong("veiculoId")
+        if (id <= 0) throw BackupInvalidoException("Backup corrompido: perfil sem veículo")
+        val painel = o.optJSONObject("painel") ?: JSONObject()
+        val campos = o.optJSONObject("perfil") ?: JSONObject()
+        return CodecPerfilCarro.decodificar(id) { chave -> campos.textoOuNull(chave) ?: painel.textoOuNull(chave) }
     }
 
     private fun veiculoDe(o: JSONObject) = Veiculo(
@@ -313,6 +360,7 @@ object BackupJson {
             unidadePressao = UnidadePressao.deCodigo(o.textoOuNull("unidadePressao")),
             sistemaUnidades = SistemaUnidades.deCodigo(o.textoOuNull("sistemaUnidades")),
             painel = o.optJSONObject("painel")?.let { p -> CodecPainel.decodificar { chave -> p.textoOuNull(chave) } },
+            unidadeConsumo = UnidadeConsumo.deCodigo(o.textoOuNull("unidadeConsumo")),
         )
     }
 

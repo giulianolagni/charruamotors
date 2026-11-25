@@ -20,6 +20,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.charruamotors.R
+import com.google.android.material.snackbar.Snackbar
+import com.charruamotors.ui.carros.PerfisCarroUi
 import com.charruamotors.databinding.ActivityVeiculoFormBinding
 import com.charruamotors.domain.calculo.LimitesProtecao
 import com.charruamotors.domain.faixas.NivelPerfil
@@ -87,6 +89,15 @@ class VeiculoFormActivity : AppCompatActivity() {
         if (savedInstanceState == null) {
             if (viewModel.modoEdicao) {
                 lifecycleScope.launch { viewModel.carregar()?.let(::preencher) ?: finish() }
+            } else if (viewModel.modoDuplicar) {
+                // v2.3.0: cópia do carro de origem, sem a placa (única); o perfil vem junto ao salvar.
+                lifecycleScope.launch {
+                    val origem = viewModel.carregarOrigem() ?: return@launch
+                    preencher(origem)
+                    binding.campoPlaca.setText("")
+                    binding.campoPlaca.requestFocus()
+                    Snackbar.make(binding.root, getString(R.string.veiculo_duplicado_dica, origem.descricao), Snackbar.LENGTH_LONG).show()
+                }
             } else {
                 binding.campoCombustivel.setText(TipoCombustivel.FLEX.rotulo(this), false)
             }
@@ -96,7 +107,13 @@ class VeiculoFormActivity : AppCompatActivity() {
     }
 
     private fun configurarToolbar() = with(binding.toolbar) {
-        setTitle(if (viewModel.modoEdicao) R.string.veiculo_titulo_editar else R.string.veiculo_titulo_novo)
+        setTitle(
+            when {
+                viewModel.modoEdicao -> R.string.veiculo_titulo_editar
+                viewModel.modoDuplicar -> R.string.veiculo_titulo_duplicar
+                else -> R.string.veiculo_titulo_novo
+            },
+        )
         setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         inflateMenu(R.menu.menu_veiculo_form)
         // Excluir só existe na edição; os presets (SW4 2013 / Cruze 2018) valem também no cadastro.
@@ -279,6 +296,10 @@ class VeiculoFormActivity : AppCompatActivity() {
     }
 
     private fun tratarEvento(evento: EventoFormVeiculo) {
+        if (evento is EventoFormVeiculo.Salvo && evento.novo && evento.generico && evento.veiculo != null) {
+            oferecerMapeamento(evento.veiculo)
+            return
+        }
         val mensagem = when (evento) {
             is EventoFormVeiculo.Salvo ->
                 if (evento.novo) R.string.veiculo_cadastrado else R.string.veiculo_atualizado
@@ -288,8 +309,29 @@ class VeiculoFormActivity : AppCompatActivity() {
         finish()
     }
 
+    /**
+     * v2.3.0: carro novo sem perfil específico — começa no OBD2 Genérico; 1 toque abre a Sessão de
+     * Mapeamento (Log Bruto ligado, conectando) para capturar o primeiro log.
+     */
+    private fun oferecerMapeamento(veiculo: Veiculo) {
+        Toast.makeText(this, R.string.veiculo_cadastrado, Toast.LENGTH_SHORT).show()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.carro_novo_generico_titulo)
+            .setMessage(getString(R.string.carro_novo_generico_mensagem, veiculo.descricao))
+            .setCancelable(false)
+            .setNegativeButton(R.string.carro_novo_depois) { _, _ -> finish() }
+            .setPositiveButton(R.string.carro_novo_mapear) { _, _ ->
+                PerfisCarroUi.iniciarMapeamento(this, veiculo)
+                finish()
+            }
+            .show()
+    }
+
     companion object {
         const val EXTRA_VEICULO_ID = "extra_veiculo_id"
+
+        /** v2.3.0: id do carro a duplicar (cadastro novo preenchido com ele). */
+        const val EXTRA_DUPLICAR_DE = "extra_duplicar_de"
         private val LOCALE_BR = java.util.Locale.forLanguageTag("pt-BR")
         private const val QUEBRA = "\n"
         private const val LAYOUT_TURBO_FLEX = "turbo_flex"
@@ -299,5 +341,9 @@ class VeiculoFormActivity : AppCompatActivity() {
             Intent(context, VeiculoFormActivity::class.java).apply {
                 veiculoId?.let { putExtra(EXTRA_VEICULO_ID, it) }
             }
+
+        /** "Duplicar" em Meus Carros. */
+        fun intentDuplicar(context: Context, origemId: Long): Intent =
+            Intent(context, VeiculoFormActivity::class.java).putExtra(EXTRA_DUPLICAR_DE, origemId)
     }
 }

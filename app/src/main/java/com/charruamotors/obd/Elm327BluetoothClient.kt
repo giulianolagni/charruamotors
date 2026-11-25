@@ -143,6 +143,20 @@ class Elm327BluetoothClient(
     private val sessoesManuaisEncerradas = java.util.concurrent.atomic.AtomicInteger(0)
     override val sessaoManualAtiva: StateFlow<Boolean> = _sessaoManual.asStateFlow()
 
+    /**
+     * v2.3.0: identificação do adaptador nesta conexão (`ELM327 v2.1`), mantida depois de uma falha
+     * com a ECU (o card mostra "adaptador respondeu, ECU sem resposta"); zera no [desconectar] e no
+     * início de cada [conectar].
+     */
+    @Volatile private var adaptadorDaConexao: String? = null
+
+    /** Servico que a camada 3 deve tentar primeiro (`21`); null = a ordem da marca. Ver [definirServicoPreferido]. */
+    @Volatile private var servicoPreferido: String? = null
+
+    override fun definirServicoPreferido(servico: String?) {
+        servicoPreferido = servico?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }
+    }
+
     /** Cabeçalho do adaptador quando a sessão manual começou (restaurado no fim). */
     @Volatile private var cabecalhoEntradaManual: String? = null
 
@@ -268,6 +282,7 @@ class Elm327BluetoothClient(
             if (_estado.compareAndSet(atual, EstadoConexaoObd.Conectando)) break
         }
         // Nada da sessão anterior (ou de um comando dela que terminou depois do desconectar) vaza para esta.
+        adaptadorDaConexao = null
         reiniciarEstadoSessao()
         registro.limpar()
         registro.evento("Conectando a ${dispositivo.nome} (${dispositivo.endereco})")
@@ -987,6 +1002,7 @@ class Elm327BluetoothClient(
         // socket é justamente o que destrava um comando em andamento.
         withContext(dispatcher + NonCancellable) {
             if (transporte != null) registro.evento("Desconectado pelo usuário")
+            adaptadorDaConexao = null
             fecharRecursos()
             _estado.value = EstadoConexaoObd.Desconectado
         }
@@ -1011,6 +1027,9 @@ class Elm327BluetoothClient(
     /** Identificação, configuração e a cascata (camadas 1 → 2 → 3) até a ECU responder. */
     private suspend fun inicializarAdaptador(marcaVeiculo: String?) {
         val adaptador = identificarAdaptador()
+        // v2.3.0: o card já mostra "Adaptador ELM327 conectado (v2.1)" enquanto a ECU ainda não respondeu.
+        adaptadorDaConexao = adaptador
+        _infoConexao.value = InfoConexao(adaptador = adaptador)
 
         // Camada 1: OBD2 padrão com o protocolo automático.
         enviar("ATSP0")
@@ -1020,7 +1039,7 @@ class Elm327BluetoothClient(
         val automatica = buscarProtocolo()
         // Sempre, qualquer que seja o 0100: é o que mais ajuda a diagnosticar no carro.
         var protocolo = consultarProtocoloETensao()
-        _infoConexao.value = InfoConexao(protocolo = protocolo)
+        _infoConexao.value = InfoConexao(protocolo = protocolo, adaptador = adaptador)
         val tentativas = mutableListOf(automatica)
         var busca = automatica
 
@@ -1136,6 +1155,7 @@ class Elm327BluetoothClient(
             protocolo = protocolo,
             protocoloForcado = forcado,
             sensoresResponderam = doCatalogo.count { it.ehModo01 },
+            adaptador = adaptadorDaConexao,
         )
         registro.evento(
             "Conectado em ${InfoConexao.NOME_OBD2_PADRAO}${forcado?.let { " via $it" }.orEmpty()}: " +
@@ -1201,7 +1221,7 @@ class Elm327BluetoothClient(
         marca: String?,
         fisico: ProtocoloFisico?,
     ) {
-        val modos = catalogoCascata.modosPara(marca)
+        val modos = catalogoCascata.modosPara(marca, servicoPreferido)
         if (modos.isEmpty()) {
             throw ObdException("$motivo. O catálogo da cascata (${CatalogoCascata.ARQUIVO_PADRAO}) não tem modos alternativos (21/22)")
         }
@@ -1317,6 +1337,7 @@ class Elm327BluetoothClient(
             sensoresResponderam = ativos.size,
             comandosServico = responderam,
             espelhos = ativos,
+            adaptador = adaptadorDaConexao,
         )
         registro.evento(
             "Conectado em ${modo.nome} (${protocolo ?: "protocolo não informado"}" +
@@ -2071,7 +2092,7 @@ class Elm327BluetoothClient(
      */
     private fun reiniciarEstadoSessao() {
         _pidsSuportados.value = emptySet()
-        _infoConexao.value = InfoConexao()
+        _infoConexao.value = InfoConexao(adaptador = adaptadorDaConexao)
         definicoesEstendidas = emptyMap()
         cabecalhoAtivo = null
         filtroRecepcaoAtivo = null

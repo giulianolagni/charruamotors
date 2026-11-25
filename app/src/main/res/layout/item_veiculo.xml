@@ -68,6 +68,19 @@
             app:layout_constraintTop_toBottomOf="@id/texto_descricao"
             tools:text="45000 km • Flex" />
 
+        <!-- v2.3.0: perfil isolado do carro (tag do protocolo/perfil e se é o ativo) -->
+        <TextView
+            android:id="@+id/texto_perfil"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="?attr/textAppearanceLabelLarge"
+            android:textColor="?attr/colorPrimary"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/texto_detalhes"
+            tools:text="● Ativo · Modo 21" />
+
         <TextView
             android:id="@+id/texto_consumo"
             android:layout_width="0dp"
@@ -77,8 +90,8 @@
             android:textColor="@color/texto_secundario"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/texto_detalhes"
-            tools:text="Consumo médio: 11,5 km/l" />
+            app:layout_constraintTop_toBottomOf="@id/texto_perfil"
+            tools:text="Consumo médio: 11,5 km/L" />
 
         <TextView
             android:id="@+id/texto_proxima_manutencao"
@@ -110,6 +123,20 @@
             app:layout_constraintTop_toBottomOf="@id/texto_proxima_manutencao"
             tools:text="2 códigos de falha ativos"
             tools:visibility="visible" />
+
+        <!-- v2.3.0: selecionar, editar, perfil técnico, duplicar, sessão de mapeamento -->
+        <ImageButton
+            android:id="@+id/botao_mais_acoes"
+            tools:ignore="ContentDescription"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="12dp"
+            android:src="@drawable/ic_mais_opcoes"
+            app:layout_constraintBottom_toBottomOf="@id/botao_diagnostico"
+            app:layout_constraintEnd_toStartOf="@id/botao_diagnostico"
+            app:layout_constraintTop_toTopOf="@id/botao_diagnostico"
+            app:tint="?attr/colorControlNormal" />
 
         <!-- Abre as 4 abas do veículo (Painel ativo) -->
         <com.google.android.material.button.MaterialButton

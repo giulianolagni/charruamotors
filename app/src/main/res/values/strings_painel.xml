@@ -15,6 +15,7 @@
 
     <!-- Personalizar Painel -->
     <string name="personalizar_titulo">Personalizar Painel</string>
+    <string name="personalizar_subtitulo_carro">Só deste carro: %1$s</string>
     <string name="personalizar_ordem">Blocos do Painel</string>
     <string name="personalizar_ordem_dica">Arraste pela alça (≡) para mudar a ordem. O olho cortado tira o bloco da tela.</string>
     <string name="personalizar_arrastar">Arrastar para reordenar</string>

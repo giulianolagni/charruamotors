@@ -1,5 +1,6 @@
 package com.charruamotors.obd.sessao
 
+import com.charruamotors.carros.SelecaoPerfisCarro
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
@@ -33,6 +34,7 @@ class GatilhoBluetoothReceiver : BroadcastReceiver() {
         }
         val endereco = runCatching { dispositivo.address }.getOrNull()
         val app = context.applicationContext as? CharruaMotorsApp ?: return
+        if (evento == EventoBluetooth.CONECTADO) selecionarCarroDoGatilho(app, nome, endereco)
         val config = app.preferenciasAutoConexao.config.value
         // Só consulta a sessão quando importa (o broadcast chega para qualquer fone ou relógio).
         val ehCarro = GatilhoBluetooth.corresponde(nome, endereco, config)
@@ -54,6 +56,20 @@ class GatilhoBluetoothReceiver : BroadcastReceiver() {
             }
             AcaoGatilho.IGNORAR -> Unit
         }
+    }
+
+    /**
+     * v2.3.0: cada carro tem o próprio Bluetooth (perfil isolado). Se o aparelho que conectou é o
+     * de outro veículo, ele vira o carro ativo antes da decisão — a sessão automática abre no carro certo.
+     * Com uma sessão já ativa nada muda (ela segue no veículo dela).
+     */
+    private fun selecionarCarroDoGatilho(app: CharruaMotorsApp, nome: String?, endereco: String?) {
+        if (app.sessaoObd.estadoSessao.value.ativa) return
+        val perfis = app.perfisCarro.lerTodos(app.perfisCarro.ids())
+        val id = SelecaoPerfisCarro.veiculoDoGatilho(nome, endereco, perfis) ?: return
+        if (id == app.perfisCarro.veiculoAtivo.value) return
+        Log.i(TAG, "Bluetooth $nome é o do veículo $id: selecionando o perfil dele")
+        app.ativarVeiculo(id, null)
     }
 
     private companion object {

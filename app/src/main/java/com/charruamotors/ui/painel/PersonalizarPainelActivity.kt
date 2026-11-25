@@ -81,6 +81,10 @@ class PersonalizarPainelActivity : AppCompatActivity() {
         binding.appbar.aplicarInsetsDoSistema(base = false)
         binding.conteudo.aplicarInsetsDoSistema(topo = false)
         binding.toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        // v2.3.0: a personalização é do perfil isolado do carro ativo.
+        app.preferenciasAutoConexao.config.value.veiculoDescricao?.let {
+            binding.toolbar.subtitle = getString(R.string.personalizar_subtitulo_carro, it)
+        }
 
         configurarBlocos()
         configurarMostradores()

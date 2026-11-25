@@ -12,9 +12,11 @@ class VeiculoRepository(private val dao: VeiculoDao) {
 
     fun observarPorId(id: Long): Flow<Veiculo?> = dao.observarPorId(id)
 
-    /** Insere quando o veículo é novo (id = 0) ou atualiza quando já existe. */
-    suspend fun salvar(veiculo: Veiculo) {
-        if (veiculo.id == 0L) dao.inserir(veiculo) else dao.atualizar(veiculo)
+    /** Insere quando o veículo é novo (id = 0) ou atualiza quando já existe. Devolve o id. */
+    suspend fun salvar(veiculo: Veiculo): Long {
+        if (veiculo.id == 0L) return dao.inserir(veiculo)
+        dao.atualizar(veiculo)
+        return veiculo.id
     }
 
     suspend fun excluir(veiculo: Veiculo) = dao.excluir(veiculo)

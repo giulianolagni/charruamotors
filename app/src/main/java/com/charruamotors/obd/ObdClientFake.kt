@@ -226,6 +226,7 @@ class ObdClientFake(
         _infoConexao.value = InfoConexao(
             protocolo = "AUTO, ISO 15765-4 (CAN 11/500)",
             sensoresResponderam = comandos.count { !it.startsWith("AT") },
+            adaptador = ADAPTADOR_SIMULADO,
         )
         _pidsSuportados.value = comandos
         _estado.value = EstadoConexaoObd.Conectado
@@ -656,6 +657,9 @@ class ObdClientFake(
     }
 
     companion object {
+        /** v2.3.0: identificação do adaptador no card ELM/ECU do Modo Simulado. */
+        const val ADAPTADOR_SIMULADO = "ELM327 v2.1 (simulado)"
+
         /** VIN de teste clássico (VW, WMI `9BW`). */
         const val VIN_PADRAO = "9BWZZZ377VT004251"
 

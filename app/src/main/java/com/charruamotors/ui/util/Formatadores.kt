@@ -39,3 +39,10 @@ fun String.paraDataOuNulo(): LocalDate? = try {
 } catch (_: DateTimeParseException) {
     null
 }
+
+/**
+ * Consumo médio (guardado em km/L) na unidade global (v2.3.0): `12,3 km/L`, `8,1 L/100km` ou
+ * `28,9 MPG`; null se não houver valor finito na unidade escolhida.
+ */
+fun Double.comoConsumo(conversor: com.charruamotors.sistema.unidades.ConversorUnidades, casas: Int = 1): String? =
+    conversor.consumo(this).takeIf { it.isFinite() }?.let { "${it.comoDecimal(casas)} ${conversor.simboloConsumo}" }
